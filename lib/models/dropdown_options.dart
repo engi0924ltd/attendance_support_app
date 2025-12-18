@@ -1,0 +1,73 @@
+/// プルダウンの選択肢
+class DropdownOptions {
+  final List<String> scheduledUse;        // 利用予定
+  final List<String> attendanceStatus;    // 出欠（内容）
+  final List<String> tasks;               // 担当業務
+  final List<String> healthCondition;     // 本日の体調
+  final List<String> sleepStatus;         // 睡眠状況
+  final List<String> fatigue;             // 疲労感
+  final List<String> stress;              // 心理的負荷
+  final List<String> specialNotes;        // 特記事項
+  final List<String> breaks;              // 休憩時間
+  final List<String> workLocations;       // 勤務地
+  final List<String> evaluations;         // 評価項目
+  final List<String> scheduledWeekly;     // 曜日別出欠予定
+  // 名簿用プルダウン
+  final List<String> rosterStatus;        // ステータス
+  final List<String> lifeProtection;      // 生活保護
+  final List<String> disabilityPension;   // 障がい者手帳年金
+  final List<String> disabilityGrade;     // 障害等級
+  final List<String> disabilityType;      // 障害種別
+  final List<String> supportLevel;        // 障害支援区分
+  final List<String> contractType;        // 契約形態
+  final List<String> employmentSupport;   // 定着支援有無
+
+  DropdownOptions({
+    required this.scheduledUse,
+    required this.attendanceStatus,
+    required this.tasks,
+    required this.healthCondition,
+    required this.sleepStatus,
+    required this.fatigue,
+    required this.stress,
+    required this.specialNotes,
+    required this.breaks,
+    required this.workLocations,
+    required this.evaluations,
+    required this.scheduledWeekly,
+    required this.rosterStatus,
+    required this.lifeProtection,
+    required this.disabilityPension,
+    required this.disabilityGrade,
+    required this.disabilityType,
+    required this.supportLevel,
+    required this.contractType,
+    required this.employmentSupport,
+  });
+
+  // スプレッドシートから受け取ったデータをプルダウン選択肢に変換
+  factory DropdownOptions.fromJson(Map<String, dynamic> json) {
+    return DropdownOptions(
+      scheduledUse: List<String>.from(json['scheduledUse'] ?? []),
+      attendanceStatus: List<String>.from(json['attendanceStatus'] ?? []),
+      tasks: List<String>.from(json['tasks'] ?? []),
+      healthCondition: List<String>.from(json['healthCondition'] ?? []),
+      sleepStatus: List<String>.from(json['sleepStatus'] ?? []),
+      fatigue: List<String>.from(json['fatigue'] ?? []),
+      stress: List<String>.from(json['stress'] ?? []),
+      specialNotes: List<String>.from(json['specialNotes'] ?? []),
+      breaks: List<String>.from(json['breaks'] ?? []),
+      workLocations: List<String>.from(json['workLocations'] ?? []),
+      evaluations: List<String>.from(json['evaluations'] ?? []),
+      scheduledWeekly: List<String>.from(json['scheduledWeekly'] ?? []),
+      rosterStatus: List<String>.from(json['rosterStatus'] ?? []),
+      lifeProtection: List<String>.from(json['lifeProtection'] ?? []),
+      disabilityPension: List<String>.from(json['disabilityPension'] ?? []),
+      disabilityGrade: List<String>.from(json['disabilityGrade'] ?? []),
+      disabilityType: List<String>.from(json['disabilityType'] ?? []),
+      supportLevel: List<String>.from(json['supportLevel'] ?? []),
+      contractType: List<String>.from(json['contractType'] ?? []),
+      employmentSupport: List<String>.from(json['employmentSupport'] ?? []),
+    );
+  }
+}

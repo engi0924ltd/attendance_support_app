@@ -1,0 +1,111 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/super_admin.dart';
+import '../models/admin_login_result.dart';
+import 'master_api_service.dart';
+
+/// 全権管理者（スーパー管理者）の認証機能
+class MasterAuthService {
+  final MasterApiService _apiService = MasterApiService();
+
+  /// 統合管理者ログイン（全権管理者 or 施設管理者）
+  Future<AdminLoginResult> unifiedAdminLogin(
+      String email, String password) async {
+    final response = await _apiService.post('auth/admin/login', {
+      'email': email,
+      'password': password,
+    });
+
+    final adminData = response['data'];
+    return AdminLoginResult.fromJson(adminData);
+  }
+
+  /// 全権管理者ログイン（旧メソッド、後方互換性のため残す）
+  Future<SuperAdmin> superAdminLogin(String email, String password) async {
+    final response = await _apiService.post('auth/superadmin/login', {
+      'email': email,
+      'password': password,
+    });
+
+    final adminData = response['data'];
+    return SuperAdmin.fromJson(adminData);
+  }
+
+  /// ログイン情報を保存
+  Future<void> saveLoginCredentials(String email, String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('super_admin_email', email);
+    await prefs.setString('super_admin_password', password);
+    await prefs.setBool('super_admin_remember', true);
+  }
+
+  /// 保存されたログイン情報を取得
+  Future<Map<String, String>?> getSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool('super_admin_remember') ?? false;
+
+    if (!rememberMe) return null;
+
+    final email = prefs.getString('super_admin_email');
+    final password = prefs.getString('super_admin_password');
+
+    if (email != null && password != null) {
+      return {
+        'email': email,
+        'password': password,
+      };
+    }
+
+    return null;
+  }
+
+  /// ログイン情報をクリア
+  Future<void> clearLoginCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('super_admin_email');
+    await prefs.remove('super_admin_password');
+    await prefs.remove('super_admin_remember');
+  }
+
+  /// ログアウト
+  Future<void> logout() async {
+    // 現在はローカルのログイン情報をクリアするのみ
+    await clearLoginCredentials();
+    await clearFacilityGasUrl();
+  }
+
+  /// 施設のGAS URLを保存
+  Future<void> saveFacilityGasUrl(String gasUrl) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('facility_gas_url', gasUrl);
+  }
+
+  /// 保存された施設のGAS URLを取得
+  Future<String?> getFacilityGasUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('facility_gas_url');
+  }
+
+  /// 施設のGAS URLをクリア
+  Future<void> clearFacilityGasUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('facility_gas_url');
+  }
+
+  /// 施設の時間設定を保存
+  Future<void> saveFacilityTimeRounding(String timeRounding) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('facility_time_rounding', timeRounding);
+  }
+
+  /// 保存された施設の時間設定を取得
+  Future<String?> getFacilityTimeRounding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('facility_time_rounding');
+  }
+
+  /// 施設の時間設定をクリア
+  Future<void> clearFacilityTimeRounding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('facility_time_rounding');
+  }
+}

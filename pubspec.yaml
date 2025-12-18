@@ -1,0 +1,38 @@
+name: attendance_support_app
+description: 就労継続支援B型事業所向け勤怠・支援記録管理アプリ
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 状態管理（データの管理を楽にする道具）
+  flutter_riverpod: ^2.5.0
+
+  # インターネット通信（スプレッドシートとやり取りする道具）
+  http: ^1.2.0
+
+  # データ保存（ログイン情報などを保存する道具）
+  shared_preferences: ^2.2.2
+
+  # 日付の表示（日付を見やすくする道具）
+  intl: ^0.19.0
+
+  # URLを開く（ブラウザやスプレッドシートを開く道具）
+  url_launcher: ^6.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  # アセット（GASコードなど）
+  assets:
+    - assets/gas/gas_code_v2.js
