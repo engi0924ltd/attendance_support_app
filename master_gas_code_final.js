@@ -23,7 +23,7 @@ const MASTER_SHEET_CONFIG = {
     FACILITY_NAME: 2,      // B列: 施設名
     ADMIN_NAME: 3,         // C列: 施設管理者名
     ADMIN_EMAIL: 4,        // D列: 施設メールアドレス
-    ADMIN_PASSWORD: 5,     // E列: 施設パスワード
+    ADMIN_PASSWORD: 5,     // E列: 管理者パスワード（管理者個人のログイン用）
     SPREADSHEET_ID: 6,     // F列: スプレッドシートID
     FISCAL_YEAR: 7,        // G列: 年度
     CREATED_AT: 8,         // H列: 作成日時
@@ -38,7 +38,9 @@ const MASTER_SHEET_CONFIG = {
     CAPACITY: 17,          // Q列: 利用者定員
     TEMPLATE_ID: 18,       // R列: テンプレートID
     GAS_URL: 19,           // S列: GAS URL
-    TIME_ROUNDING: 20      // T列: 時間設定（「オン」または「オフ」）
+    TIME_ROUNDING: 20,     // T列: 時間設定（「オン」または「オフ」）
+    FACILITY_CODE: 21,     // U列: 施設コード（6桁数字、複数PC設定用）
+    FACILITY_PASSWORD: 22  // V列: 施設パスワード（8桁英数字、複数PC設定用）
   },
 
   // 全施設管理者シートの列
@@ -91,6 +93,9 @@ function doPost(e) {
         break;
       case 'facility/delete':
         response = handleDeleteFacility(data);
+        break;
+      case 'facility/get-by-code':
+        response = handleGetFacilityByCode(data);
         break;
       default:
         response = createErrorResponse('不明なエンドポイントです: ' + endpoint);
@@ -493,6 +498,10 @@ function handleCreateFacility(data) {
     const now = new Date();
     const cols = MASTER_SHEET_CONFIG.FACILITY_COLS;
 
+    // 施設コードと施設パスワードを自動生成
+    const facilityCode = generateFacilityCode();
+    const facilityPassword = generateFacilityPassword();
+
     facilitySheet.getRange(newRow, cols.FACILITY_ID).setValue(data.facilityId);
     facilitySheet.getRange(newRow, cols.FACILITY_NAME).setValue(data.facilityName);
     facilitySheet.getRange(newRow, cols.ADMIN_NAME).setValue(data.adminName);
@@ -512,6 +521,8 @@ function handleCreateFacility(data) {
     facilitySheet.getRange(newRow, cols.CAPACITY).setValue(data.capacity || '');
     facilitySheet.getRange(newRow, cols.TEMPLATE_ID).setValue(templateId);
     facilitySheet.getRange(newRow, cols.TIME_ROUNDING).setValue(data.timeRounding || 'オフ');
+    facilitySheet.getRange(newRow, cols.FACILITY_CODE).setValue(facilityCode);
+    facilitySheet.getRange(newRow, cols.FACILITY_PASSWORD).setValue(facilityPassword);
 
     return createSuccessResponse({
       message: '施設を登録しました',
@@ -662,6 +673,76 @@ function handleUpdateFacilityGasUrl(data) {
   }
 }
 
+/**
+ * 施設コード + 施設パスワードで施設情報を取得
+ * 複数PC設定用のエンドポイント
+ */
+function handleGetFacilityByCode(data) {
+  try {
+    // バリデーション
+    if (!data.facilityCode) {
+      return createErrorResponse('施設コードを入力してください');
+    }
+    if (!data.facilityPassword) {
+      return createErrorResponse('施設パスワードを入力してください');
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const facilitySheet = ss.getSheetByName(MASTER_SHEET_CONFIG.FACILITY_MASTER_SHEET);
+
+    if (!facilitySheet) {
+      return createErrorResponse('システムエラー: 施設マスタシートが見つかりません');
+    }
+
+    const lastRow = facilitySheet.getLastRow();
+    const cols = MASTER_SHEET_CONFIG.FACILITY_COLS;
+
+    // 施設コードで検索
+    for (let row = MASTER_SHEET_CONFIG.DATA_START_ROW; row <= lastRow; row++) {
+      const facilityCode = facilitySheet.getRange(row, cols.FACILITY_CODE).getValue();
+
+      if (facilityCode && facilityCode.toString() === data.facilityCode.toString()) {
+        // 施設パスワードを検証
+        const facilityPassword = facilitySheet.getRange(row, cols.FACILITY_PASSWORD).getValue();
+        const status = facilitySheet.getRange(row, cols.STATUS).getValue();
+
+        // ステータスチェック
+        if (status !== '有効') {
+          return createErrorResponse('この施設は無効化されています');
+        }
+
+        // パスワードチェック
+        if (facilityPassword && String(facilityPassword) === String(data.facilityPassword)) {
+          // 施設情報を取得
+          const facilityId = facilitySheet.getRange(row, cols.FACILITY_ID).getValue();
+          const facilityName = facilitySheet.getRange(row, cols.FACILITY_NAME).getValue();
+          const gasUrl = facilitySheet.getRange(row, cols.GAS_URL).getValue();
+          const spreadsheetId = facilitySheet.getRange(row, cols.SPREADSHEET_ID).getValue();
+          const fiscalYear = facilitySheet.getRange(row, cols.FISCAL_YEAR).getValue();
+          const timeRounding = facilitySheet.getRange(row, cols.TIME_ROUNDING).getValue();
+
+          return createSuccessResponse({
+            facilityId: facilityId || '',
+            facilityName: facilityName || '',
+            gasUrl: gasUrl || '',
+            spreadsheetId: spreadsheetId || '',
+            fiscalYear: fiscalYear || '',
+            timeRounding: timeRounding || 'オフ',
+            message: '施設情報を取得しました'
+          });
+        } else {
+          return createErrorResponse('施設パスワードが正しくありません');
+        }
+      }
+    }
+
+    return createErrorResponse('施設コードが見つかりません');
+
+  } catch (error) {
+    return createErrorResponse('施設情報取得エラー: ' + error.toString());
+  }
+}
+
 // ========================================
 // ユーティリティ関数
 // ========================================
@@ -694,6 +775,28 @@ function validatePassword(password) {
 }
 
 /**
+ * 施設コードを自動生成（6桁の数字）
+ */
+function generateFacilityCode() {
+  // 100000～999999の範囲でランダムな6桁の数字を生成
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+/**
+ * 施設パスワードを自動生成（8桁の英数字）
+ * 紛らわしい文字（0, O, I, l, 1）を除外
+ */
+function generateFacilityPassword() {
+  // 紛らわしい文字を除外した文字セット
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let password = '';
+  for (let i = 0; i < 8; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
+/**
  * 施設マスタシートの1行をパースして施設オブジェクトに変換
  */
 function parseFacilityRow(sheet, row) {
@@ -708,6 +811,8 @@ function parseFacilityRow(sheet, row) {
     fiscalYear: toStringOrNull(sheet.getRange(row, cols.FISCAL_YEAR).getValue()),
     gasUrl: toStringOrNull(sheet.getRange(row, cols.GAS_URL).getValue()),
     timeRounding: toStringOrNull(sheet.getRange(row, cols.TIME_ROUNDING).getValue()) || 'オフ',
+    facilityCode: toStringOrNull(sheet.getRange(row, cols.FACILITY_CODE).getValue()),
+    facilityPassword: toStringOrNull(sheet.getRange(row, cols.FACILITY_PASSWORD).getValue()),
     permissionLevel: 1, // 固定値: 施設管理者
     createdAt: toStringOrNull(sheet.getRange(row, cols.CREATED_AT).getValue()),
     updatedAt: toStringOrNull(sheet.getRange(row, cols.UPDATED_AT).getValue()),

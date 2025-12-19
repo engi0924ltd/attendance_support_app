@@ -30,6 +30,30 @@ class MasterAuthService {
     return SuperAdmin.fromJson(adminData);
   }
 
+  /// 施設コード + 施設パスワードで施設情報を取得（複数PC設定用）
+  Future<Map<String, dynamic>> getFacilityByCode(
+      String facilityCode, String facilityPassword) async {
+    final response = await _apiService.post('facility/get-by-code', {
+      'facilityCode': facilityCode,
+      'facilityPassword': facilityPassword,
+    });
+
+    final facilityData = response['data'];
+
+    // GAS URLを自動保存（空でない場合のみ）
+    if (facilityData['gasUrl'] != null &&
+        facilityData['gasUrl'].toString().isNotEmpty) {
+      await saveFacilityGasUrl(facilityData['gasUrl']);
+    }
+
+    // 時間設定も保存
+    if (facilityData['timeRounding'] != null) {
+      await saveFacilityTimeRounding(facilityData['timeRounding']);
+    }
+
+    return facilityData;
+  }
+
   /// ログイン情報を保存
   Future<void> saveLoginCredentials(String email, String password) async {
     final prefs = await SharedPreferences.getInstance();

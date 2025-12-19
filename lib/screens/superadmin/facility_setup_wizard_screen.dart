@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/facility.dart';
 import '../../services/facility_service.dart';
+import '../../services/master_auth_service.dart';
 
 /// 施設セットアップウィザード画面
 class FacilitySetupWizardScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class FacilitySetupWizardScreen extends StatefulWidget {
 class _FacilitySetupWizardScreenState
     extends State<FacilitySetupWizardScreen> {
   final FacilityService _facilityService = FacilityService();
+  final MasterAuthService _masterAuthService = MasterAuthService();
   final TextEditingController _gasUrlController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
@@ -39,7 +41,7 @@ class _FacilitySetupWizardScreenState
   Future<void> _copyGasCode() async {
     try {
       // アセットから実際のGASコードを読み込む
-      final gasCode = await rootBundle.loadString('assets/gas/gas_code_v2.js');
+      final gasCode = await rootBundle.loadString('assets/gas/gas_code_v3.js');
 
       await Clipboard.setData(ClipboardData(text: gasCode));
 
@@ -105,10 +107,20 @@ class _FacilitySetupWizardScreenState
     });
 
     try {
+      final gasUrl = _gasUrlController.text.trim();
+
+      // マスターシートのGAS URLを更新
       await _facilityService.updateFacilityGasUrl(
         widget.facility.facilityId,
-        _gasUrlController.text.trim(),
+        gasUrl,
       );
+
+      // SharedPreferencesに保存（重要！）
+      await _masterAuthService.saveFacilityGasUrl(gasUrl);
+
+      // デバッグ：保存されたか確認
+      final savedUrl = await _masterAuthService.getFacilityGasUrl();
+      print('🔍 DEBUG: Setup complete - saved gasUrl = $savedUrl');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/facility.dart';
 import '../../services/facility_service.dart';
 
@@ -158,6 +159,129 @@ class _FacilityEditScreenState extends State<FacilityEditScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // 施設コード・施設パスワード（複数PC設定用）
+              if (widget.facility.facilityCode != null && widget.facility.facilityPassword != null)
+                Card(
+                  color: Colors.blue.shade50,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.devices, color: Colors.blue.shade700, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              '複数PC設定用の認証情報',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          '他のPCで施設情報を設定する際に使用してください',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 施設コード
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '施設コード',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    widget.facility.facilityCode!,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 2.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy, size: 20),
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: widget.facility.facilityCode!));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('施設コードをコピーしました'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              tooltip: 'コピー',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // 施設パスワード
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '施設パスワード',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    widget.facility.facilityPassword!,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy, size: 20),
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: widget.facility.facilityPassword!));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('施設パスワードをコピーしました'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              tooltip: 'コピー',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               const SizedBox(height: 24),
 
               // 施設名

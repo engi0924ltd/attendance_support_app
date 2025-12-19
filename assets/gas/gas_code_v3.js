@@ -1,11 +1,19 @@
 /**
  * B型施設 支援者サポートアプリ - Google Apps Script
- * 既存シート構造対応版（完全版）
+ * 既存シート構造対応版（v3.1 - 時刻丸め処理追加版）
  *
  * シート構成：
  * - マスタ設定: 利用者・職員・プルダウン選択肢
  * - 勤怠_2025: 日々の勤怠データ
  * - 支援記録_2025: 支援記録データ
+ *
+ * 変更履歴:
+ * v3.1 (2025-12-18):
+ * - 時刻データの形式変換を修正（Dateオブジェクト → "HH:MM" 形式）
+ * - formatTimeValue関数を追加
+ * v3 (2025-12-18):
+ * - 時刻丸め処理を追加（出勤・退勤時刻を最も近いプルダウン選択肢に丸める）
+ * - プルダウン選択肢にcheckinTimes、checkoutTimesを追加（P列・Q列の8〜40行目）
  */
 
 // === 設定 ===
@@ -27,6 +35,10 @@ const MASTER_CONFIG = {
   CHECKOUT_DROPDOWN_START_ROW: 31,  // 31行目から退勤時選択肢開始
   CHECKOUT_DROPDOWN_END_ROW: 40,    // 40行目まで退勤時選択肢
 
+  // 時刻選択肢の範囲（8〜40行目）
+  TIME_DROPDOWN_START_ROW: 8,   // 8行目から時刻選択肢開始
+  TIME_DROPDOWN_END_ROW: 40,    // 40行目まで時刻選択肢
+
   USER_COLS: {
     NAME: 1,        // A列
     FURIGANA: 2,    // B列
@@ -40,8 +52,8 @@ const MASTER_CONFIG = {
     AFTERNOON_TASK: 13,    // M列: 担当業務PM
     HEALTH: 14,            // N列: 本日の体調（8〜29行目）
     SLEEP: 15,             // O列: 睡眠状況（8〜29行目）
-    CHECKIN_TIME: 16,      // P列: 勤務開始時刻
-    CHECKOUT_TIME: 17,     // Q列: 勤務終了時刻
+    CHECKIN_TIME: 16,      // P列: 勤務開始時刻（8〜40行目）
+    CHECKOUT_TIME: 17,     // Q列: 勤務終了時刻（8〜40行目）
     LUNCH_BREAK: 18,       // R列: 昼休憩
     SHORT_BREAK: 19,       // S列: 15分休憩
     OTHER_BREAK: 20        // T列: 他休憩時間
@@ -202,6 +214,8 @@ function handleGetDropdowns() {
     sleepStatus: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.SLEEP),                                                                                     // O列: 睡眠状況（8〜29行目）
     fatigue: getColumnOptions(sheet, MASTER_CONFIG.CHECKOUT_DROPDOWN_COLS.FATIGUE, MASTER_CONFIG.CHECKOUT_DROPDOWN_START_ROW, MASTER_CONFIG.CHECKOUT_DROPDOWN_END_ROW),  // N列: 疲労感（31〜40行目）
     stress: getColumnOptions(sheet, MASTER_CONFIG.CHECKOUT_DROPDOWN_COLS.STRESS, MASTER_CONFIG.CHECKOUT_DROPDOWN_START_ROW, MASTER_CONFIG.CHECKOUT_DROPDOWN_END_ROW),    // O列: 心理的負荷（31〜40行目）
+    checkinTimes: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.CHECKIN_TIME, MASTER_CONFIG.TIME_DROPDOWN_START_ROW, MASTER_CONFIG.TIME_DROPDOWN_END_ROW),        // P列: 勤務開始時刻（8〜40行目）
+    checkoutTimes: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.CHECKOUT_TIME, MASTER_CONFIG.TIME_DROPDOWN_START_ROW, MASTER_CONFIG.TIME_DROPDOWN_END_ROW),      // Q列: 勤務終了時刻（8〜40行目）
     specialNotes: [],                                                                                                                                             // 特記事項（使用しない）
     breaks: [],                                                                                                                                                   // 休憩時間（使用しない）
     workLocations: [],                                                                                                                                            // 勤務地（使用しない）
@@ -225,11 +239,114 @@ function getColumnOptions(sheet, col, startRow, endRow) {
 
     // 空白はスキップ（他の列と行が揃っていない場合があるため）
     if (value && value !== '') {
-      options.push(String(value));
+      // 時刻データ（Dateオブジェクト）の場合は "HH:MM" 形式に変換
+      if (value instanceof Date) {
+        const formattedTime = formatTimeValue(value);
+        if (formattedTime) {
+          options.push(formattedTime);
+        }
+      } else {
+        options.push(String(value));
+      }
     }
   }
 
   return options;
+}
+
+/**
+ * 時刻データ（Dateオブジェクト）を "HH:MM" 形式に変換
+ * @param {Date} dateValue - Dateオブジェクト
+ * @return {string|null} - "HH:MM" 形式の時刻文字列、変換できない場合はnull
+ */
+function formatTimeValue(dateValue) {
+  if (!(dateValue instanceof Date)) {
+    return null;
+  }
+
+  const hours = dateValue.getHours();
+  const minutes = dateValue.getMinutes();
+
+  // "HH:MM" 形式にフォーマット
+  const paddedHours = String(hours).padStart(2, '0');
+  const paddedMinutes = String(minutes).padStart(2, '0');
+
+  return `${paddedHours}:${paddedMinutes}`;
+}
+
+// === 時刻丸め処理 ===
+
+/**
+ * 入力時刻を最も近いプルダウン選択肢に丸める
+ * @param {string} inputTime - 入力時刻（例: "9:13", "14:47"）
+ * @param {Array<string>} timeOptions - プルダウン選択肢リスト（例: ["9:00", "9:30", "10:00"]）
+ * @return {string} - 最も近い時刻（プルダウン選択肢から）
+ */
+function roundTimeToNearest(inputTime, timeOptions) {
+  // プルダウン選択肢が空の場合は入力時刻をそのまま返す
+  if (!timeOptions || timeOptions.length === 0) {
+    return inputTime;
+  }
+
+  // 入力時刻が空の場合はそのまま返す
+  if (!inputTime || inputTime === '') {
+    return inputTime;
+  }
+
+  // 入力時刻を分単位に変換
+  const inputMinutes = timeToMinutes(inputTime);
+  if (inputMinutes === null) {
+    return inputTime; // 変換できない場合はそのまま返す
+  }
+
+  // 最も近い選択肢を探す
+  let nearestTime = timeOptions[0];
+  let minDifference = Math.abs(inputMinutes - timeToMinutes(timeOptions[0]));
+
+  for (let i = 1; i < timeOptions.length; i++) {
+    const optionMinutes = timeToMinutes(timeOptions[i]);
+    if (optionMinutes === null) continue;
+
+    const difference = Math.abs(inputMinutes - optionMinutes);
+    if (difference < minDifference) {
+      minDifference = difference;
+      nearestTime = timeOptions[i];
+    }
+  }
+
+  return nearestTime;
+}
+
+/**
+ * 時刻文字列を分単位の数値に変換
+ * @param {string} timeStr - 時刻文字列（例: "9:30", "14:15"）
+ * @return {number|null} - 分単位の数値（例: 9:30 → 570）、変換できない場合はnull
+ */
+function timeToMinutes(timeStr) {
+  if (!timeStr || timeStr === '') {
+    return null;
+  }
+
+  const timeString = String(timeStr).trim();
+
+  // "HH:MM" 形式のチェック
+  if (timeString.includes(':')) {
+    const parts = timeString.split(':');
+    if (parts.length !== 2) {
+      return null;
+    }
+
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+
+    if (isNaN(hours) || isNaN(minutes)) {
+      return null;
+    }
+
+    return hours * 60 + minutes;
+  }
+
+  return null;
 }
 
 // === 認証処理 ===
@@ -538,11 +655,12 @@ function validatePassword(password) {
 // === 勤怠データ処理 ===
 
 /**
- * 出勤登録
+ * 出勤登録（時刻丸め処理付き）
  */
 function handleCheckin(data) {
   try {
     const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
     const date = data.date || formatDate(new Date());
     const userName = data.userName;
 
@@ -574,6 +692,17 @@ function handleCheckin(data) {
       return createErrorResponse('空行が見つかりませんでした（最大10000行まで検索）');
     }
 
+    // プルダウン選択肢を取得して時刻を丸める
+    const checkinTimeOptions = getColumnOptions(
+      masterSheet,
+      MASTER_CONFIG.DROPDOWN_COLS.CHECKIN_TIME,
+      MASTER_CONFIG.TIME_DROPDOWN_START_ROW,
+      MASTER_CONFIG.TIME_DROPDOWN_END_ROW
+    );
+    const roundedCheckinTime = data.checkinTime
+      ? roundTimeToNearest(data.checkinTime, checkinTimeOptions)
+      : data.checkinTime;
+
     // 各列にデータを設定
     sheet.getRange(newRow, ATTENDANCE_COLS.DATE).setValue(date);
     sheet.getRange(newRow, ATTENDANCE_COLS.USER_NAME).setValue(userName);
@@ -585,12 +714,14 @@ function handleCheckin(data) {
     if (data.healthCondition) sheet.getRange(newRow, ATTENDANCE_COLS.HEALTH).setValue(data.healthCondition);
     if (data.sleepStatus) sheet.getRange(newRow, ATTENDANCE_COLS.SLEEP).setValue(data.sleepStatus);
     if (data.checkinComment) sheet.getRange(newRow, ATTENDANCE_COLS.CHECKIN_COMMENT).setValue(data.checkinComment);
-    if (data.checkinTime) sheet.getRange(newRow, ATTENDANCE_COLS.CHECKIN_TIME).setValue(data.checkinTime);
+    if (roundedCheckinTime) sheet.getRange(newRow, ATTENDANCE_COLS.CHECKIN_TIME).setValue(roundedCheckinTime);
 
     return createSuccessResponse({
       message: '出勤登録が完了しました',
       date: date,
-      userName: userName
+      userName: userName,
+      originalCheckinTime: data.checkinTime || null,
+      roundedCheckinTime: roundedCheckinTime || null
     });
   } catch (error) {
     return createErrorResponse('出勤登録エラー: ' + error.message);
@@ -598,41 +729,59 @@ function handleCheckin(data) {
 }
 
 /**
- * 退勤登録
+ * 退勤登録（時刻丸め処理付き）
  */
 function handleCheckout(data) {
-  const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
-  const date = data.date;
-  const userName = data.userName;
-  const checkoutTime = data.checkoutTime;
+  try {
+    const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+    const date = data.date;
+    const userName = data.userName;
+    const checkoutTime = data.checkoutTime;
 
-  const rowIndex = findAttendanceRow(sheet, date, userName);
+    const rowIndex = findAttendanceRow(sheet, date, userName);
 
-  if (!rowIndex) {
-    return createErrorResponse('出勤記録が見つかりません');
+    if (!rowIndex) {
+      return createErrorResponse('出勤記録が見つかりません');
+    }
+
+    // プルダウン選択肢を取得して時刻を丸める
+    const checkoutTimeOptions = getColumnOptions(
+      masterSheet,
+      MASTER_CONFIG.DROPDOWN_COLS.CHECKOUT_TIME,
+      MASTER_CONFIG.TIME_DROPDOWN_START_ROW,
+      MASTER_CONFIG.TIME_DROPDOWN_END_ROW
+    );
+    const roundedCheckoutTime = checkoutTime
+      ? roundTimeToNearest(checkoutTime, checkoutTimeOptions)
+      : checkoutTime;
+
+    // 退勤時刻を設定
+    sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_TIME).setValue(roundedCheckoutTime);
+
+    // 退勤時のデータを設定
+    if (data.fatigue) sheet.getRange(rowIndex, ATTENDANCE_COLS.FATIGUE).setValue(data.fatigue);
+    if (data.stress) sheet.getRange(rowIndex, ATTENDANCE_COLS.STRESS).setValue(data.stress);
+    if (data.checkoutComment) sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_COMMENT).setValue(data.checkoutComment);
+
+    // 実労時間を計算
+    const checkinTime = sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKIN_TIME).getValue();
+    const lunchBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.LUNCH_BREAK).getValue();
+    const shortBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.SHORT_BREAK).getValue();
+    const otherBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.OTHER_BREAK).getValue();
+
+    const workMinutes = calculateWorkMinutes(checkinTime, roundedCheckoutTime, lunchBreak, shortBreak, otherBreak);
+    sheet.getRange(rowIndex, ATTENDANCE_COLS.WORK_MINUTES).setValue(workMinutes);
+
+    return createSuccessResponse({
+      message: '退勤登録が完了しました',
+      workMinutes: workMinutes,
+      originalCheckoutTime: checkoutTime || null,
+      roundedCheckoutTime: roundedCheckoutTime || null
+    });
+  } catch (error) {
+    return createErrorResponse('退勤登録エラー: ' + error.message);
   }
-
-  // 退勤時刻を設定
-  sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_TIME).setValue(checkoutTime);
-
-  // 退勤時のデータを設定
-  if (data.fatigue) sheet.getRange(rowIndex, ATTENDANCE_COLS.FATIGUE).setValue(data.fatigue);
-  if (data.stress) sheet.getRange(rowIndex, ATTENDANCE_COLS.STRESS).setValue(data.stress);
-  if (data.checkoutComment) sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_COMMENT).setValue(data.checkoutComment);
-
-  // 実労時間を計算
-  const checkinTime = sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKIN_TIME).getValue();
-  const lunchBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.LUNCH_BREAK).getValue();
-  const shortBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.SHORT_BREAK).getValue();
-  const otherBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.OTHER_BREAK).getValue();
-
-  const workMinutes = calculateWorkMinutes(checkinTime, checkoutTime, lunchBreak, shortBreak, otherBreak);
-  sheet.getRange(rowIndex, ATTENDANCE_COLS.WORK_MINUTES).setValue(workMinutes);
-
-  return createSuccessResponse({
-    message: '退勤登録が完了しました',
-    workMinutes: workMinutes
-  });
 }
 
 /**

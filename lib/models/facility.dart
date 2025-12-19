@@ -12,6 +12,8 @@ class Facility {
   final String? phone;
   final String status;
   final String? timeRounding; // 時間設定（「オン」または「オフ」）
+  final String? facilityCode; // 施設コード（6桁数字、複数PC設定用）
+  final String? facilityPassword; // 施設パスワード（8桁英数字、複数PC設定用）
 
   Facility({
     required this.facilityId,
@@ -26,6 +28,8 @@ class Facility {
     this.phone,
     required this.status,
     this.timeRounding,
+    this.facilityCode,
+    this.facilityPassword,
   });
 
   factory Facility.fromJson(Map<String, dynamic> json) {
@@ -42,6 +46,8 @@ class Facility {
       phone: json['phone']?.toString(),
       status: json['status']?.toString() ?? '有効',
       timeRounding: json['timeRounding']?.toString(),
+      facilityCode: json['facilityCode']?.toString(),
+      facilityPassword: json['facilityPassword']?.toString(),
     );
   }
 
@@ -59,6 +65,8 @@ class Facility {
       'phone': phone,
       'status': status,
       'timeRounding': timeRounding,
+      'facilityCode': facilityCode,
+      'facilityPassword': facilityPassword,
     };
   }
 

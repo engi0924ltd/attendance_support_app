@@ -3,7 +3,9 @@ import '../user/user_select_screen.dart';
 import '../staff/login_screen.dart';
 import '../staff/daily_attendance_list_screen.dart';
 import '../superadmin/admin_login_screen.dart';
+import '../superadmin/facility_code_setup_screen.dart';
 import '../../services/auth_service.dart';
+import '../../services/master_auth_service.dart';
 
 /// 最初の画面：利用者メニューか支援者メニューを選ぶ
 class MenuSelectionScreen extends StatefulWidget {
@@ -15,6 +17,7 @@ class MenuSelectionScreen extends StatefulWidget {
 
 class _MenuSelectionScreenState extends State<MenuSelectionScreen> {
   final AuthService _authService = AuthService();
+  final MasterAuthService _masterAuthService = MasterAuthService();
   bool _isCheckingLogin = true;
 
   @override
@@ -71,8 +74,57 @@ class _MenuSelectionScreenState extends State<MenuSelectionScreen> {
     }
   }
 
+  /// 利用者メニューへ遷移（施設設定をチェック）
+  Future<void> _navigateToUserMenu() async {
+    // 施設のGAS URLがあるかチェック
+    final gasUrl = await _masterAuthService.getFacilityGasUrl();
+
+    // デバッグ：保存されているGAS URLを確認
+    print('🔍 DEBUG _navigateToUserMenu: gasUrl = $gasUrl');
+    print('🔍 DEBUG _navigateToUserMenu: isEmpty = ${gasUrl?.isEmpty ?? true}');
+
+    if (mounted) {
+      if (gasUrl == null || gasUrl.isEmpty) {
+        // 施設が設定されていない場合は施設コード入力画面へ
+        print('🔍 DEBUG: 施設コード入力画面に遷移');
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const FacilityCodeSetupScreen(),
+          ),
+        );
+      } else {
+        // 施設が設定されている場合は利用者選択画面へ
+        print('🔍 DEBUG: 利用者選択画面に遷移');
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const UserSelectScreen(),
+          ),
+        );
+      }
+    }
+  }
+
   /// 支援者メニューへ遷移（ログイン状態をチェック）
   Future<void> _navigateToStaffMenu() async {
+    // 施設のGAS URLがあるかチェック
+    final gasUrl = await _masterAuthService.getFacilityGasUrl();
+
+    if (gasUrl == null || gasUrl.isEmpty) {
+      // 施設が設定されていない場合は施設コード入力画面へ
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const FacilityCodeSetupScreen(),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 施設が設定されている場合は通常のログインフローへ
     // 保存された認証情報をチェック
     final credentials = await _authService.getSavedCredentials();
 
@@ -187,14 +239,7 @@ class _MenuSelectionScreenState extends State<MenuSelectionScreen> {
                   label: '利用者メニュー',
                   icon: Icons.person,
                   color: Colors.green,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const UserSelectScreen(),
-                      ),
-                    );
-                  },
+                  onTap: _navigateToUserMenu,
                 ),
                 const SizedBox(height: 24),
 

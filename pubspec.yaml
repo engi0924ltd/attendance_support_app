@@ -35,4 +35,4 @@ flutter:
 
   # アセット（GASコードなど）
   assets:
-    - assets/gas/gas_code_v2.js
+    - assets/gas/gas_code_v3.js
