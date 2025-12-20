@@ -7,6 +7,9 @@ class DropdownOptions {
   final List<String> sleepStatus;         // 睡眠状況
   final List<String> fatigue;             // 疲労感
   final List<String> stress;              // 心理的負荷
+  final List<String> lunchBreak;          // 昼休憩
+  final List<String> shortBreak;          // 15分休憩
+  final List<String> otherBreak;          // その他休憩
   final List<String> specialNotes;        // 特記事項
   final List<String> breaks;              // 休憩時間
   final List<String> workLocations;       // 勤務地
@@ -21,6 +24,9 @@ class DropdownOptions {
   final List<String> supportLevel;        // 障害支援区分
   final List<String> contractType;        // 契約形態
   final List<String> employmentSupport;   // 定着支援有無
+  // 時間丸め用の時間リスト
+  final List<String> checkinTimeList;     // 勤務開始時刻（15分刻み）
+  final List<String> checkoutTimeList;    // 勤務終了時刻（15分刻み）
 
   DropdownOptions({
     required this.scheduledUse,
@@ -30,6 +36,9 @@ class DropdownOptions {
     required this.sleepStatus,
     required this.fatigue,
     required this.stress,
+    required this.lunchBreak,
+    required this.shortBreak,
+    required this.otherBreak,
     required this.specialNotes,
     required this.breaks,
     required this.workLocations,
@@ -43,6 +52,8 @@ class DropdownOptions {
     required this.supportLevel,
     required this.contractType,
     required this.employmentSupport,
+    required this.checkinTimeList,
+    required this.checkoutTimeList,
   });
 
   // スプレッドシートから受け取ったデータをプルダウン選択肢に変換
@@ -55,6 +66,9 @@ class DropdownOptions {
       sleepStatus: List<String>.from(json['sleepStatus'] ?? []),
       fatigue: List<String>.from(json['fatigue'] ?? []),
       stress: List<String>.from(json['stress'] ?? []),
+      lunchBreak: List<String>.from(json['lunchBreak'] ?? []),
+      shortBreak: List<String>.from(json['shortBreak'] ?? []),
+      otherBreak: List<String>.from(json['otherBreak'] ?? []),
       specialNotes: List<String>.from(json['specialNotes'] ?? []),
       breaks: List<String>.from(json['breaks'] ?? []),
       workLocations: List<String>.from(json['workLocations'] ?? []),
@@ -68,6 +82,8 @@ class DropdownOptions {
       supportLevel: List<String>.from(json['supportLevel'] ?? []),
       contractType: List<String>.from(json['contractType'] ?? []),
       employmentSupport: List<String>.from(json['employmentSupport'] ?? []),
+      checkinTimeList: List<String>.from(json['checkinTimeList'] ?? []),
+      checkoutTimeList: List<String>.from(json['checkoutTimeList'] ?? []),
     );
   }
 }

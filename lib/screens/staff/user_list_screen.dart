@@ -96,13 +96,86 @@ class _UserListScreenState extends State<UserListScreen> {
     }
   }
 
-  /// 削除確認ダイアログ
-  Future<void> _confirmDelete(User user) async {
+  /// 契約状態を変更
+  Future<void> _changeUserStatus(User user) async {
+    // 現在の状態と異なる状態を選択肢として表示
+    final currentStatus = user.status;
+    final newStatus = currentStatus == '契約中' ? '退所済み' : '契約中';
+
+    // 退所日入力用コントローラー（退所済みに変更する場合のみ使用）
+    final leaveDateController = TextEditingController();
+
+    // 確認ダイアログ
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('削除確認'),
-        content: Text('${user.name}さんを削除しますか？'),
+        title: const Text('契約状態の変更'),
+        content: StatefulBuilder(
+          builder: (context, setState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${user.name}さんの契約状態を変更しますか？'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('現在: '),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: currentStatus == '契約中' ? Colors.orange : Colors.grey,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      currentStatus,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('変更後: '),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: newStatus == '契約中' ? Colors.orange : Colors.grey,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      newStatus,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+              // 退所済みに変更する場合のみ退所日入力フィールドを表示
+              if (newStatus == '退所済み') ...[
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  '退所日を入力してください',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: leaveDateController,
+                  decoration: const InputDecoration(
+                    labelText: '退所日',
+                    hintText: '例: 20251231（8桁の数字）',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.calendar_today),
+                    counterText: '',
+                  ),
+                  keyboardType: TextInputType.number,
+                  maxLength: 8,
+                ),
+              ],
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -110,32 +183,38 @@ class _UserListScreenState extends State<UserListScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('削除'),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('変更'),
           ),
         ],
       ),
     );
 
-    if (confirm == true && user.rowNumber != null) {
-      await _deleteUser(user);
-    }
-  }
+    if (confirm != true) return;
 
-  /// 利用者を削除
-  Future<void> _deleteUser(User user) async {
     try {
-      await _userService.deleteUser(user.rowNumber!);
+      // 退所日を取得（退所済みに変更する場合のみ）
+      final leaveDate = newStatus == '退所済み' ? leaveDateController.text.trim() : null;
+
+      await _userService.changeUserStatus(
+        user.rowNumber!,
+        newStatus,
+        leaveDate: leaveDate,
+      );
+
+      leaveDateController.dispose();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${user.name}さんを削除しました')),
+          SnackBar(content: Text('${user.name}さんの契約状態を「$newStatus」に変更しました')),
         );
-        _loadUsers();
+        _loadUsers(); // リスト再読み込み
       }
     } catch (e) {
+      leaveDateController.dispose();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('削除に失敗しました: $e')),
+          SnackBar(content: Text('契約状態の変更に失敗しました: $e')),
         );
       }
     }
@@ -328,8 +407,8 @@ class _UserListScreenState extends State<UserListScreen> {
           onSelected: (value) {
             if (value == 'edit') {
               _navigateToEditScreen(user);
-            } else if (value == 'delete') {
-              _confirmDelete(user);
+            } else if (value == 'change_status') {
+              _changeUserStatus(user);
             }
           },
           itemBuilder: (context) => [
@@ -344,12 +423,12 @@ class _UserListScreenState extends State<UserListScreen> {
               ),
             ),
             const PopupMenuItem(
-              value: 'delete',
+              value: 'change_status',
               child: Row(
                 children: [
-                  Icon(Icons.delete, size: 20, color: Colors.red),
+                  Icon(Icons.swap_horiz, size: 20, color: Colors.orange),
                   SizedBox(width: 8),
-                  Text('削除', style: TextStyle(color: Colors.red)),
+                  Text('契約状態の変更', style: TextStyle(color: Colors.orange)),
                 ],
               ),
             ),

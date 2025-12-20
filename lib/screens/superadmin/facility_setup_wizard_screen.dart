@@ -41,7 +41,7 @@ class _FacilitySetupWizardScreenState
   Future<void> _copyGasCode() async {
     try {
       // アセットから実際のGASコードを読み込む
-      final gasCode = await rootBundle.loadString('assets/gas/gas_code_v3.js');
+      final gasCode = await rootBundle.loadString('assets/gas/gas_code_v4.js');
 
       await Clipboard.setData(ClipboardData(text: gasCode));
 

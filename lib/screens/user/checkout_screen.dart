@@ -31,6 +31,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   // 入力フォームの値
   String? _fatigue;
   String? _stress;
+  String? _lunchBreak;
+  String? _shortBreak;
+  String? _otherBreak;
   final TextEditingController _commentController = TextEditingController();
 
   @override
@@ -48,7 +51,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   /// プルダウンの選択肢を読み込む
   Future<void> _loadDropdownOptions() async {
     try {
-      final options = await _masterService.getDropdownOptions();
+      // 強制的に最新データを取得（キャッシュを使わない）
+      final options = await _masterService.getDropdownOptions(forceRefresh: true);
       setState(() {
         _dropdownOptions = options;
         _isLoading = false;
@@ -82,7 +86,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     try {
       final now = DateTime.now();
       final dateStr = DateFormat(AppConstants.dateFormat).format(now);
-      final checkoutTime = DateFormat(AppConstants.timeFormat).format(now);
+      String checkoutTime = DateFormat(AppConstants.timeFormat).format(now);
+
+      // 時間丸め設定を取得
+      final authService = MasterAuthService();
+      final timeRounding = await authService.getFacilityTimeRounding();
+
+      // 時間丸め処理（オンの場合のみ）
+      if (timeRounding == 'オン' && _dropdownOptions?.checkoutTimeList.isNotEmpty == true) {
+        checkoutTime = TimeUtils.roundToNearestTime(
+          checkoutTime,
+          _dropdownOptions!.checkoutTimeList,
+        );
+      }
 
       await _attendanceService.checkout(
         widget.userName,
@@ -90,6 +106,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         checkoutTime,
         fatigue: _fatigue!,
         stress: _stress!,
+        lunchBreak: _lunchBreak,
+        shortBreak: _shortBreak,
+        otherBreak: _otherBreak,
         checkoutComment: _commentController.text,
       );
 
@@ -219,6 +238,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           value: _stress,
           items: _dropdownOptions!.stress,
           onChanged: (value) => setState(() => _stress = value),
+        ),
+        const SizedBox(height: 16),
+        _buildDropdown(
+          label: '昼休憩（任意）',
+          value: _lunchBreak,
+          items: ['', ..._dropdownOptions!.lunchBreak],  // 空白を先頭に追加
+          onChanged: (value) => setState(() => _lunchBreak = value == '' ? null : value),
+        ),
+        const SizedBox(height: 16),
+        _buildDropdown(
+          label: '15分休憩（任意）',
+          value: _shortBreak,
+          items: ['', ..._dropdownOptions!.shortBreak],  // 空白を先頭に追加
+          onChanged: (value) => setState(() => _shortBreak = value == '' ? null : value),
+        ),
+        const SizedBox(height: 16),
+        _buildDropdown(
+          label: 'その他休憩（任意）',
+          value: _otherBreak,
+          items: ['', ..._dropdownOptions!.otherBreak],  // 空白を先頭に追加
+          onChanged: (value) => setState(() => _otherBreak = value == '' ? null : value),
         ),
         const SizedBox(height: 16),
         TextField(

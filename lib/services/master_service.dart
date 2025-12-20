@@ -84,6 +84,9 @@ class MasterService {
         'sleepStatus': options.sleepStatus,
         'fatigue': options.fatigue,
         'stress': options.stress,
+        'lunchBreak': options.lunchBreak,
+        'shortBreak': options.shortBreak,
+        'otherBreak': options.otherBreak,
         'specialNotes': options.specialNotes,
         'breaks': options.breaks,
         'workLocations': options.workLocations,
@@ -97,6 +100,8 @@ class MasterService {
         'supportLevel': options.supportLevel,
         'contractType': options.contractType,
         'employmentSupport': options.employmentSupport,
+        'checkinTimeList': options.checkinTimeList,
+        'checkoutTimeList': options.checkoutTimeList,
       };
 
       await prefs.setString(_cacheKeyDropdowns, jsonEncode(json));

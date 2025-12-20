@@ -21,6 +21,9 @@ class AttendanceService {
     String checkoutTime, {
     String? fatigue,
     String? stress,
+    String? lunchBreak,
+    String? shortBreak,
+    String? otherBreak,
     String? checkoutComment,
   }) async {
     final response = await _apiService.post('attendance/checkout', {
@@ -29,6 +32,9 @@ class AttendanceService {
       'checkoutTime': checkoutTime,
       'fatigue': fatigue,
       'stress': stress,
+      'lunchBreak': lunchBreak,
+      'shortBreak': shortBreak,
+      'otherBreak': otherBreak,
       'checkoutComment': checkoutComment,
     });
     return response;

@@ -51,7 +51,8 @@ class _CheckinScreenState extends State<CheckinScreen> {
   /// プルダウンの選択肢を読み込む
   Future<void> _loadDropdownOptions() async {
     try {
-      final options = await _masterService.getDropdownOptions();
+      // 強制的に最新データを取得（キャッシュを使わない）
+      final options = await _masterService.getDropdownOptions(forceRefresh: true);
       setState(() {
         _dropdownOptions = options;
         _isLoading = false;
@@ -84,6 +85,20 @@ class _CheckinScreenState extends State<CheckinScreen> {
 
     try {
       final now = DateTime.now();
+      String checkinTime = DateFormat(AppConstants.timeFormat).format(now);
+
+      // 時間丸め設定を取得
+      final authService = MasterAuthService();
+      final timeRounding = await authService.getFacilityTimeRounding();
+
+      // 時間丸め処理（オンの場合のみ）
+      if (timeRounding == 'オン' && _dropdownOptions?.checkinTimeList.isNotEmpty == true) {
+        checkinTime = TimeUtils.roundToNearestTime(
+          checkinTime,
+          _dropdownOptions!.checkinTimeList,
+        );
+      }
+
       final attendance = Attendance(
         date: DateFormat(AppConstants.dateFormat).format(now),
         userName: widget.userName,
@@ -94,7 +109,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
         healthCondition: _healthCondition,
         sleepStatus: _sleepStatus,
         checkinComment: _commentController.text,
-        checkinTime: DateFormat(AppConstants.timeFormat).format(now),
+        checkinTime: checkinTime,
         mealService: false,  // 管理者が後から登録
         transportService: false,  // 管理者が後から登録
       );
@@ -125,7 +140,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('出勤登録完了'),
-        content: const Text('出勤を記録しました。\nお疲れ様です！'),
+        content: const Text('出勤を記録しました。\n今日も頑張りましょう！'),
         actions: [
           TextButton(
             onPressed: () {

@@ -398,6 +398,35 @@ class UserService {
     }
   }
 
+  /// 利用者の契約状態を変更
+  Future<Map<String, dynamic>> changeUserStatus(
+    int rowNumber,
+    String newStatus, {
+    String? leaveDate,
+  }) async {
+    try {
+      final url = Uri.parse(await _gasUrl);
+      final body = jsonEncode({
+        'action': 'user/change-status',
+        'rowNumber': rowNumber,
+        'status': newStatus,
+        'leaveDate': leaveDate ?? '', // 退所日（退所済みの場合のみ）
+      });
+
+      final response = await _client
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(ApiConfig.timeout);
+
+      return await _handleResponse(response);
+    } catch (e) {
+      throw Exception('契約状態変更エラー: $e');
+    }
+  }
+
   /// 利用者を削除
   Future<Map<String, dynamic>> deleteUser(int rowNumber) async {
     try {
