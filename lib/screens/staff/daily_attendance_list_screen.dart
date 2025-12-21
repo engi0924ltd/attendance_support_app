@@ -283,7 +283,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
     if (hasNotCheckedOut) {
       cardColor = Colors.yellow.shade50;
     } else if (hasComment) {
-      cardColor = Colors.amber.shade50;
+      cardColor = Colors.blue.shade50;
     }
 
     return Card(

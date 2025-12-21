@@ -1263,9 +1263,19 @@ function handleCheckin(data) {
       return createErrorResponse('既に出勤登録されています');
     }
 
-    // 新しい行に追加
+    // D列が空欄の最上行を探す（X列の関数が入っている行を優先的に使用）
+    let newRow = 2; // 2行目から開始（1行目はヘッダー）
     const lastRow = sheet.getLastRow();
-    const newRow = lastRow + 1;
+    const maxRow = Math.max(lastRow, 200); // 最低でも200行目までチェック
+
+    // D列（日時）が空欄の行を探す
+    while (newRow <= maxRow) {
+      const cellValue = sheet.getRange(newRow, ATTENDANCE_COLS.DATE).getValue();
+      if (cellValue === '' || cellValue === null) {
+        break; // 空欄行を発見
+      }
+      newRow++;
+    }
 
     // 各列にデータを設定
     sheet.getRange(newRow, ATTENDANCE_COLS.DATE).setValue(date);
@@ -1332,19 +1342,27 @@ function handleCheckout(data) {
 }
 
 /**
- * 指定日の勤怠一覧取得（逆順走査で高速化）
+ * 指定日の勤怠一覧取得（一括取得で高速化）
  */
 function handleGetDailyAttendance(date) {
   const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
   const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return createSuccessResponse({ records: [] });
+  }
+
+  // 全データを一括取得（API呼び出しを1回に削減）
+  const allData = sheet.getRange(2, 1, lastRow - 1, 28).getValues();
   const records = [];
 
-  // 最終行から2行目へ逆順走査（最新データから検索）
-  for (let row = lastRow; row >= 2; row--) {
-    const rowDate = formatDate(sheet.getRange(row, ATTENDANCE_COLS.DATE).getValue());
+  // メモリ上でフィルタリング（逆順走査で最新データから検索）
+  for (let i = allData.length - 1; i >= 0; i--) {
+    const rowData = allData[i];
+    const rowDate = formatDate(rowData[ATTENDANCE_COLS.DATE - 1]);
 
     if (rowDate === date) {
-      records.push(parseAttendanceRow(sheet, row));
+      records.push(parseAttendanceRowFromArray(rowData, i + 2));
     }
   }
 
@@ -1371,7 +1389,92 @@ function findAttendanceRow(sheet, date, userName) {
 }
 
 /**
- * 勤怠データ行をパース
+ * 勤怠データ行をパース（配列版：高速）
+ */
+function parseAttendanceRowFromArray(rowData, rowNumber) {
+  // ヘルパー関数：値を文字列に変換（空白の場合はnull）
+  function toStringOrNull(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    return String(value);
+  }
+
+  // ヘルパー関数：時刻をHH:mm形式にフォーマット（Date型とString型の両方に対応）
+  function formatTimeToHHMM(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    // すでにHH:mm形式の文字列の場合はそのまま返す
+    if (typeof value === 'string' && /^\d{1,2}:\d{2}$/.test(value)) {
+      return value;
+    }
+
+    // Date型の場合はHH:mm形式に変換
+    if (value instanceof Date) {
+      const hours = String(value.getHours()).padStart(2, '0');
+      const minutes = String(value.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    // その他の場合は文字列化を試みる
+    const valueStr = String(value);
+    // HH:mm形式のチェック
+    if (/^\d{1,2}:\d{2}$/.test(valueStr)) {
+      return valueStr;
+    }
+
+    return null;
+  }
+
+  // ヘルパー関数：値を整数に変換（エラー値や空白の場合はnull）
+  function toIntOrNull(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    // エラー値（#NUM!、#VALUE!など）をチェック
+    const valueStr = String(value);
+    if (valueStr.startsWith('#')) {
+      return null;
+    }
+    // 数値に変換
+    const num = Number(value);
+    if (isNaN(num)) {
+      return null;
+    }
+    return Math.round(num);
+  }
+
+  return {
+    rowId: rowNumber,
+    date: formatDate(rowData[ATTENDANCE_COLS.DATE - 1]),
+    userName: toStringOrNull(rowData[ATTENDANCE_COLS.USER_NAME - 1]),
+    scheduledUse: toStringOrNull(rowData[ATTENDANCE_COLS.SCHEDULED - 1]),
+    attendance: toStringOrNull(rowData[ATTENDANCE_COLS.ATTENDANCE - 1]),
+    morningTask: toStringOrNull(rowData[ATTENDANCE_COLS.MORNING_TASK - 1]),
+    afternoonTask: toStringOrNull(rowData[ATTENDANCE_COLS.AFTERNOON_TASK - 1]),
+    healthCondition: toStringOrNull(rowData[ATTENDANCE_COLS.HEALTH - 1]),
+    sleepStatus: toStringOrNull(rowData[ATTENDANCE_COLS.SLEEP - 1]),
+    checkinComment: toStringOrNull(rowData[ATTENDANCE_COLS.CHECKIN_COMMENT - 1]),
+    fatigue: toStringOrNull(rowData[ATTENDANCE_COLS.FATIGUE - 1]),
+    stress: toStringOrNull(rowData[ATTENDANCE_COLS.STRESS - 1]),
+    checkoutComment: toStringOrNull(rowData[ATTENDANCE_COLS.CHECKOUT_COMMENT - 1]),
+    checkinTime: formatTimeToHHMM(rowData[ATTENDANCE_COLS.CHECKIN_TIME - 1]),
+    checkoutTime: formatTimeToHHMM(rowData[ATTENDANCE_COLS.CHECKOUT_TIME - 1]),
+    lunchBreak: toStringOrNull(rowData[ATTENDANCE_COLS.LUNCH_BREAK - 1]),
+    shortBreak: toStringOrNull(rowData[ATTENDANCE_COLS.SHORT_BREAK - 1]),
+    otherBreak: toStringOrNull(rowData[ATTENDANCE_COLS.OTHER_BREAK - 1]),
+    actualWorkMinutes: toIntOrNull(rowData[ATTENDANCE_COLS.WORK_MINUTES - 1]),
+    mealService: rowData[ATTENDANCE_COLS.MEAL_SERVICE - 1] || false,
+    absenceSupport: rowData[ATTENDANCE_COLS.ABSENCE_SUPPORT - 1] || false,
+    visitSupport: rowData[ATTENDANCE_COLS.VISIT_SUPPORT - 1] || false,
+    transportService: rowData[ATTENDANCE_COLS.TRANSPORT - 1] || false
+  };
+}
+
+/**
+ * 勤怠データ行をパース（シート版：互換性のため残す）
  */
 function parseAttendanceRow(sheet, row) {
   // ヘルパー関数：値を文字列に変換（空白の場合はnull）
