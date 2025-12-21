@@ -31,13 +31,28 @@ class ApiService {
 
   /// データを取得する（GET）
   Future<Map<String, dynamic>> get(String endpoint) async {
+    final stopwatch = Stopwatch()..start();
     try {
+      print('⏱️ [API-GET] 開始: $endpoint');
+
       final baseUrl = await _gasUrl;
       final url = Uri.parse('$baseUrl?action=$endpoint');
-      final response = await _client.get(url).timeout(ApiConfig.timeout);
 
-      return await _handleResponse(response);
+      final requestStart = Stopwatch()..start();
+      final response = await _client.get(url).timeout(ApiConfig.timeout);
+      requestStart.stop();
+
+      print('⏱️ [API-GET] ネットワーク時間: ${requestStart.elapsedMilliseconds}ms');
+
+      final result = await _handleResponse(response);
+
+      stopwatch.stop();
+      print('⏱️ [API-GET] 完了: $endpoint (合計: ${stopwatch.elapsedMilliseconds}ms)');
+
+      return result;
     } catch (e) {
+      stopwatch.stop();
+      print('❌ [API-GET] エラー: $endpoint (${stopwatch.elapsedMilliseconds}ms) - $e');
       throw Exception('通信エラー: $e');
     }
   }
@@ -47,7 +62,10 @@ class ApiService {
     String endpoint,
     Map<String, dynamic> data,
   ) async {
+    final stopwatch = Stopwatch()..start();
     try {
+      print('⏱️ [API-POST] 開始: $endpoint');
+
       final baseUrl = await _gasUrl;
       final url = Uri.parse(baseUrl);
       final body = jsonEncode({
@@ -55,6 +73,7 @@ class ApiService {
         ...data,
       });
 
+      final requestStart = Stopwatch()..start();
       final response = await _client
           .post(
             url,
@@ -62,9 +81,19 @@ class ApiService {
             body: body,
           )
           .timeout(ApiConfig.timeout);
+      requestStart.stop();
 
-      return await _handleResponse(response);
+      print('⏱️ [API-POST] ネットワーク時間: ${requestStart.elapsedMilliseconds}ms');
+
+      final result = await _handleResponse(response);
+
+      stopwatch.stop();
+      print('⏱️ [API-POST] 完了: $endpoint (合計: ${stopwatch.elapsedMilliseconds}ms)');
+
+      return result;
     } catch (e) {
+      stopwatch.stop();
+      print('❌ [API-POST] エラー: $endpoint (${stopwatch.elapsedMilliseconds}ms) - $e');
       throw Exception('通信エラー: $e');
     }
   }
@@ -100,14 +129,21 @@ class ApiService {
   Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
     // 302リダイレクトの場合、リダイレクト先を手動でフォロー
     if (response.statusCode == 302) {
+      print('🔄 [REDIRECT] 302リダイレクト検出');
+      final redirectStart = Stopwatch()..start();
+
       // HTMLからリダイレクトURLを抽出
       final redirectMatch = RegExp(r'HREF="([^"]+)"').firstMatch(response.body);
 
       if (redirectMatch != null) {
         final redirectUrl = redirectMatch.group(1)!.replaceAll('&amp;', '&');
 
+        print('🔄 [REDIRECT] リダイレクト先へ再リクエスト');
         // リダイレクト先にGETリクエストを送る
         final redirectResponse = await _client.get(Uri.parse(redirectUrl)).timeout(ApiConfig.timeout);
+
+        redirectStart.stop();
+        print('🔄 [REDIRECT] 完了: ${redirectStart.elapsedMilliseconds}ms');
 
         // リダイレクト先のレスポンスを処理
         return await _handleResponse(redirectResponse);

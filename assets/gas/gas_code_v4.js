@@ -223,6 +223,9 @@ function doGet(e) {
     } else if (action.startsWith('attendance/daily/')) {
       const date = action.split('/')[2];
       return handleGetDailyAttendance(date);
+    } else if (action.startsWith('attendance/scheduled/')) {
+      const date = action.split('/')[2];
+      return handleGetScheduledUsers(date);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -1263,32 +1266,52 @@ function handleCheckin(data) {
       return createErrorResponse('既に出勤登録されています');
     }
 
-    // D列が空欄の最上行を探す（X列の関数が入っている行を優先的に使用）
-    let newRow = 2; // 2行目から開始（1行目はヘッダー）
+    // D列が空欄の最上行を探す（一括取得で超高速化）
     const lastRow = sheet.getLastRow();
     const maxRow = Math.max(lastRow, 200); // 最低でも200行目までチェック
 
-    // D列（日時）が空欄の行を探す
-    while (newRow <= maxRow) {
-      const cellValue = sheet.getRange(newRow, ATTENDANCE_COLS.DATE).getValue();
-      if (cellValue === '' || cellValue === null) {
-        break; // 空欄行を発見
+    // D列を一括取得（API呼び出し1回）
+    const dateColumn = sheet.getRange(2, ATTENDANCE_COLS.DATE, maxRow - 1, 1).getValues();
+
+    // メモリ上で空欄行を検索
+    let newRow = 2;
+    for (let i = 0; i < dateColumn.length; i++) {
+      if (dateColumn[i][0] === '' || dateColumn[i][0] === null) {
+        newRow = i + 2; // 配列インデックス → 行番号に変換
+        break;
       }
-      newRow++;
     }
 
-    // 各列にデータを設定
-    sheet.getRange(newRow, ATTENDANCE_COLS.DATE).setValue(date);
-    sheet.getRange(newRow, ATTENDANCE_COLS.USER_NAME).setValue(userName);
+    // 空欄行が見つからなかった場合は最後に追加
+    if (newRow === 2 && dateColumn[0][0] !== '' && dateColumn[0][0] !== null) {
+      newRow = maxRow + 1;
+    }
 
-    if (data.scheduledUse) sheet.getRange(newRow, ATTENDANCE_COLS.SCHEDULED).setValue(data.scheduledUse);
-    if (data.attendance) sheet.getRange(newRow, ATTENDANCE_COLS.ATTENDANCE).setValue(data.attendance);
-    if (data.morningTask) sheet.getRange(newRow, ATTENDANCE_COLS.MORNING_TASK).setValue(data.morningTask);
-    if (data.afternoonTask) sheet.getRange(newRow, ATTENDANCE_COLS.AFTERNOON_TASK).setValue(data.afternoonTask);
-    if (data.healthCondition) sheet.getRange(newRow, ATTENDANCE_COLS.HEALTH).setValue(data.healthCondition);
-    if (data.sleepStatus) sheet.getRange(newRow, ATTENDANCE_COLS.SLEEP).setValue(data.sleepStatus);
-    if (data.checkinComment) sheet.getRange(newRow, ATTENDANCE_COLS.CHECKIN_COMMENT).setValue(data.checkinComment);
-    if (data.checkinTime) sheet.getRange(newRow, ATTENDANCE_COLS.CHECKIN_TIME).setValue(data.checkinTime);
+    // マスタ設定シートから曜日別出欠予定を自動取得
+    const scheduledAttendance = getUserScheduledAttendance(userName, date);
+    const scheduledValue = scheduledAttendance || data.scheduledUse || '';
+
+    // 必要な列のデータを配列として準備（D列〜S列：16列分）
+    const rowData = [];
+    rowData[0] = date;                          // D列: 日時
+    rowData[1] = userName;                      // E列: 利用者名
+    rowData[2] = scheduledValue;                // F列: 出欠（予定）
+    rowData[3] = data.attendance || '';         // G列: 出欠
+    rowData[4] = data.morningTask || '';        // H列: 担当業務AM
+    rowData[5] = data.afternoonTask || '';      // I列: 担当業務PM
+    rowData[6] = '';                            // J列: 業務連絡
+    rowData[7] = data.healthCondition || '';    // K列: 本日の体調
+    rowData[8] = data.sleepStatus || '';        // L列: 睡眠状況
+    rowData[9] = data.checkinComment || '';     // M列: 出勤時コメント
+    rowData[10] = '';                           // N列: 疲労感
+    rowData[11] = '';                           // O列: 心理的負荷
+    rowData[12] = '';                           // P列: 退勤時コメント
+    rowData[13] = '';                           // Q列: （空白列）
+    rowData[14] = '';                           // R列: （空白列）
+    rowData[15] = data.checkinTime || '';       // S列: 勤務開始時刻
+
+    // D列からS列まで一括入力（API呼び出し1回）
+    sheet.getRange(newRow, ATTENDANCE_COLS.DATE, 1, 16).setValues([rowData]);
 
     return createSuccessResponse({
       message: '出勤登録が完了しました',
@@ -1315,29 +1338,33 @@ function handleCheckout(data) {
     return createErrorResponse('出勤記録が見つかりません');
   }
 
-  // 退勤時刻を設定
-  sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_TIME).setValue(checkoutTime);
+  // 退勤時のデータを配列として準備
+  // N列〜P列（疲労感、心理的負荷、退勤時コメント）
+  const checkoutData1 = [
+    data.fatigue || '',
+    data.stress || '',
+    data.checkoutComment || ''
+  ];
 
-  // 退勤時のデータを設定
-  if (data.fatigue) sheet.getRange(rowIndex, ATTENDANCE_COLS.FATIGUE).setValue(data.fatigue);
-  if (data.stress) sheet.getRange(rowIndex, ATTENDANCE_COLS.STRESS).setValue(data.stress);
-  if (data.lunchBreak) sheet.getRange(rowIndex, ATTENDANCE_COLS.LUNCH_BREAK).setValue(data.lunchBreak);
-  if (data.shortBreak) sheet.getRange(rowIndex, ATTENDANCE_COLS.SHORT_BREAK).setValue(data.shortBreak);
-  if (data.otherBreak) sheet.getRange(rowIndex, ATTENDANCE_COLS.OTHER_BREAK).setValue(data.otherBreak);
-  if (data.checkoutComment) sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_COMMENT).setValue(data.checkoutComment);
+  // T列〜W列（勤務終了時刻、昼休憩、15分休憩、他休憩時間）
+  const checkoutData2 = [
+    checkoutTime,
+    data.lunchBreak || '',
+    data.shortBreak || '',
+    data.otherBreak || ''
+  ];
 
-  // 実労時間を計算
-  const checkinTime = sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKIN_TIME).getValue();
-  const lunchBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.LUNCH_BREAK).getValue();
-  const shortBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.SHORT_BREAK).getValue();
-  const otherBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.OTHER_BREAK).getValue();
+  // N列〜P列を一括入力（API呼び出し1回）
+  sheet.getRange(rowIndex, ATTENDANCE_COLS.FATIGUE, 1, 3).setValues([checkoutData1]);
 
-  const workMinutes = calculateWorkMinutes(checkinTime, checkoutTime, lunchBreak, shortBreak, otherBreak);
-  sheet.getRange(rowIndex, ATTENDANCE_COLS.WORK_MINUTES).setValue(workMinutes);
+  // T列〜W列を一括入力（API呼び出し1回）
+  sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_TIME, 1, 4).setValues([checkoutData2]);
+
+  // X列（実労時間）は関数で自動計算されるため、GAS側での計算・入力は不要
+  // S列（開始時刻）、T列（終了時刻）、U/V/W列（休憩）を入力すれば関数が自動計算する
 
   return createSuccessResponse({
-    message: '退勤登録が完了しました',
-    workMinutes: workMinutes
+    message: '退勤登録が完了しました'
   });
 }
 
@@ -1370,18 +1397,94 @@ function handleGetDailyAttendance(date) {
 }
 
 /**
- * 勤怠データ行を探す（逆順走査で高速化）
+ * 指定日の出勤予定者一覧を取得（予定と実績をマージ）
+ */
+function handleGetScheduledUsers(date) {
+  try {
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+    const attendanceSheet = getSheet(SHEET_NAMES.ATTENDANCE);
+    const dayColumn = getDayOfWeekColumn(date);
+
+    if (!dayColumn) {
+      return createErrorResponse('日付の解析に失敗しました');
+    }
+
+    // 実際の出勤記録を取得（高速化のため一括取得）
+    const lastRow = attendanceSheet.getLastRow();
+    const actualAttendance = {};
+
+    if (lastRow >= 2) {
+      const allData = attendanceSheet.getRange(2, 1, lastRow - 1, 28).getValues();
+
+      // 指定日の出勤記録を抽出
+      for (let i = allData.length - 1; i >= 0; i--) {
+        const rowData = allData[i];
+        const rowDate = formatDate(rowData[ATTENDANCE_COLS.DATE - 1]);
+
+        if (rowDate === date) {
+          const userName = rowData[ATTENDANCE_COLS.USER_NAME - 1];
+          actualAttendance[userName] = parseAttendanceRowFromArray(rowData, i + 2);
+        }
+      }
+    }
+
+    // マスタ設定シートから出勤予定者を取得
+    const scheduledUsers = [];
+    let row = MASTER_CONFIG.USER_DATA_START_ROW;
+
+    while (row <= 1000) {
+      const name = masterSheet.getRange(row, MASTER_CONFIG.USER_COLS.NAME).getValue();
+
+      // 空白行に達したら終了
+      if (!name || name === '') {
+        break;
+      }
+
+      const status = masterSheet.getRange(row, MASTER_CONFIG.USER_COLS.STATUS).getValue();
+      const scheduledValue = masterSheet.getRange(row, dayColumn).getValue();
+
+      // 契約中かつ出勤予定がある利用者のみ
+      if (status === '契約中' && scheduledValue && scheduledValue !== '') {
+        const userData = {
+          userName: name,
+          scheduledAttendance: scheduledValue,
+          hasCheckedIn: actualAttendance[name] ? true : false,
+          attendance: actualAttendance[name] || null
+        };
+
+        scheduledUsers.push(userData);
+      }
+
+      row++;
+    }
+
+    return createSuccessResponse({ scheduledUsers });
+
+  } catch (error) {
+    return createErrorResponse('出勤予定者取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 勤怠データ行を探す（一括取得で超高速化）
  */
 function findAttendanceRow(sheet, date, userName) {
   const lastRow = sheet.getLastRow();
 
-  // 最終行から2行目へ逆順走査（最新データから検索）
-  for (let row = lastRow; row >= 2; row--) {
-    const rowDate = formatDate(sheet.getRange(row, ATTENDANCE_COLS.DATE).getValue());
-    const rowUserName = sheet.getRange(row, ATTENDANCE_COLS.USER_NAME).getValue();
+  if (lastRow < 2) {
+    return null;
+  }
+
+  // D列（日時）とE列（利用者名）を一括取得（API呼び出し1回）
+  const dataRange = sheet.getRange(2, ATTENDANCE_COLS.DATE, lastRow - 1, 2).getValues();
+
+  // メモリ上で逆順検索（最新データから）
+  for (let i = dataRange.length - 1; i >= 0; i--) {
+    const rowDate = formatDate(dataRange[i][0]);
+    const rowUserName = dataRange[i][1];
 
     if (rowDate === date && rowUserName === userName) {
-      return row;
+      return i + 2; // 配列インデックス → 行番号に変換
     }
   }
 
@@ -1587,6 +1690,70 @@ function formatDate(dateValue) {
   const day = String(date.getDate()).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * 日付から曜日列を取得（マスタ設定シートの曜日別出欠予定用）
+ */
+function getDayOfWeekColumn(dateValue) {
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : new Date(dateValue);
+  const dayOfWeek = date.getDay(); // 0=日曜, 1=月曜, ..., 6=土曜
+
+  // 曜日に対応する列を返す
+  switch (dayOfWeek) {
+    case 0: return MASTER_CONFIG.USER_COLS.SCHEDULED_SUN; // 日曜
+    case 1: return MASTER_CONFIG.USER_COLS.SCHEDULED_MON; // 月曜
+    case 2: return MASTER_CONFIG.USER_COLS.SCHEDULED_TUE; // 火曜
+    case 3: return MASTER_CONFIG.USER_COLS.SCHEDULED_WED; // 水曜
+    case 4: return MASTER_CONFIG.USER_COLS.SCHEDULED_THU; // 木曜
+    case 5: return MASTER_CONFIG.USER_COLS.SCHEDULED_FRI; // 金曜
+    case 6: return MASTER_CONFIG.USER_COLS.SCHEDULED_SAT; // 土曜
+    default: return null;
+  }
+}
+
+/**
+ * マスタ設定シートから利用者の曜日別出欠予定を取得（一括取得で超高速化）
+ */
+function getUserScheduledAttendance(userName, dateValue) {
+  try {
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+    const dayColumn = getDayOfWeekColumn(dateValue);
+
+    if (!dayColumn) {
+      return null;
+    }
+
+    // A列（利用者名）と該当曜日列を一括取得（API呼び出し1回）
+    // 8行目から200行目までの範囲を取得
+    const nameCol = MASTER_CONFIG.USER_COLS.NAME;
+    const maxRows = 200;
+
+    // 利用者名列を一括取得
+    const namesRange = masterSheet.getRange(MASTER_CONFIG.USER_DATA_START_ROW, nameCol, maxRows, 1).getValues();
+    // 該当曜日列を一括取得
+    const scheduledRange = masterSheet.getRange(MASTER_CONFIG.USER_DATA_START_ROW, dayColumn, maxRows, 1).getValues();
+
+    // メモリ上で検索
+    for (let i = 0; i < namesRange.length; i++) {
+      const name = namesRange[i][0];
+
+      // 空白行に達したら終了
+      if (!name || name === '') {
+        break;
+      }
+
+      // 利用者名が一致したら、該当曜日の出欠予定を返す
+      if (name === userName) {
+        const scheduledValue = scheduledRange[i][0];
+        return scheduledValue || null;
+      }
+    }
+
+    return null; // 利用者が見つからない場合
+  } catch (error) {
+    return null; // エラーの場合はnullを返す
+  }
 }
 
 /**

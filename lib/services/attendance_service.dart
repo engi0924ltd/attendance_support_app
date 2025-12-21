@@ -49,6 +49,24 @@ class AttendanceService {
     return records.map((json) => Attendance.fromJson(json)).toList();
   }
 
+  /// 指定日の出勤予定者一覧を取得（支援者用）
+  Future<List<Map<String, dynamic>>> getScheduledUsers(String date) async {
+    final response = await _apiService.get('attendance/scheduled/$date');
+
+    final List<dynamic> scheduledUsers = response['scheduledUsers'] ?? [];
+
+    return scheduledUsers.map((item) {
+      return {
+        'userName': item['userName'],
+        'scheduledAttendance': item['scheduledAttendance'],
+        'hasCheckedIn': item['hasCheckedIn'],
+        'attendance': item['attendance'] != null
+            ? Attendance.fromJson(item['attendance'])
+            : null,
+      };
+    }).toList();
+  }
+
   /// 特定利用者の勤怠データを取得
   Future<Attendance?> getUserAttendance(String userName, String date) async {
     final response = await _apiService.get('attendance/user/$userName/$date');

@@ -21,18 +21,36 @@ class DailyAttendanceListScreen extends StatefulWidget {
       _DailyAttendanceListScreenState();
 }
 
-class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
+class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
+    with SingleTickerProviderStateMixin {
   final AttendanceService _attendanceService = AttendanceService();
   final AuthService _authService = AuthService();
   List<Attendance> _attendances = [];
+  List<Map<String, dynamic>> _scheduledUsers = [];
   bool _isLoading = true;
   String? _errorMessage;
   DateTime _selectedDate = DateTime.now();
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _loadAttendances();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  /// 勤怠一覧と出勤予定者を読み込む
+  Future<void> _loadData() async {
+    await Future.wait([
+      _loadAttendances(),
+      _loadScheduledUsers(),
+    ]);
   }
 
   /// 勤怠一覧を読み込む
@@ -72,6 +90,29 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
     }
   }
 
+  /// 出勤予定者を読み込む
+  Future<void> _loadScheduledUsers() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
+      final scheduledUsers = await _attendanceService.getScheduledUsers(dateStr);
+
+      setState(() {
+        _scheduledUsers = scheduledUsers;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'データの読み込みに失敗しました\n$e';
+        _isLoading = false;
+      });
+    }
+  }
+
   /// 日付を変更
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
@@ -85,7 +126,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
       setState(() {
         _selectedDate = picked;
       });
-      _loadAttendances();
+      _loadData();
     }
   }
 
@@ -142,7 +183,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadAttendances,
+            onPressed: _loadData,
             tooltip: '再読み込み',
           ),
           IconButton(
@@ -151,6 +192,16 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
             tooltip: 'ログアウト',
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          tabs: const [
+            Tab(text: '出勤一覧'),
+            Tab(text: '出勤予定者'),
+          ],
+        ),
       ),
       drawer: _buildDrawer(),
       body: Column(
@@ -161,7 +212,13 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _errorMessage != null
                     ? _buildErrorView()
-                    : _buildAttendanceList(),
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildAttendanceList(),
+                          _buildScheduledUsersList(),
+                        ],
+                      ),
           ),
         ],
       ),
@@ -241,6 +298,38 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
     );
   }
 
+  /// 出勤予定者一覧
+  Widget _buildScheduledUsersList() {
+    if (_scheduledUsers.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inbox,
+              size: 64,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'この日の出勤予定者はいません',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: _scheduledUsers.length,
+      itemBuilder: (context, index) {
+        final scheduledUser = _scheduledUsers[index];
+        return _buildScheduledUserCard(scheduledUser);
+      },
+    );
+  }
+
   /// 勤怠一覧
   Widget _buildAttendanceList() {
     if (_attendances.isEmpty) {
@@ -270,6 +359,107 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
         final attendance = _attendances[index];
         return _buildAttendanceCard(attendance);
       },
+    );
+  }
+
+  /// 出勤予定者カード
+  Widget _buildScheduledUserCard(Map<String, dynamic> scheduledUser) {
+    final userName = scheduledUser['userName'] as String;
+    final scheduledAttendance = scheduledUser['scheduledAttendance'] as String;
+    final hasCheckedIn = scheduledUser['hasCheckedIn'] as bool;
+    final attendance = scheduledUser['attendance'] as Attendance?;
+
+    // 状態判定
+    final bool hasNotCheckedIn = !hasCheckedIn;
+    final bool hasNotCheckedOut = attendance != null &&
+        attendance.checkinTime != null &&
+        attendance.checkoutTime == null;
+    final bool hasComment = attendance != null &&
+        (attendance.checkinComment != null || attendance.checkoutComment != null);
+
+    // 背景色の優先順位：未登録 > 未退勤 > コメント
+    Color? cardColor;
+    IconData statusIcon;
+    Color statusIconColor;
+    String statusText;
+
+    if (hasNotCheckedIn) {
+      cardColor = Colors.orange.shade50;
+      statusIcon = Icons.warning_amber;
+      statusIconColor = Colors.orange;
+      statusText = 'まだ出勤登録されていません';
+    } else if (hasNotCheckedOut) {
+      cardColor = Colors.yellow.shade50;
+      statusIcon = Icons.check_circle;
+      statusIconColor = Colors.green;
+      statusText = '出勤登録済み（未退勤）';
+    } else if (hasComment) {
+      cardColor = Colors.blue.shade50;
+      statusIcon = Icons.check_circle;
+      statusIconColor = Colors.green;
+      statusText = '出勤・退勤完了（コメントあり）';
+    } else {
+      cardColor = Colors.white;
+      statusIcon = Icons.check_circle;
+      statusIconColor = Colors.green;
+      statusText = '出勤・退勤完了';
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      color: cardColor,
+      child: ListTile(
+        leading: Icon(
+          statusIcon,
+          color: statusIconColor,
+          size: 32,
+        ),
+        title: Row(
+          children: [
+            Text(
+              userName,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                scheduledAttendance,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(statusText),
+            if (attendance != null) ...[
+              const SizedBox(height: 4),
+              _buildAttendanceStatusText(attendance),
+              if (attendance.morningTask != null || attendance.afternoonTask != null)
+                _buildTaskText(attendance),
+              if (hasComment)
+                _buildCommentAlert(attendance),
+            ],
+          ],
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          // TODO: 勤怠編集画面へ遷移
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('勤怠編集機能は次のフェーズで実装予定')),
+          );
+        },
+      ),
     );
   }
 
