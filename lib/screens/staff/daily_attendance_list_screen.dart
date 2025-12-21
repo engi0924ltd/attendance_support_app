@@ -46,6 +46,20 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
       final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
       final attendances = await _attendanceService.getDailyAttendance(dateStr);
 
+      // 退勤未登録の人を上位に並べ替え
+      attendances.sort((a, b) {
+        final aHasCheckout = a.checkoutTime != null;
+        final bHasCheckout = b.checkoutTime != null;
+
+        // 両方未退勤または両方退勤済みの場合は名前順
+        if (aHasCheckout == bHasCheckout) {
+          return a.userName.compareTo(b.userName);
+        }
+
+        // 未退勤(checkoutTime == null)を上位に
+        return aHasCheckout ? 1 : -1;
+      });
+
       setState(() {
         _attendances = attendances;
         _isLoading = false;
@@ -261,8 +275,20 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
 
   /// 勤怠カード
   Widget _buildAttendanceCard(Attendance attendance) {
+    final hasComment = attendance.checkinComment != null || attendance.checkoutComment != null;
+    final hasNotCheckedOut = attendance.checkinTime != null && attendance.checkoutTime == null;
+
+    // 背景色の優先順位：未退勤 > コメント
+    Color? cardColor;
+    if (hasNotCheckedOut) {
+      cardColor = Colors.yellow.shade50;
+    } else if (hasComment) {
+      cardColor = Colors.amber.shade50;
+    }
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      color: cardColor,
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: _getStatusColor(attendance.attendanceStatus),
@@ -271,19 +297,49 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
-        title: Text(
-          attendance.userName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          children: [
+            Text(
+              attendance.userName,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            if (hasNotCheckedOut) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.yellow.shade700,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '未退勤',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+            if (hasComment) ...[
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.comment,
+                size: 18,
+                color: Colors.orange,
+              ),
+            ],
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Text('出欠: ${attendance.attendanceStatus ?? "未入力"}'),
-            if (attendance.checkinTime != null)
-              Text('出勤: ${attendance.checkinTime}'),
-            if (attendance.morningTask != null)
-              Text('午前: ${attendance.morningTask}'),
+            _buildAttendanceStatusText(attendance),
+            if (attendance.morningTask != null || attendance.afternoonTask != null)
+              _buildTaskText(attendance),
+            if (hasComment)
+              _buildCommentAlert(attendance),
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
@@ -311,6 +367,98 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen> {
       default:
         return Colors.grey;
     }
+  }
+
+  /// 出欠状態と勤務時刻を表示するテキスト
+  Widget _buildAttendanceStatusText(Attendance attendance) {
+    final status = attendance.attendanceStatus ?? "未入力";
+    final checkinTime = attendance.checkinTime;
+    final checkoutTime = attendance.checkoutTime;
+
+    // 勤務時刻の表示文字列を構築
+    String timeText = '';
+    if (checkinTime != null) {
+      final startTime = checkinTime;
+      final endTime = checkoutTime ?? '未退勤';
+      timeText = ' ($startTime - $endTime)';
+    } else if (checkoutTime != null) {
+      // 出勤時刻がないが退勤時刻がある場合（通常はあり得ないが念のため）
+      timeText = ' (--:-- - $checkoutTime)';
+    }
+
+    return Text('出欠: $status$timeText');
+  }
+
+  /// 午前・午後の業務を1行で表示するテキスト
+  Widget _buildTaskText(Attendance attendance) {
+    final morningTask = attendance.morningTask;
+    final afternoonTask = attendance.afternoonTask;
+
+    // 両方ある場合
+    if (morningTask != null && afternoonTask != null) {
+      return Text('業務: 午前 $morningTask / 午後 $afternoonTask');
+    }
+    // 午前のみ
+    else if (morningTask != null) {
+      return Text('業務: 午前 $morningTask');
+    }
+    // 午後のみ
+    else if (afternoonTask != null) {
+      return Text('業務: 午後 $afternoonTask');
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  /// コメントアラートを表示
+  Widget _buildCommentAlert(Attendance attendance) {
+    final checkinComment = attendance.checkinComment;
+    final checkoutComment = attendance.checkoutComment;
+
+    String commentText = '';
+
+    // 両方ある場合
+    if (checkinComment != null && checkoutComment != null) {
+      commentText = '出勤時「$checkinComment」/ 退勤時「$checkoutComment」';
+    }
+    // 出勤時のみ
+    else if (checkinComment != null) {
+      commentText = '出勤時「$checkinComment」';
+    }
+    // 退勤時のみ
+    else if (checkoutComment != null) {
+      commentText = '退勤時「$checkoutComment」';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade100,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.orange.shade300, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber,
+            size: 18,
+            color: Colors.orange,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'コメント: $commentText',
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// ドロワーメニュー

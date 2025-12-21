@@ -1382,6 +1382,34 @@ function parseAttendanceRow(sheet, row) {
     return String(value);
   }
 
+  // ヘルパー関数：時刻をHH:mm形式にフォーマット（Date型とString型の両方に対応）
+  function formatTimeToHHMM(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    // すでにHH:mm形式の文字列の場合はそのまま返す
+    if (typeof value === 'string' && /^\d{1,2}:\d{2}$/.test(value)) {
+      return value;
+    }
+
+    // Date型の場合はHH:mm形式に変換
+    if (value instanceof Date) {
+      const hours = String(value.getHours()).padStart(2, '0');
+      const minutes = String(value.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    // その他の場合は文字列化を試みる
+    const valueStr = String(value);
+    // HH:mm形式のチェック
+    if (/^\d{1,2}:\d{2}$/.test(valueStr)) {
+      return valueStr;
+    }
+
+    return null;
+  }
+
   // ヘルパー関数：値を整数に変換（エラー値や空白の場合はnull）
   function toIntOrNull(value) {
     if (value === null || value === undefined || value === '') {
@@ -1414,8 +1442,8 @@ function parseAttendanceRow(sheet, row) {
     fatigue: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.FATIGUE).getValue()),
     stress: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.STRESS).getValue()),
     checkoutComment: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.CHECKOUT_COMMENT).getValue()),
-    checkinTime: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.CHECKIN_TIME).getValue()),
-    checkoutTime: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.CHECKOUT_TIME).getValue()),
+    checkinTime: formatTimeToHHMM(sheet.getRange(row, ATTENDANCE_COLS.CHECKIN_TIME).getValue()),
+    checkoutTime: formatTimeToHHMM(sheet.getRange(row, ATTENDANCE_COLS.CHECKOUT_TIME).getValue()),
     lunchBreak: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.LUNCH_BREAK).getValue()),
     shortBreak: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.SHORT_BREAK).getValue()),
     otherBreak: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.OTHER_BREAK).getValue()),
