@@ -67,6 +67,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// プルダウン値から数字部分だけを抽出
+  /// 例: "1（非常に悪い）" -> "1"
+  String? _extractNumber(String? value) {
+    if (value == null || value.isEmpty) return value;
+    final match = RegExp(r'^\d+').firstMatch(value);
+    return match != null ? match.group(0) : value;
+  }
+
   /// 退勤登録
   Future<void> _submitCheckout() async {
     // 必須項目のバリデーション
@@ -104,8 +112,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         widget.userName,
         dateStr,
         checkoutTime,
-        fatigue: _fatigue!,
-        stress: _stress!,
+        fatigue: _extractNumber(_fatigue),  // 数字部分のみ抽出
+        stress: _extractNumber(_stress),    // 数字部分のみ抽出
         lunchBreak: _lunchBreak,
         shortBreak: _shortBreak,
         otherBreak: _otherBreak,

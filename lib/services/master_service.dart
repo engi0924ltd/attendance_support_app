@@ -35,6 +35,11 @@ class MasterService {
 
     // APIから取得
     final response = await _apiService.get('master/dropdowns');
+
+    // 【デバッグ】APIレスポンスを確認
+    print('🔧 API Response (workLocations): ${response['workLocations']}');
+    print('🔧 API Response (recorders): ${response['recorders']}');
+
     final options = DropdownOptions.fromJson(response);
 
     // キャッシュに保存
@@ -92,6 +97,7 @@ class MasterService {
         'workLocations': options.workLocations,
         'evaluations': options.evaluations,
         'scheduledWeekly': options.scheduledWeekly,
+        'recorders': options.recorders, // 【追加】記録者
         'rosterStatus': options.rosterStatus,
         'lifeProtection': options.lifeProtection,
         'disabilityPension': options.disabilityPension,

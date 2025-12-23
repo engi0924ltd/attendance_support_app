@@ -67,6 +67,14 @@ class _CheckinScreenState extends State<CheckinScreen> {
     }
   }
 
+  /// プルダウン値から数字部分だけを抽出
+  /// 例: "1（非常に悪い）" -> "1"
+  String? _extractNumber(String? value) {
+    if (value == null || value.isEmpty) return value;
+    final match = RegExp(r'^\d+').firstMatch(value);
+    return match != null ? match.group(0) : value;
+  }
+
   /// 出勤登録
   Future<void> _submitCheckin() async {
     // 必須項目のバリデーション
@@ -106,8 +114,8 @@ class _CheckinScreenState extends State<CheckinScreen> {
         attendanceStatus: '出勤',
         morningTask: _morningTask,
         afternoonTask: _afternoonTask,
-        healthCondition: _healthCondition,
-        sleepStatus: _sleepStatus,
+        healthCondition: _extractNumber(_healthCondition),  // 数字部分のみ抽出
+        sleepStatus: _extractNumber(_sleepStatus),          // 数字部分のみ抽出
         checkinComment: _commentController.text,
         checkinTime: checkinTime,
         mealService: false,  // 管理者が後から登録

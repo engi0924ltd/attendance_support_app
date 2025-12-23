@@ -78,11 +78,26 @@ class AttendanceService {
   }
 
   /// 勤怠データを更新（支援者用）
-  Future<Map<String, dynamic>> updateAttendance(Attendance attendance) async {
-    final response = await _apiService.put(
-      'attendance/update/${attendance.rowId}',
-      attendance.toJson(),
-    );
+  Future<Map<String, dynamic>> updateAttendance(
+    String userName,
+    String date, {
+    String? attendanceStatus,
+    String? checkinTime,
+    String? checkoutTime,
+    String? lunchBreak,
+    String? shortBreak,
+    String? otherBreak,
+  }) async {
+    final response = await _apiService.post('attendance/update', {
+      'userName': userName,
+      'date': date,
+      'attendanceStatus': attendanceStatus,
+      'checkinTime': checkinTime,
+      'checkoutTime': checkoutTime,
+      'lunchBreak': lunchBreak,
+      'shortBreak': shortBreak,
+      'otherBreak': otherBreak,
+    });
     return response;
   }
 }

@@ -15,6 +15,7 @@ class DropdownOptions {
   final List<String> workLocations;       // 勤務地
   final List<String> evaluations;         // 評価項目
   final List<String> scheduledWeekly;     // 曜日別出欠予定
+  final List<String> recorders;           // 記録者
   // 名簿用プルダウン
   final List<String> rosterStatus;        // ステータス
   final List<String> lifeProtection;      // 生活保護
@@ -44,6 +45,7 @@ class DropdownOptions {
     required this.workLocations,
     required this.evaluations,
     required this.scheduledWeekly,
+    required this.recorders,
     required this.rosterStatus,
     required this.lifeProtection,
     required this.disabilityPension,
@@ -74,6 +76,7 @@ class DropdownOptions {
       workLocations: List<String>.from(json['workLocations'] ?? []),
       evaluations: List<String>.from(json['evaluations'] ?? []),
       scheduledWeekly: List<String>.from(json['scheduledWeekly'] ?? []),
+      recorders: List<String>.from(json['recorders'] ?? []),
       rosterStatus: List<String>.from(json['rosterStatus'] ?? []),
       lifeProtection: List<String>.from(json['lifeProtection'] ?? []),
       disabilityPension: List<String>.from(json['disabilityPension'] ?? []),

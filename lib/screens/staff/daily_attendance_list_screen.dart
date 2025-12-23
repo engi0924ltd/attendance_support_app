@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../config/constants.dart';
 import '../common/menu_selection_screen.dart';
 import 'user_list_screen.dart';
+import 'user_detail_screen.dart';
 
 /// 本日の出勤一覧画面（支援者用）
 class DailyAttendanceListScreen extends StatefulWidget {
@@ -453,11 +454,22 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          // TODO: 勤怠編集画面へ遷移
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('勤怠編集機能は次のフェーズで実装予定')),
+        onTap: () async {
+          // 利用者詳細画面へ遷移
+          final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UserDetailScreen(
+                date: dateStr,
+                userName: userName,
+              ),
+            ),
           );
+          // 画面から戻ってきたらデータを再読み込み
+          if (result == true) {
+            _loadData();
+          }
         },
       ),
     );
@@ -533,11 +545,22 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          // TODO: 勤怠編集画面へ遷移
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('勤怠編集機能は次のフェーズで実装予定')),
+        onTap: () async {
+          // 利用者詳細画面へ遷移
+          final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UserDetailScreen(
+                date: dateStr,
+                userName: attendance.userName,
+              ),
+            ),
           );
+          // 画面から戻ってきたらデータを再読み込み
+          if (result == true) {
+            _loadData();
+          }
         },
       ),
     );
