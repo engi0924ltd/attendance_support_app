@@ -3,6 +3,7 @@ import '../../models/attendance.dart';
 import '../../models/user.dart';
 import '../../services/attendance_service.dart';
 import '../../services/master_service.dart';
+import '../../widgets/searchable_dropdown.dart';
 import 'user_detail_screen.dart';
 
 /// 過去の実績記録画面（支援者用）
@@ -160,30 +161,17 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
           const SizedBox(height: 8),
           _isLoadingUsers
               ? const Center(child: CircularProgressIndicator())
-              : DropdownButtonFormField<String>(
-                  value: _selectedUserName,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  hint: const Text('利用者を選択してください'),
-                  items: _users.map((user) {
-                    return DropdownMenuItem<String>(
-                      value: user.name,
-                      child: Text(user.name),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
+              : SearchableDropdown<User>(
+                  value: _users.where((u) => u.name == _selectedUserName).firstOrNull,
+                  items: _users,
+                  itemLabel: (user) => user.name,
+                  onChanged: (user) {
                     setState(() {
-                      _selectedUserName = value;
+                      _selectedUserName = user?.name;
                     });
                     _loadRecords();
                   },
+                  hint: '名前を入力して検索...',
                 ),
         ],
       ),

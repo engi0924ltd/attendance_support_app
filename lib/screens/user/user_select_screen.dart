@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../../services/master_service.dart';
+import '../../widgets/searchable_dropdown.dart';
 import 'checkin_screen.dart';
 import 'checkout_screen.dart';
 
@@ -112,33 +113,17 @@ class _UserSelectScreenState extends State<UserSelectScreen> {
           ),
           const SizedBox(height: 32),
 
-          // 名前選択のプルダウン
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButton<User>(
-              value: _selectedUser,
-              hint: const Text('名前を選択してください'),
-              isExpanded: true,
-              underline: const SizedBox(),
-              items: _users.map((user) {
-                return DropdownMenuItem<User>(
-                  value: user,
-                  child: Text(
-                    user.name,
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                );
-              }).toList(),
-              onChanged: (User? user) {
-                setState(() {
-                  _selectedUser = user;
-                });
-              },
-            ),
+          // 名前選択のプルダウン（検索機能付き）
+          SearchableDropdown<User>(
+            value: _selectedUser,
+            items: _users,
+            itemLabel: (user) => user.name,
+            onChanged: (user) {
+              setState(() {
+                _selectedUser = user;
+              });
+            },
+            hint: '名前を入力して検索...',
           ),
           const SizedBox(height: 48),
 
