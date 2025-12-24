@@ -8,6 +8,7 @@ import '../../config/constants.dart';
 import '../common/menu_selection_screen.dart';
 import 'user_list_screen.dart';
 import 'user_detail_screen.dart';
+import 'past_records_screen.dart';
 
 /// 本日の出勤一覧画面（支援者用）
 class DailyAttendanceListScreen extends StatefulWidget {
@@ -828,6 +829,21 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
                 context,
                 MaterialPageRoute(
                   builder: (context) => const UserListScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('過去の実績記録'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PastRecordsScreen(
+                    staffName: widget.staffName,
+                  ),
                 ),
               );
             },

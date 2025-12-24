@@ -11,16 +11,77 @@ class MasterService {
   // キャッシュのキー
   static const String _cacheKeyDropdowns = 'cached_dropdown_options';
   static const String _cacheKeyTimestamp = 'cached_dropdown_timestamp';
+  static const String _cacheKeyUsers = 'cached_users';
+  static const String _cacheKeyUsersTimestamp = 'cached_users_timestamp';
 
-  // キャッシュの有効期限（24時間）
+  // キャッシュの有効期限
   static const Duration _cacheExpiry = Duration(hours: 24);
+  static const Duration _usersCacheExpiry = Duration(hours: 1); // 利用者は1時間キャッシュ
 
-  /// 在籍中の利用者一覧を取得
-  Future<List<User>> getActiveUsers() async {
+  /// 在籍中の利用者一覧を取得（キャッシュ機能付き）
+  Future<List<User>> getActiveUsers({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      // キャッシュから取得を試みる
+      final cachedUsers = await _getCachedUsers();
+      if (cachedUsers != null) {
+        return cachedUsers;
+      }
+    }
+
+    // APIから取得
     final response = await _apiService.get('master/users');
-
     final List<dynamic> userList = response['users'] ?? [];
-    return userList.map((json) => User.fromJson(json)).toList();
+    final users = userList.map((json) => User.fromJson(json)).toList();
+
+    // キャッシュに保存
+    await _cacheUsers(users);
+
+    return users;
+  }
+
+  /// キャッシュされた利用者一覧を取得
+  Future<List<User>?> _getCachedUsers() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // キャッシュの有効期限をチェック
+      final timestampStr = prefs.getString(_cacheKeyUsersTimestamp);
+      if (timestampStr != null) {
+        final timestamp = DateTime.parse(timestampStr);
+        final now = DateTime.now();
+
+        if (now.difference(timestamp) < _usersCacheExpiry) {
+          // キャッシュが有効期限内
+          final cachedJson = prefs.getString(_cacheKeyUsers);
+          if (cachedJson != null) {
+            final List<dynamic> jsonList = jsonDecode(cachedJson);
+            return jsonList.map((json) => User.fromJson(json)).toList();
+          }
+        }
+      }
+    } catch (e) {
+      // キャッシュの読み込みに失敗した場合は無視
+    }
+    return null;
+  }
+
+  /// 利用者一覧をキャッシュに保存
+  Future<void> _cacheUsers(List<User> users) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = users.map((u) => u.toJson()).toList();
+      await prefs.setString(_cacheKeyUsers, jsonEncode(jsonList));
+      await prefs.setString(_cacheKeyUsersTimestamp, DateTime.now().toIso8601String());
+    } catch (e) {
+      // キャッシュの保存に失敗しても続行
+    }
+  }
+
+  /// 利用者キャッシュをクリア
+  Future<void> clearUsersCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_cacheKeyUsers);
+    await prefs.remove(_cacheKeyUsersTimestamp);
   }
 
   /// プルダウンの選択肢を取得（キャッシュ機能付き）

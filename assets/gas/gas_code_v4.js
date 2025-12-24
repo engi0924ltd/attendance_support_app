@@ -291,6 +291,10 @@ function doGet(e) {
       const date = parts[2];
       const userName = parts[3];
       return handleGetSupportRecord(date, userName);
+    } else if (action.startsWith('attendance/history/')) {
+      // 利用者の過去記録一覧を取得
+      const userName = decodeURIComponent(action.split('/')[2]);
+      return handleGetUserHistory(userName);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -444,69 +448,116 @@ function handleGetDropdowns() {
  */
 function handleGetEvaluationAlerts() {
   const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+  const masterSheet = getSheet(SHEET_NAMES.MASTER);
 
   const alerts = [];
   const today = new Date();
   const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
   const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
 
-  // 支援記録から全データを取得
-  const supportLastRow = supportSheet.getLastRow();
-  if (supportLastRow < 2) {
-    return createSuccessResponse({ alerts: [] });
+  // === Step 1: マスタシートから利用者の出勤予定を取得 ===
+  const masterLastRow = masterSheet.getLastRow();
+  const userScheduleMap = {}; // { userName: { needsHomeEval: boolean, needsExternalEval: boolean } }
+
+  if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
+    const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+    const numRows = masterLastRow - startRow + 1;
+    // A列(名前), C列(状態), D-J列(曜日別予定)を取得
+    const masterData = masterSheet.getRange(startRow, 1, numRows, 10).getValues();
+
+    for (let i = 0; i < masterData.length; i++) {
+      const name = masterData[i][MASTER_CONFIG.USER_COLS.NAME - 1];
+      const status = masterData[i][MASTER_CONFIG.USER_COLS.STATUS - 1];
+
+      // 空白行または退所済みはスキップ
+      if (!name || name === '' || status !== '契約中') {
+        continue;
+      }
+
+      // 曜日別予定をチェック（D-J列、インデックス3-9）
+      let needsHomeEval = false;
+      let needsExternalEval = false;
+
+      for (let col = 3; col <= 9; col++) {
+        const schedule = masterData[i][col];
+        if (schedule) {
+          const scheduleStr = String(schedule);
+          // 在宅チェック
+          if (scheduleStr.includes('在宅')) {
+            needsHomeEval = true;
+          }
+          // 施設外チェック
+          if (scheduleStr.includes('施設外')) {
+            needsExternalEval = true;
+          }
+        }
+      }
+
+      if (needsHomeEval || needsExternalEval) {
+        userScheduleMap[name] = {
+          needsHomeEval: needsHomeEval,
+          needsExternalEval: needsExternalEval
+        };
+      }
+    }
   }
 
-  // A列（日時）、B列（利用者名）、AD列（在宅支援評価対象）、AE列（施設外評価対象）を取得
-  const allSupportData = supportSheet.getRange(2, 1, supportLastRow - 1, 38).getValues();
-  const supportData = allSupportData.filter(row => row[0] && row[1]); // 空行を除外
+  // === Step 2: 支援記録から評価履歴を取得 ===
+  const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
 
   // 各利用者の最終評価日を集計
-  // キー: 利用者名, 値: { lastHomeDate: Date|null, lastExternalDate: Date|null, hasHomeEval: boolean, hasExternalEval: boolean }
   const userEvalMap = {};
 
-  for (let i = 0; i < supportData.length; i++) {
-    const row = supportData[i];
-    const userName = row[SUPPORT_COLS.USER_NAME - 1];
-    const recordDate = row[SUPPORT_COLS.DATE - 1];
-    const homeSupportEval = row[SUPPORT_COLS.HOME_SUPPORT_EVAL - 1];
-    const externalEval = row[SUPPORT_COLS.EXTERNAL_EVAL - 1];
+  if (actualLastRow >= 2) {
+    const MAX_SEARCH_ROWS = 500;
+    const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+    const startRow = Math.max(2, actualLastRow - searchRows + 1);
 
-    if (!userName) continue;
+    const dateCol = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, searchRows, 1).getValues();
+    const nameCol = supportSheet.getRange(startRow, SUPPORT_COLS.USER_NAME, searchRows, 1).getValues();
+    const homeCol = supportSheet.getRange(startRow, SUPPORT_COLS.HOME_SUPPORT_EVAL, searchRows, 1).getValues();
+    const externalCol = supportSheet.getRange(startRow, SUPPORT_COLS.EXTERNAL_EVAL, searchRows, 1).getValues();
 
-    // 初期化
-    if (!userEvalMap[userName]) {
-      userEvalMap[userName] = {
-        lastHomeDate: null,
-        lastExternalDate: null,
-        hasHomeEval: false,
-        hasExternalEval: false
-      };
-    }
+    for (let i = 0; i < searchRows; i++) {
+      if (!dateCol[i][0] || !nameCol[i][0]) continue;
 
-    // 在宅支援評価対象が○の場合
-    if (homeSupportEval === '○') {
-      userEvalMap[userName].hasHomeEval = true;
-      const evalDate = new Date(recordDate);
-      if (!userEvalMap[userName].lastHomeDate || evalDate > userEvalMap[userName].lastHomeDate) {
-        userEvalMap[userName].lastHomeDate = evalDate;
+      const userName = nameCol[i][0];
+
+      if (!userEvalMap[userName]) {
+        userEvalMap[userName] = {
+          lastHomeDate: null,
+          lastExternalDate: null,
+          hasHomeEval: false,
+          hasExternalEval: false
+        };
       }
-    }
 
-    // 施設外評価対象が○の場合
-    if (externalEval === '○') {
-      userEvalMap[userName].hasExternalEval = true;
-      const evalDate = new Date(recordDate);
-      if (!userEvalMap[userName].lastExternalDate || evalDate > userEvalMap[userName].lastExternalDate) {
-        userEvalMap[userName].lastExternalDate = evalDate;
+      // 在宅支援評価対象が○の場合
+      if (homeCol[i][0] === '○') {
+        userEvalMap[userName].hasHomeEval = true;
+        const evalDate = new Date(dateCol[i][0]);
+        if (!userEvalMap[userName].lastHomeDate || evalDate > userEvalMap[userName].lastHomeDate) {
+          userEvalMap[userName].lastHomeDate = evalDate;
+        }
+      }
+
+      // 施設外評価対象が○の場合
+      if (externalCol[i][0] === '○') {
+        userEvalMap[userName].hasExternalEval = true;
+        const evalDate = new Date(dateCol[i][0]);
+        if (!userEvalMap[userName].lastExternalDate || evalDate > userEvalMap[userName].lastExternalDate) {
+          userEvalMap[userName].lastExternalDate = evalDate;
+        }
       }
     }
   }
 
-  // 各利用者についてアラート判定
+  // === Step 3: アラート判定 ===
+  // 既存の評価履歴があるユーザーのアラート
   for (const userName in userEvalMap) {
     const evalInfo = userEvalMap[userName];
 
-    // 在宅支援評価のアラート判定（過去に1回でも○があるユーザーが対象）
+    // 在宅支援評価のアラート判定
     if (evalInfo.hasHomeEval && evalInfo.lastHomeDate) {
       const elapsed = today - evalInfo.lastHomeDate;
       if (elapsed >= ONE_WEEK_MS) {
@@ -518,11 +569,11 @@ function handleGetEvaluationAlerts() {
           daysSinceLastEval: daysSinceLastEval,
           lastEvalDate: formatDate(evalInfo.lastHomeDate)
         });
-        continue; // 1人につき1アラートのみ
+        continue;
       }
     }
 
-    // 施設外評価のアラート判定（過去に1回でも○があるユーザーが対象）
+    // 施設外評価のアラート判定
     if (evalInfo.hasExternalEval && evalInfo.lastExternalDate) {
       const elapsed = today - evalInfo.lastExternalDate;
       if (elapsed >= TWO_WEEKS_MS) {
@@ -533,6 +584,42 @@ function handleGetEvaluationAlerts() {
           message: `施設外評価が${daysSinceLastEval}日間未入力です`,
           daysSinceLastEval: daysSinceLastEval,
           lastEvalDate: formatDate(evalInfo.lastExternalDate)
+        });
+      }
+    }
+  }
+
+  // マスタに予定があるが一度も評価していないユーザーのアラート
+  for (const userName in userScheduleMap) {
+    const schedule = userScheduleMap[userName];
+    const evalInfo = userEvalMap[userName];
+
+    // 在宅予定があるが一度も評価していない
+    if (schedule.needsHomeEval && (!evalInfo || !evalInfo.hasHomeEval)) {
+      // 既にこのユーザーのアラートがなければ追加
+      const hasAlert = alerts.some(a => a.userName === userName);
+      if (!hasAlert) {
+        alerts.push({
+          userName: userName,
+          alertType: 'home',
+          message: '在宅支援評価が未実施です（初回評価が必要）',
+          daysSinceLastEval: 0,
+          lastEvalDate: null
+        });
+        continue;
+      }
+    }
+
+    // 施設外予定があるが一度も評価していない
+    if (schedule.needsExternalEval && (!evalInfo || !evalInfo.hasExternalEval)) {
+      const hasAlert = alerts.some(a => a.userName === userName);
+      if (!hasAlert) {
+        alerts.push({
+          userName: userName,
+          alertType: 'external',
+          message: '施設外評価が未実施です（初回評価が必要）',
+          daysSinceLastEval: 0,
+          lastEvalDate: null
         });
       }
     }
@@ -1913,6 +2000,52 @@ function handleUpdateAttendance(data) {
     });
   } catch (error) {
     return createErrorResponse('勤怠データ更新エラー: ' + error.message);
+  }
+}
+
+/**
+ * 利用者の過去記録一覧を取得（高速版）
+ * 直近データから検索し、最大50件を返す
+ */
+function handleGetUserHistory(userName) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.SUPPORT);
+
+    // 実データの最下行を取得
+    const actualLastRow = findActualLastRow(sheet, SUPPORT_COLS.USER_NAME);
+
+    if (actualLastRow < 2) {
+      return createSuccessResponse({ records: [] });
+    }
+
+    const MAX_RECORDS = 50;      // 最大取得件数
+    const MAX_SEARCH_ROWS = 500; // 最大検索行数
+
+    // 直近500行のみ検索（高速化）
+    const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+    const startRow = Math.max(2, actualLastRow - searchRows + 1);
+
+    // 必要な列のみ取得（高速化）: 日付、利用者名、出欠、出勤時間、退勤時間、実労時間、支援記録
+    const colsToFetch = 38; // 全列取得（parseAttendanceRowFromArrayで必要）
+    const allData = sheet.getRange(startRow, 1, searchRows, colsToFetch).getValues();
+    const records = [];
+
+    // 逆順（新しい順）で検索し、最大件数まで取得
+    for (let i = allData.length - 1; i >= 0 && records.length < MAX_RECORDS; i--) {
+      const rowUserName = allData[i][SUPPORT_COLS.USER_NAME - 1];
+
+      // 利用者名が一致する行のみ処理
+      if (rowUserName && String(rowUserName) === userName) {
+        const rowNumber = startRow + i;
+        records.push(parseAttendanceRowFromArray(allData[i], rowNumber));
+      }
+    }
+
+    // 既に新しい順になっているのでソート不要
+
+    return createSuccessResponse({ records });
+  } catch (error) {
+    return createErrorResponse('履歴取得エラー: ' + error.message);
   }
 }
 

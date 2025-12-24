@@ -100,4 +100,14 @@ class AttendanceService {
     });
     return response;
   }
+
+  /// 特定利用者の過去記録一覧を取得
+  Future<List<Attendance>> getUserHistory(String userName) async {
+    final encodedName = Uri.encodeComponent(userName);
+    final response = await _apiService.get('attendance/history/$encodedName');
+
+    final List<dynamic> records = response['records'] ?? [];
+
+    return records.map((json) => Attendance.fromJson(json)).toList();
+  }
 }
