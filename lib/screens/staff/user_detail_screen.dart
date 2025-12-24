@@ -47,14 +47,14 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   final TextEditingController _userStatusController = TextEditingController();
   String? _editedWorkLocation;  // Dropdown用に変更
   String? _editedRecorder;      // Dropdown用に変更
-  final TextEditingController _homeSupportEvalController = TextEditingController();
-  final TextEditingController _externalEvalController = TextEditingController();
+  bool _isHomeSupportEval = false;   // 在宅支援評価対象（チェックボックス）
+  bool _isExternalEval = false;      // 施設外評価対象（チェックボックス）
   final TextEditingController _workGoalController = TextEditingController();
-  final TextEditingController _workEvalController = TextEditingController();
-  final TextEditingController _employmentEvalController = TextEditingController();
-  final TextEditingController _workMotivationController = TextEditingController();
-  final TextEditingController _communicationController = TextEditingController();
-  final TextEditingController _evaluationController = TextEditingController();
+  String? _editedWorkEval;      // Dropdown用に変更
+  String? _editedEmploymentEval; // Dropdown用に変更
+  String? _editedWorkMotivation; // Dropdown用に変更
+  String? _editedCommunication;  // Dropdown用に変更
+  String? _editedEvaluation;     // Dropdown用に変更
   final TextEditingController _userFeedbackController = TextEditingController();
 
   @override
@@ -66,14 +66,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   @override
   void dispose() {
     _userStatusController.dispose();
-    _homeSupportEvalController.dispose();
-    _externalEvalController.dispose();
     _workGoalController.dispose();
-    _workEvalController.dispose();
-    _employmentEvalController.dispose();
-    _workMotivationController.dispose();
-    _communicationController.dispose();
-    _evaluationController.dispose();
     _userFeedbackController.dispose();
     super.dispose();
   }
@@ -94,7 +87,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       final results = await Future.wait([
         _attendanceService.getUserAttendance(widget.userName, dateStr),
         _supportService.getSupportRecord(dateStr, widget.userName),
-        _masterService.getDropdownOptions(forceRefresh: true), // キャッシュを使わず強制取得
+        _masterService.getDropdownOptions(),
       ]);
 
       setState(() {
@@ -102,12 +95,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         _supportRecord = results[1] as SupportRecord?;
         _dropdownOptions = results[2] as DropdownOptions?;
         _isLoading = false;
-
-        // 【デバッグ】勤務地と記録者のデータを確認
-        print('📍 勤務地の選択肢数: ${_dropdownOptions?.workLocations.length ?? 0}');
-        print('📍 勤務地の内容: ${_dropdownOptions?.workLocations}');
-        print('👤 記録者の選択肢数: ${_dropdownOptions?.recorders.length ?? 0}');
-        print('👤 記録者の内容: ${_dropdownOptions?.recorders}');
 
         // 勤怠データがあれば編集用変数に設定（文字列に変換）
         if (_attendance != null) {
@@ -124,14 +111,15 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           _userStatusController.text = _supportRecord!.userStatus ?? '';
           _editedWorkLocation = _supportRecord!.workLocation;
           _editedRecorder = _supportRecord!.recorder;
-          _homeSupportEvalController.text = _supportRecord!.homeSupportEval ?? '';
-          _externalEvalController.text = _supportRecord!.externalEval ?? '';
+          // ○が入っていればtrue、それ以外はfalse
+          _isHomeSupportEval = _supportRecord!.homeSupportEval == '○';
+          _isExternalEval = _supportRecord!.externalEval == '○';
           _workGoalController.text = _supportRecord!.workGoal ?? '';
-          _workEvalController.text = _supportRecord!.workEval ?? '';
-          _employmentEvalController.text = _supportRecord!.employmentEval ?? '';
-          _workMotivationController.text = _supportRecord!.workMotivation ?? '';
-          _communicationController.text = _supportRecord!.communication ?? '';
-          _evaluationController.text = _supportRecord!.evaluation ?? '';
+          _editedWorkEval = _supportRecord!.workEval;
+          _editedEmploymentEval = _supportRecord!.employmentEval;
+          _editedWorkMotivation = _supportRecord!.workMotivation;
+          _editedCommunication = _supportRecord!.communication;
+          _editedEvaluation = _supportRecord!.evaluation;
           _userFeedbackController.text = _supportRecord!.userFeedback ?? '';
         }
       });
@@ -143,12 +131,12 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     }
   }
 
-  /// 勤怠データを保存
-  Future<void> _saveAttendance() async {
+  /// 勤怠データと支援記録を統合保存
+  Future<void> _saveAll() async {
     if (_attendance == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('勤怠データがありません。'),
+          content: Text('勤怠データがありません。先に出勤・退勤登録を行ってください。'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -166,47 +154,32 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       return;
     }
 
-    try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
-
-      await _attendanceService.updateAttendance(
-        widget.userName,
-        widget.date,
-        attendanceStatus: _editedAttendanceStatus,
-        checkinTime: _editedCheckinTime,
-        checkoutTime: _editedCheckoutTime,
-        lunchBreak: _editedLunchBreak,
-        shortBreak: _editedShortBreak,
-        otherBreak: _editedOtherBreak,
+    // 支援記録の必須項目チェック
+    final userStatus = _userStatusController.text.trim();
+    if (userStatus.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('「支援記録」を入力してください。'),
+          backgroundColor: Colors.orange,
+        ),
       );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('勤怠データを保存しました')),
-        );
-        _loadData(); // データ再読み込み
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = '勤怠データの保存に失敗しました\n$e';
-        _isLoading = false;
-      });
-    }
-  }
-
-  /// 支援記録を保存
-  Future<void> _saveSupportRecord() async {
-    if (!_supportFormKey.currentState!.validate()) {
       return;
     }
 
-    if (_attendance == null) {
+    if (_editedWorkLocation == null || _editedWorkLocation!.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('勤怠データがありません。先に出勤・退勤登録を行ってください。'),
+          content: Text('勤務地を選択してください。'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_editedRecorder == null || _editedRecorder!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('記録者を選択してください。'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -219,20 +192,33 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         _errorMessage = null;
       });
 
+      // 勤怠データを保存
+      await _attendanceService.updateAttendance(
+        widget.userName,
+        widget.date,
+        attendanceStatus: _editedAttendanceStatus,
+        checkinTime: _editedCheckinTime,
+        checkoutTime: _editedCheckoutTime,
+        lunchBreak: _editedLunchBreak,
+        shortBreak: _editedShortBreak,
+        otherBreak: _editedOtherBreak,
+      );
+
+      // 支援記録を保存
       final newRecord = SupportRecord(
         date: widget.date,
         userName: widget.userName,
-        userStatus: _userStatusController.text.trim(),
+        userStatus: userStatus,
         workLocation: _editedWorkLocation,
         recorder: _editedRecorder,
-        homeSupportEval: _homeSupportEvalController.text.trim(),
-        externalEval: _externalEvalController.text.trim(),
+        homeSupportEval: _isHomeSupportEval ? '○' : '',
+        externalEval: _isExternalEval ? '○' : '',
         workGoal: _workGoalController.text.trim(),
-        workEval: _workEvalController.text.trim(),
-        employmentEval: _employmentEvalController.text.trim(),
-        workMotivation: _workMotivationController.text.trim(),
-        communication: _communicationController.text.trim(),
-        evaluation: _evaluationController.text.trim(),
+        workEval: _editedWorkEval,
+        employmentEval: _editedEmploymentEval,
+        workMotivation: _editedWorkMotivation,
+        communication: _editedCommunication,
+        evaluation: _editedEvaluation,
         userFeedback: _userFeedbackController.text.trim(),
       );
 
@@ -240,9 +226,9 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('支援記録を保存しました')),
+          const SnackBar(content: Text('勤怠データと支援記録を保存しました')),
         );
-        _loadData(); // データ再読み込み
+        Navigator.pop(context, true); // 保存後に一覧に戻る
       }
     } catch (e) {
       setState(() {
@@ -318,104 +304,101 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  '勤怠情報',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _saveAttendance,
-                  icon: const Icon(Icons.save, size: 18),
-                  label: const Text('保存'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                ),
-              ],
+            const Text(
+              '勤怠情報',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 16),
-            _buildInfoRow('日時', _attendance!.date),
-            _buildInfoRow('利用者名', _attendance!.userName),
-            _buildInfoRow('出欠（予定）', _attendance!.scheduledUse ?? '-'),
-            const SizedBox(height: 8),
 
-            // 編集可能：出欠（必須項目なので"選択なし"なし）
-            _buildEditableDropdown(
-              '出欠',
-              _editedAttendanceStatus,
-              _dropdownOptions?.attendanceStatus ?? [],
-              (value) => setState(() => _editedAttendanceStatus = value),
-              allowNull: false, // 出欠は必須なので"選択なし"を表示しない
+            // 日時 & 利用者名（横並び）
+            _buildTwoColumnRow(
+              _buildInfoRow('日時', _attendance!.date),
+              _buildInfoRow('利用者名', _attendance!.userName),
+            ),
+
+            // 出欠（予定） & 出欠（編集可能）（横並び）
+            _buildTwoColumnRow(
+              _buildInfoRow('出欠（予定）', _attendance!.scheduledUse ?? '-'),
+              _buildEditableDropdown(
+                '出欠',
+                _editedAttendanceStatus,
+                _dropdownOptions?.attendanceStatus ?? [],
+                (value) => setState(() => _editedAttendanceStatus = value),
+                allowNull: false,
+              ),
             ),
             const SizedBox(height: 8),
 
-            _buildInfoRow('担当業務AM', _attendance!.morningTask ?? '-'),
-            _buildInfoRow('担当業務PM', _attendance!.afternoonTask ?? '-'),
+            // 担当業務AM & 担当業務PM（横並び）
+            _buildTwoColumnRow(
+              _buildInfoRow('担当業務AM', _attendance!.morningTask ?? '-'),
+              _buildInfoRow('担当業務PM', _attendance!.afternoonTask ?? '-'),
+            ),
             const Divider(),
-            _buildInfoRow('本日の体調', _attendance!.healthCondition ?? '-'),
-            _buildInfoRow('睡眠状況', _attendance!.sleepStatus ?? '-'),
+
+            // 本日の体調 & 睡眠状況（横並び）
+            _buildTwoColumnRow(
+              _buildInfoRow('本日の体調', _attendance!.healthCondition ?? '-'),
+              _buildInfoRow('睡眠状況', _attendance!.sleepStatus ?? '-'),
+            ),
+
+            // 出勤時コメント（幅いっぱい）
             _buildInfoRow('出勤時コメント', _attendance!.checkinComment ?? '-'),
             const Divider(),
-            _buildInfoRow('疲労感', _attendance!.fatigue ?? '-'),
-            _buildInfoRow('心理的負荷', _attendance!.stress ?? '-'),
+
+            // 疲労感 & 心理的負荷（横並び）
+            _buildTwoColumnRow(
+              _buildInfoRow('疲労感', _attendance!.fatigue ?? '-'),
+              _buildInfoRow('心理的負荷', _attendance!.stress ?? '-'),
+            ),
+
+            // 退勤時コメント（幅いっぱい）
             _buildInfoRow('退勤時コメント', _attendance!.checkoutComment ?? '-'),
             const Divider(),
 
-            // 編集可能：勤務開始時刻
-            _buildEditableDropdown(
-              '勤務開始時刻',
-              _editedCheckinTime,
-              _dropdownOptions?.checkinTimeList ?? [],
-              (value) => setState(() => _editedCheckinTime = value),
+            // 勤務開始時刻 & 勤務終了時刻（横並び、両方編集可能）
+            _buildTwoColumnRow(
+              _buildEditableDropdown(
+                '勤務開始時刻',
+                _editedCheckinTime,
+                _dropdownOptions?.checkinTimeList ?? [],
+                (value) => setState(() => _editedCheckinTime = value),
+              ),
+              _buildEditableDropdown(
+                '勤務終了時刻',
+                _editedCheckoutTime,
+                _dropdownOptions?.checkoutTimeList ?? [],
+                (value) => setState(() => _editedCheckoutTime = value),
+              ),
             ),
             const SizedBox(height: 8),
 
-            // 編集可能：勤務終了時刻
-            _buildEditableDropdown(
-              '勤務終了時刻',
-              _editedCheckoutTime,
-              _dropdownOptions?.checkoutTimeList ?? [],
-              (value) => setState(() => _editedCheckoutTime = value),
+            // 昼休憩 & 15分休憩（横並び、両方編集可能）
+            _buildTwoColumnRow(
+              _buildEditableDropdown(
+                '昼休憩',
+                _editedLunchBreak,
+                _dropdownOptions?.lunchBreak ?? [],
+                (value) => setState(() => _editedLunchBreak = value),
+              ),
+              _buildEditableDropdown(
+                '15分休憩',
+                _editedShortBreak,
+                _dropdownOptions?.shortBreak ?? [],
+                (value) => setState(() => _editedShortBreak = value),
+              ),
             ),
             const SizedBox(height: 8),
 
-            // 編集可能：昼休憩
-            _buildEditableDropdown(
-              '昼休憩',
-              _editedLunchBreak,
-              _dropdownOptions?.lunchBreak ?? [],
-              (value) => setState(() => _editedLunchBreak = value),
-            ),
-            const SizedBox(height: 8),
-
-            // 編集可能：15分休憩
-            _buildEditableDropdown(
-              '15分休憩',
-              _editedShortBreak,
-              _dropdownOptions?.shortBreak ?? [],
-              (value) => setState(() => _editedShortBreak = value),
-            ),
-            const SizedBox(height: 8),
-
-            // 編集可能：他休憩時間
+            // 他休憩時間（編集可能）
             _buildEditableDropdown(
               '他休憩時間',
               _editedOtherBreak,
               _dropdownOptions?.otherBreak ?? [],
               (value) => setState(() => _editedOtherBreak = value),
-            ),
-            const SizedBox(height: 8),
-
-            _buildInfoRow(
-              '実労時間',
-              _attendance!.actualWorkMinutes != null
-                  ? '${_attendance!.actualWorkMinutes}分'
-                  : '-',
             ),
           ],
         ),
@@ -531,198 +514,367 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Z列: 本人の状況
+          // Z列: 支援記録（幅いっぱい）※必須
           TextFormField(
             controller: _userStatusController,
-            decoration: const InputDecoration(
-              labelText: '本人の状況/欠勤時対応/施設外評価/在宅評価',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: '支援記録 *',
+              labelStyle: TextStyle(color: Colors.red.shade700),
+              border: const OutlineInputBorder(),
+              hintText: '必須項目です',
             ),
             maxLines: 3,
           ),
           const SizedBox(height: 16),
 
-          // AA列: 勤務地（プルダウン）
-          DropdownButtonFormField<String>(
-            value: _editedWorkLocation != null &&
-                   _editedWorkLocation!.trim().isNotEmpty &&
-                   (_dropdownOptions?.workLocations ?? [])
-                       .map((e) => e.trim())
-                       .toSet()
-                       .contains(_editedWorkLocation!.trim())
-                ? _editedWorkLocation!.trim()
-                : null,
-            decoration: const InputDecoration(
-              labelText: '勤務地',
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('選択なし'),
+          // 勤務地 & 記録者（横並び）※両方必須
+          _buildTwoColumnRow(
+            DropdownButtonFormField<String>(
+              value: _editedWorkLocation != null &&
+                     _editedWorkLocation!.trim().isNotEmpty &&
+                     (_dropdownOptions?.workLocations ?? [])
+                         .map((e) => e.trim())
+                         .toSet()
+                         .contains(_editedWorkLocation!.trim())
+                  ? _editedWorkLocation!.trim()
+                  : null,
+              decoration: InputDecoration(
+                labelText: '勤務地 *',
+                labelStyle: TextStyle(color: Colors.red.shade700),
+                border: const OutlineInputBorder(),
               ),
-              ...(_dropdownOptions?.workLocations ?? [])
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toSet()
-                  .map((option) {
-                return DropdownMenuItem<String>(
-                  value: option,
-                  child: Text(option),
-                );
-              }),
-            ],
-            onChanged: (value) => setState(() => _editedWorkLocation = value),
-          ),
-          const SizedBox(height: 16),
-
-          // AB列: 記録者（プルダウン）
-          DropdownButtonFormField<String>(
-            value: _editedRecorder != null &&
-                   _editedRecorder!.trim().isNotEmpty &&
-                   (_dropdownOptions?.recorders ?? [])
-                       .map((e) => e.trim())
-                       .toSet()
-                       .contains(_editedRecorder!.trim())
-                ? _editedRecorder!.trim()
-                : null,
-            decoration: const InputDecoration(
-              labelText: '記録者',
-              border: OutlineInputBorder(),
+              items: [
+                ...(_dropdownOptions?.workLocations ?? [])
+                    .map((e) => e.trim())
+                    .where((e) => e.isNotEmpty)
+                    .toSet()
+                    .map((option) {
+                  return DropdownMenuItem<String>(
+                    value: option,
+                    child: Text(option),
+                  );
+                }),
+              ],
+              onChanged: (value) => setState(() => _editedWorkLocation = value),
             ),
-            items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('選択なし'),
+            DropdownButtonFormField<String>(
+              value: _editedRecorder != null &&
+                     _editedRecorder!.trim().isNotEmpty &&
+                     (_dropdownOptions?.recorders ?? [])
+                         .map((e) => e.trim())
+                         .toSet()
+                         .contains(_editedRecorder!.trim())
+                  ? _editedRecorder!.trim()
+                  : null,
+              decoration: InputDecoration(
+                labelText: '記録者 *',
+                labelStyle: TextStyle(color: Colors.red.shade700),
+                border: const OutlineInputBorder(),
               ),
-              ...(_dropdownOptions?.recorders ?? [])
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toSet()
-                  .map((option) {
-                return DropdownMenuItem<String>(
-                  value: option,
-                  child: Text(option),
-                );
-              }),
-            ],
-            onChanged: (value) => setState(() => _editedRecorder = value),
+              items: [
+                ...(_dropdownOptions?.recorders ?? [])
+                    .map((e) => e.trim())
+                    .where((e) => e.isNotEmpty)
+                    .toSet()
+                    .map((option) {
+                  return DropdownMenuItem<String>(
+                    value: option,
+                    child: Text(option),
+                  );
+                }),
+              ],
+              onChanged: (value) => setState(() => _editedRecorder = value),
+            ),
           ),
           const SizedBox(height: 16),
 
-          // AD列: 在宅支援評価対象
-          TextFormField(
-            controller: _homeSupportEvalController,
-            decoration: const InputDecoration(
-              labelText: '在宅支援評価対象',
-              border: OutlineInputBorder(),
+          // 在宅支援評価対象 & 施設外評価対象（チェックボックス・横並び・排他的）
+          _buildTwoColumnRow(
+            CheckboxListTile(
+              title: Text(
+                '在宅支援評価対象',
+                style: TextStyle(
+                  color: _isExternalEval ? Colors.grey : null,
+                ),
+              ),
+              value: _isHomeSupportEval,
+              onChanged: _isExternalEval
+                  ? null  // 施設外がチェックされている場合は無効化
+                  : (value) => setState(() => _isHomeSupportEval = value ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
             ),
-            maxLines: 2,
+            CheckboxListTile(
+              title: Text(
+                '施設外評価対象',
+                style: TextStyle(
+                  color: _isHomeSupportEval ? Colors.grey : null,
+                ),
+              ),
+              value: _isExternalEval,
+              onChanged: _isHomeSupportEval
+                  ? null  // 在宅支援がチェックされている場合は無効化
+                  : (value) => setState(() => _isExternalEval = value ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+            ),
           ),
-          const SizedBox(height: 16),
 
-          // AE列: 施設外評価対象
-          TextFormField(
-            controller: _externalEvalController,
-            decoration: const InputDecoration(
-              labelText: '施設外評価対象',
-              border: OutlineInputBorder(),
+          // 条件付き表示：在宅支援評価対象または施設外評価対象がチェックされた場合のみ表示
+          if (_isHomeSupportEval || _isExternalEval) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text(
+              _isHomeSupportEval && _isExternalEval
+                  ? '在宅支援・施設外 評価項目'
+                  : _isHomeSupportEval
+                      ? '在宅支援 評価項目'
+                      : '施設外 評価項目',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
             ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // AF列: 作業目標
-          TextFormField(
-            controller: _workGoalController,
-            decoration: const InputDecoration(
-              labelText: '作業目標',
-              border: OutlineInputBorder(),
+            // 作業目標 & 勤務評価（横並び）
+            _buildTwoColumnRow(
+              TextFormField(
+                controller: _workGoalController,
+                decoration: const InputDecoration(
+                  labelText: '作業目標',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+              DropdownButtonFormField<String>(
+                value: _editedWorkEval != null &&
+                       _editedWorkEval!.trim().isNotEmpty &&
+                       (_dropdownOptions?.workEvaluations ?? [])
+                           .map((e) => e.trim())
+                           .toSet()
+                           .contains(_editedWorkEval!.trim())
+                    ? _editedWorkEval!.trim()
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: '勤怠評価',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('選択なし'),
+                  ),
+                  ...(_dropdownOptions?.workEvaluations ?? [])
+                      .map((e) => e.trim())
+                      .where((e) => e.isNotEmpty)
+                      .toSet()
+                      .map((option) {
+                    return DropdownMenuItem<String>(
+                      value: option,
+                      child: Text(option),
+                    );
+                  }),
+                ],
+                onChanged: (value) => setState(() => _editedWorkEval = value),
+              ),
             ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // AG列: 勤務評価
-          TextFormField(
-            controller: _workEvalController,
-            decoration: const InputDecoration(
-              labelText: '勤務評価',
-              border: OutlineInputBorder(),
+            // 通信連絡対応度 & 就労意欲（横並び）
+            _buildTwoColumnRow(
+              DropdownButtonFormField<String>(
+                value: _editedCommunication != null &&
+                       _editedCommunication!.trim().isNotEmpty &&
+                       (_dropdownOptions?.communications ?? [])
+                           .map((e) => e.trim())
+                           .toSet()
+                           .contains(_editedCommunication!.trim())
+                    ? _editedCommunication!.trim()
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: '通信連絡対応度',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('選択なし'),
+                  ),
+                  ...(_dropdownOptions?.communications ?? [])
+                      .map((e) => e.trim())
+                      .where((e) => e.isNotEmpty)
+                      .toSet()
+                      .map((option) {
+                    return DropdownMenuItem<String>(
+                      value: option,
+                      child: Text(option),
+                    );
+                  }),
+                ],
+                onChanged: (value) => setState(() => _editedCommunication = value),
+              ),
+              DropdownButtonFormField<String>(
+                value: _editedWorkMotivation != null &&
+                       _editedWorkMotivation!.trim().isNotEmpty &&
+                       (_dropdownOptions?.workMotivations ?? [])
+                           .map((e) => e.trim())
+                           .toSet()
+                           .contains(_editedWorkMotivation!.trim())
+                    ? _editedWorkMotivation!.trim()
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: '就労意欲',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('選択なし'),
+                  ),
+                  ...(_dropdownOptions?.workMotivations ?? [])
+                      .map((e) => e.trim())
+                      .where((e) => e.isNotEmpty)
+                      .toSet()
+                      .map((option) {
+                    return DropdownMenuItem<String>(
+                      value: option,
+                      child: Text(option),
+                    );
+                  }),
+                ],
+                onChanged: (value) => setState(() => _editedWorkMotivation = value),
+              ),
             ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // AH列: 就労評価（品質・生産性）
-          TextFormField(
-            controller: _employmentEvalController,
-            decoration: const InputDecoration(
-              labelText: '就労評価（品質・生産性）',
-              border: OutlineInputBorder(),
+            // 就労評価（品質・生産性）（1列表示 - ラベルが長いため）
+            DropdownButtonFormField<String>(
+              value: _editedEmploymentEval != null &&
+                     _editedEmploymentEval!.trim().isNotEmpty &&
+                     (_dropdownOptions?.employmentEvaluations ?? [])
+                         .map((e) => e.trim())
+                         .toSet()
+                         .contains(_editedEmploymentEval!.trim())
+                  ? _editedEmploymentEval!.trim()
+                  : null,
+              decoration: const InputDecoration(
+                labelText: '就労評価（品質・生産性）',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem<String>(
+                  value: null,
+                  child: Text('選択なし'),
+                ),
+                ...(_dropdownOptions?.employmentEvaluations ?? [])
+                    .map((e) => e.trim())
+                    .where((e) => e.isNotEmpty)
+                    .toSet()
+                    .map((option) {
+                  return DropdownMenuItem<String>(
+                    value: option,
+                    child: Text(option),
+                  );
+                }),
+              ],
+              onChanged: (value) => setState(() => _editedEmploymentEval = value),
             ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // AI列: 就労意欲
-          TextFormField(
-            controller: _workMotivationController,
-            decoration: const InputDecoration(
-              labelText: '就労意欲',
-              border: OutlineInputBorder(),
+            // 評価 & 利用者の感想（横並び）
+            _buildTwoColumnRow(
+              DropdownButtonFormField<String>(
+                value: _editedEvaluation != null &&
+                       _editedEvaluation!.trim().isNotEmpty &&
+                       (_dropdownOptions?.evaluations ?? [])
+                           .map((e) => e.trim())
+                           .toSet()
+                           .contains(_editedEvaluation!.trim())
+                    ? _editedEvaluation!.trim()
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: '評価',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('選択なし'),
+                  ),
+                  ...(_dropdownOptions?.evaluations ?? [])
+                      .map((e) => e.trim())
+                      .where((e) => e.isNotEmpty)
+                      .toSet()
+                      .map((option) {
+                    return DropdownMenuItem<String>(
+                      value: option,
+                      child: Text(option),
+                    );
+                  }),
+                ],
+                onChanged: (value) => setState(() => _editedEvaluation = value),
+              ),
+              TextFormField(
+                controller: _userFeedbackController,
+                decoration: const InputDecoration(
+                  labelText: '利用者の感想',
+                  border: OutlineInputBorder(),
+                ),
+              maxLines: 3,
             ),
-            maxLines: 2,
           ),
-          const SizedBox(height: 16),
+          ], // if (_isHomeSupportEval || _isExternalEval) の閉じカッコ
 
-          // AJ列: 通信連絡対応
-          TextFormField(
-            controller: _communicationController,
-            decoration: const InputDecoration(
-              labelText: '通信連絡対応',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 16),
-
-          // AK列: 評価
-          TextFormField(
-            controller: _evaluationController,
-            decoration: const InputDecoration(
-              labelText: '評価',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 3,
-          ),
-          const SizedBox(height: 16),
-
-          // AL列: 利用者の感想
-          TextFormField(
-            controller: _userFeedbackController,
-            decoration: const InputDecoration(
-              labelText: '利用者の感想',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 3,
-          ),
           const SizedBox(height: 24),
 
-          // 保存ボタン
+          // 統合保存ボタン
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _saveSupportRecord,
+              onPressed: _saveAll,
               icon: const Icon(Icons.save),
-              label: const Text('支援記録を保存'),
+              label: const Text('保存'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.all(16),
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// 2カラムレイアウト用ヘルパー
+  Widget _buildTwoColumnRow(Widget left, Widget right) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 画面幅が600px以上なら2カラム、未満なら1カラム
+        if (constraints.maxWidth > 600) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: left),
+              const SizedBox(width: 16),
+              Expanded(child: right),
+            ],
+          );
+        } else {
+          return Column(
+            children: [
+              left,
+              const SizedBox(height: 16),
+              right,
+            ],
+          );
+        }
+      },
     );
   }
 }

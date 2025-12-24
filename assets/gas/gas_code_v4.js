@@ -84,12 +84,17 @@ const MASTER_CONFIG = {
     JOB_TYPE: 26    // Z列: 職種（元T列から+6列）
   },
 
-  // 支援記録用プルダウン選択肢（K列、V列、8〜25行目）
+  // 支援記録用プルダウン選択肢（K列、V列、AD〜AH列、8〜25行目）
   SUPPORT_DROPDOWN_START_ROW: 8,
   SUPPORT_DROPDOWN_END_ROW: 25,
   SUPPORT_DROPDOWN_COLS: {
     WORK_LOCATION: 11,    // K列: 勤務地
-    RECORDER: 22          // V列: 記録者（職員名と同じ列）
+    RECORDER: 22,         // V列: 記録者（職員名と同じ列）
+    WORK_EVAL: 30,        // AD列: 勤怠評価
+    EMPLOYMENT_EVAL: 31,  // AE列: 就労評価（品質・生産性）
+    WORK_MOTIVATION: 32,  // AF列: 就労意欲
+    COMMUNICATION: 33,    // AG列: 通信連絡対応度
+    EVALUATION: 34        // AH列: 評価
   },
 
   // 名簿用プルダウン選択肢（L〜S列、44〜50行目）
@@ -249,6 +254,8 @@ function doGet(e) {
       return handleGetUsers();
     } else if (action === 'master/dropdowns') {
       return handleGetDropdowns();
+    } else if (action === 'master/evaluation-alerts') {
+      return handleGetEvaluationAlerts();
     } else if (action === 'staff/list') {
       return handleGetStaffList();
     } else if (action.startsWith('attendance/daily/')) {
@@ -398,13 +405,19 @@ function handleGetDropdowns() {
     specialNotes: [],                                                                                                                                             // 特記事項（使用しない）
     breaks: [],                                                                                                                                                   // 休憩時間（使用しない）
     workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),  // K列: 勤務地（8〜25行目）
-    evaluations: [],                                                                                                                                              // 評価項目（使用しない）
 
     // 曜日別出欠予定用プルダウン（K列、44〜50行目）
     scheduledWeekly: getColumnOptions(sheet, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_COL, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_START_ROW, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_END_ROW), // K列: 曜日別出欠予定
 
     // 支援記録用プルダウン
     recorders: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.RECORDER, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),  // V列: 記録者（8〜25行目）
+
+    // 評価項目プルダウン（AD〜AH列、8〜25行目）
+    workEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),           // AD列: 勤怠評価（8〜25行目）
+    employmentEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EMPLOYMENT_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),   // AE列: 就労評価（8〜25行目）
+    workMotivations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_MOTIVATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),     // AF列: 就労意欲（8〜25行目）
+    communications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.COMMUNICATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),         // AG列: 通信連絡対応度（8〜25行目）
+    evaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EVALUATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),               // AH列: 評価（8〜25行目）
 
     // 名簿用プルダウン（L〜S列、44〜50行目）
     rosterStatus: getColumnOptions(sheet, MASTER_CONFIG.ROSTER_DROPDOWN_COLS.STATUS, MASTER_CONFIG.ROSTER_DROPDOWN_START_ROW, MASTER_CONFIG.ROSTER_DROPDOWN_END_ROW),                     // L列: ステータス
@@ -422,6 +435,110 @@ function handleGetDropdowns() {
   };
 
   return createSuccessResponse(options);
+}
+
+/**
+ * 評価アラート情報を取得
+ * 支援記録で「在宅支援評価対象」をONにした日から1週間経過でアラート
+ * 支援記録で「施設外評価対象」をONにした日から2週間経過でアラート
+ */
+function handleGetEvaluationAlerts() {
+  const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+
+  const alerts = [];
+  const today = new Date();
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
+  // 支援記録から全データを取得
+  const supportLastRow = supportSheet.getLastRow();
+  if (supportLastRow < 2) {
+    return createSuccessResponse({ alerts: [] });
+  }
+
+  // A列（日時）、B列（利用者名）、AD列（在宅支援評価対象）、AE列（施設外評価対象）を取得
+  const allSupportData = supportSheet.getRange(2, 1, supportLastRow - 1, 38).getValues();
+  const supportData = allSupportData.filter(row => row[0] && row[1]); // 空行を除外
+
+  // 各利用者の最終評価日を集計
+  // キー: 利用者名, 値: { lastHomeDate: Date|null, lastExternalDate: Date|null, hasHomeEval: boolean, hasExternalEval: boolean }
+  const userEvalMap = {};
+
+  for (let i = 0; i < supportData.length; i++) {
+    const row = supportData[i];
+    const userName = row[SUPPORT_COLS.USER_NAME - 1];
+    const recordDate = row[SUPPORT_COLS.DATE - 1];
+    const homeSupportEval = row[SUPPORT_COLS.HOME_SUPPORT_EVAL - 1];
+    const externalEval = row[SUPPORT_COLS.EXTERNAL_EVAL - 1];
+
+    if (!userName) continue;
+
+    // 初期化
+    if (!userEvalMap[userName]) {
+      userEvalMap[userName] = {
+        lastHomeDate: null,
+        lastExternalDate: null,
+        hasHomeEval: false,
+        hasExternalEval: false
+      };
+    }
+
+    // 在宅支援評価対象が○の場合
+    if (homeSupportEval === '○') {
+      userEvalMap[userName].hasHomeEval = true;
+      const evalDate = new Date(recordDate);
+      if (!userEvalMap[userName].lastHomeDate || evalDate > userEvalMap[userName].lastHomeDate) {
+        userEvalMap[userName].lastHomeDate = evalDate;
+      }
+    }
+
+    // 施設外評価対象が○の場合
+    if (externalEval === '○') {
+      userEvalMap[userName].hasExternalEval = true;
+      const evalDate = new Date(recordDate);
+      if (!userEvalMap[userName].lastExternalDate || evalDate > userEvalMap[userName].lastExternalDate) {
+        userEvalMap[userName].lastExternalDate = evalDate;
+      }
+    }
+  }
+
+  // 各利用者についてアラート判定
+  for (const userName in userEvalMap) {
+    const evalInfo = userEvalMap[userName];
+
+    // 在宅支援評価のアラート判定（過去に1回でも○があるユーザーが対象）
+    if (evalInfo.hasHomeEval && evalInfo.lastHomeDate) {
+      const elapsed = today - evalInfo.lastHomeDate;
+      if (elapsed >= ONE_WEEK_MS) {
+        const daysSinceLastEval = Math.floor(elapsed / (24 * 60 * 60 * 1000));
+        alerts.push({
+          userName: userName,
+          alertType: 'home',
+          message: `在宅支援評価が${daysSinceLastEval}日間未入力です`,
+          daysSinceLastEval: daysSinceLastEval,
+          lastEvalDate: formatDate(evalInfo.lastHomeDate)
+        });
+        continue; // 1人につき1アラートのみ
+      }
+    }
+
+    // 施設外評価のアラート判定（過去に1回でも○があるユーザーが対象）
+    if (evalInfo.hasExternalEval && evalInfo.lastExternalDate) {
+      const elapsed = today - evalInfo.lastExternalDate;
+      if (elapsed >= TWO_WEEKS_MS) {
+        const daysSinceLastEval = Math.floor(elapsed / (24 * 60 * 60 * 1000));
+        alerts.push({
+          userName: userName,
+          alertType: 'external',
+          message: `施設外評価が${daysSinceLastEval}日間未入力です`,
+          daysSinceLastEval: daysSinceLastEval,
+          lastEvalDate: formatDate(evalInfo.lastExternalDate)
+        });
+      }
+    }
+  }
+
+  return createSuccessResponse({ alerts: alerts });
 }
 
 /**
@@ -1880,7 +1997,8 @@ function parseAttendanceRowFromArray(rowData, rowNumber) {
     mealService: rowData[SUPPORT_COLS.MEAL_SERVICE - 1] || false,
     absenceSupport: rowData[SUPPORT_COLS.ABSENCE_SUPPORT - 1] || false,
     visitSupport: rowData[SUPPORT_COLS.VISIT_SUPPORT - 1] || false,
-    transportService: rowData[SUPPORT_COLS.TRANSPORT - 1] || false
+    transportService: rowData[SUPPORT_COLS.TRANSPORT - 1] || false,
+    userStatus: toStringOrNull(rowData[SUPPORT_COLS.USER_STATUS - 1])  // Z列: 本人の状況
   };
 }
 
@@ -1965,7 +2083,8 @@ function parseAttendanceRow(sheet, row) {
     mealService: sheet.getRange(row, SUPPORT_COLS.MEAL_SERVICE).getValue() || false,
     absenceSupport: sheet.getRange(row, SUPPORT_COLS.ABSENCE_SUPPORT).getValue() || false,
     visitSupport: sheet.getRange(row, SUPPORT_COLS.VISIT_SUPPORT).getValue() || false,
-    transportService: sheet.getRange(row, SUPPORT_COLS.TRANSPORT).getValue() || false
+    transportService: sheet.getRange(row, SUPPORT_COLS.TRANSPORT).getValue() || false,
+    userStatus: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.USER_STATUS).getValue())  // Z列: 本人の状況
   };
 }
 

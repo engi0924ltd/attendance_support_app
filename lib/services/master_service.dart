@@ -35,11 +35,6 @@ class MasterService {
 
     // APIから取得
     final response = await _apiService.get('master/dropdowns');
-
-    // 【デバッグ】APIレスポンスを確認
-    print('🔧 API Response (workLocations): ${response['workLocations']}');
-    print('🔧 API Response (recorders): ${response['recorders']}');
-
     final options = DropdownOptions.fromJson(response);
 
     // キャッシュに保存
@@ -95,9 +90,13 @@ class MasterService {
         'specialNotes': options.specialNotes,
         'breaks': options.breaks,
         'workLocations': options.workLocations,
-        'evaluations': options.evaluations,
         'scheduledWeekly': options.scheduledWeekly,
-        'recorders': options.recorders, // 【追加】記録者
+        'recorders': options.recorders,
+        'workEvaluations': options.workEvaluations,
+        'employmentEvaluations': options.employmentEvaluations,
+        'workMotivations': options.workMotivations,
+        'communications': options.communications,
+        'evaluations': options.evaluations,
         'rosterStatus': options.rosterStatus,
         'lifeProtection': options.lifeProtection,
         'disabilityPension': options.disabilityPension,
@@ -122,5 +121,59 @@ class MasterService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cacheKeyDropdowns);
     await prefs.remove(_cacheKeyTimestamp);
+  }
+
+  /// 評価アラート情報を取得
+  /// 在宅支援（1週間以内）または施設外支援（2週間以内）の評価が必要な利用者を返す
+  Future<List<EvaluationAlert>> getEvaluationAlerts() async {
+    try {
+      final response = await _apiService.get('master/evaluation-alerts');
+      final List<dynamic> alertList = response['alerts'] ?? [];
+      return alertList.map((json) => EvaluationAlert.fromJson(json)).toList();
+    } catch (e) {
+      // エラー時は空のリストを返す（UIに影響しないように）
+      return [];
+    }
+  }
+}
+
+/// 評価アラート情報を表すモデル
+class EvaluationAlert {
+  final String userName;
+  final String alertType; // 'home' or 'external'
+  final int daysSinceLastEval;
+  final String? lastEvalDate;
+  final String message;
+
+  EvaluationAlert({
+    required this.userName,
+    required this.alertType,
+    required this.daysSinceLastEval,
+    this.lastEvalDate,
+    required this.message,
+  });
+
+  factory EvaluationAlert.fromJson(Map<String, dynamic> json) {
+    return EvaluationAlert(
+      userName: json['userName'] ?? '',
+      alertType: json['alertType'] ?? '',
+      daysSinceLastEval: json['daysSinceLastEval'] ?? 0,
+      lastEvalDate: json['lastEvalDate'],
+      message: json['message'] ?? '',
+    );
+  }
+
+  /// 表示用のアラートメッセージ
+  String get alertMessage {
+    // GASからのメッセージがあればそれを使用
+    if (message.isNotEmpty) {
+      return message;
+    }
+    final typeLabel = alertType == 'home' ? '在宅支援' : '施設外支援';
+    if (lastEvalDate != null) {
+      return '$typeLabel評価が必要です（前回: $lastEvalDate, $daysSinceLastEval日経過）';
+    } else {
+      return '$typeLabel評価が必要です（評価未実施）';
+    }
   }
 }

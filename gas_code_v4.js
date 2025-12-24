@@ -11,7 +11,7 @@
 // === 設定 ===
 const SHEET_NAMES = {
   MASTER: 'マスタ設定',
-  ATTENDANCE: '勤怠_2025',
+  ATTENDANCE: '支援記録_2025',  // 【統合】旧：勤怠_2025 → 支援記録_2025に統合
   SUPPORT: '支援記録_2025',
   ROSTER: '名簿_2025'
 };
@@ -23,6 +23,10 @@ const MASTER_CONFIG = {
   USER_DATA_START_ROW: 8,      // 8行目から利用者データ開始
   DROPDOWN_START_ROW: 8,       // 8行目からプルダウン選択肢開始（基本）
   DROPDOWN_END_ROW: 29,        // 29行目まで選択肢（基本）
+
+  // 出勤時プルダウン選択肢（本日の体調・睡眠状況）
+  CHECKIN_DROPDOWN_START_ROW: 8,   // 8行目から出勤時選択肢開始
+  CHECKIN_DROPDOWN_END_ROW: 17,    // 17行目まで出勤時選択肢
 
   // 退勤時プルダウン選択肢（疲労感・心理的負荷）
   CHECKOUT_DROPDOWN_START_ROW: 31,  // 31行目から退勤時選択肢開始
@@ -80,6 +84,19 @@ const MASTER_CONFIG = {
     JOB_TYPE: 26    // Z列: 職種（元T列から+6列）
   },
 
+  // 支援記録用プルダウン選択肢（K列、V列、AD〜AH列、8〜25行目）
+  SUPPORT_DROPDOWN_START_ROW: 8,
+  SUPPORT_DROPDOWN_END_ROW: 25,
+  SUPPORT_DROPDOWN_COLS: {
+    WORK_LOCATION: 11,    // K列: 勤務地
+    RECORDER: 22,         // V列: 記録者（職員名と同じ列）
+    WORK_EVAL: 30,        // AD列: 勤怠評価
+    EMPLOYMENT_EVAL: 31,  // AE列: 就労評価（品質・生産性）
+    WORK_MOTIVATION: 32,  // AF列: 就労意欲
+    COMMUNICATION: 33,    // AG列: 通信連絡対応度
+    EVALUATION: 34        // AH列: 評価
+  },
+
   // 名簿用プルダウン選択肢（L〜S列、44〜50行目）
   ROSTER_DROPDOWN_START_ROW: 44,
   ROSTER_DROPDOWN_END_ROW: 50,
@@ -95,31 +112,50 @@ const MASTER_CONFIG = {
   }
 };
 
-// 勤怠_2025シートの列構成
-const ATTENDANCE_COLS = {
-  DATE: 4,              // D列: 日時
-  USER_NAME: 5,         // E列: 利用者名
-  SCHEDULED: 6,         // F列: 出欠（予定）
-  ATTENDANCE: 7,        // G列: 出欠
-  MORNING_TASK: 8,      // H列: 担当業務AM
-  AFTERNOON_TASK: 9,    // I列: 担当業務PM
-  WORKPLACE: 10,        // J列: 業務連絡
-  HEALTH: 11,           // K列: 本日の体調
-  SLEEP: 12,            // L列: 睡眠状況
-  CHECKIN_COMMENT: 13,  // M列: 出勤時利用者コメント
-  FATIGUE: 14,          // N列: 疲労感
-  STRESS: 15,           // O列: 心理的負荷
-  CHECKOUT_COMMENT: 16, // P列: 退勤時利用者コメント
-  CHECKIN_TIME: 19,     // S列: 勤務開始時刻
-  CHECKOUT_TIME: 20,    // T列: 勤務終了時刻
-  LUNCH_BREAK: 21,      // U列: 昼休憩
-  SHORT_BREAK: 22,      // V列: 15分休憩
-  OTHER_BREAK: 23,      // W列: 他休憩時間
-  WORK_MINUTES: 24,     // X列: 実労時間
-  MEAL_SERVICE: 25,     // Y列: 食事提供
-  ABSENCE_SUPPORT: 26,  // Z列: 欠席対応
-  VISIT_SUPPORT: 27,    // AA列: 訪問支援
-  TRANSPORT: 28         // AB列: 送迎
+// 【統合】支援記録_2025シートの列構成（勤怠データも含む）
+// 旧：勤怠_2025シート（D列〜AB列）は廃止し、支援記録_2025（A列〜AL列）に統合
+const SUPPORT_COLS = {
+  // A-Y列: 勤怠_2025から自動反映される項目
+  DATE: 1,                    // A列: 日時
+  USER_NAME: 2,               // B列: 利用者名
+  SCHEDULED: 3,               // C列: 出欠（予定）
+  ATTENDANCE: 4,              // D列: 出欠
+  MORNING_TASK: 5,            // E列: 担当業務AM
+  AFTERNOON_TASK: 6,          // F列: 担当業務PM
+  WORKPLACE: 7,               // G列: 業務連絡
+  HEALTH: 8,                  // H列: 本日の体調
+  SLEEP: 9,                   // I列: 睡眠状況
+  CHECKIN_COMMENT: 10,        // J列: 出勤時利用者コメント
+  FATIGUE: 11,                // K列: 疲労感
+  STRESS: 12,                 // L列: 心理的負荷
+  CHECKOUT_COMMENT: 13,       // M列: 退勤時利用者コメント
+  RESERVE1: 14,               // N列: （予備）
+  RESERVE2: 15,               // O列: （予備）
+  CHECKIN_TIME: 16,           // P列: 勤務開始時刻
+  CHECKOUT_TIME: 17,          // Q列: 勤務終了時刻
+  LUNCH_BREAK: 18,            // R列: 昼休憩
+  SHORT_BREAK: 19,            // S列: 15分休憩
+  OTHER_BREAK: 20,            // T列: 他休憩時間
+  WORK_MINUTES: 21,           // U列: 実労時間
+  MEAL_SERVICE: 22,           // V列: 食事提供
+  ABSENCE_SUPPORT: 23,        // W列: 欠席対応
+  VISIT_SUPPORT: 24,          // X列: 訪問支援
+  TRANSPORT: 25,              // Y列: 送迎
+
+  // Z-AL列: アプリから手動入力する支援記録項目
+  USER_STATUS: 26,            // Z列: 本人の状況/欠勤時対応/施設外評価/在宅評価
+  WORK_LOCATION: 27,          // AA列: 勤務地
+  RECORDER: 28,               // AB列: 記録者
+  RESERVE3: 29,               // AC列: （予備）
+  HOME_SUPPORT_EVAL: 30,      // AD列: 在宅支援評価対象
+  EXTERNAL_EVAL: 31,          // AE列: 施設外評価対象
+  WORK_GOAL: 32,              // AF列: 作業目標
+  WORK_EVAL: 33,              // AG列: 勤務評価
+  EMPLOYMENT_EVAL: 34,        // AH列: 就労評価（品質・生産性）
+  WORK_MOTIVATION: 35,        // AI列: 就労意欲
+  COMMUNICATION: 36,          // AJ列: 通信連絡対応
+  EVALUATION: 37,             // AK列: 評価
+  USER_FEEDBACK: 38           // AL列: 利用者の感想
 };
 
 // 名簿_2025シートの列構成（A〜BH列：全60列）
@@ -218,11 +254,43 @@ function doGet(e) {
       return handleGetUsers();
     } else if (action === 'master/dropdowns') {
       return handleGetDropdowns();
+    } else if (action === 'master/evaluation-alerts') {
+      return handleGetEvaluationAlerts();
     } else if (action === 'staff/list') {
       return handleGetStaffList();
     } else if (action.startsWith('attendance/daily/')) {
       const date = action.split('/')[2];
       return handleGetDailyAttendance(date);
+    } else if (action.startsWith('attendance/scheduled/')) {
+      const date = action.split('/')[2];
+      return handleGetScheduledUsers(date);
+    } else if (action.startsWith('attendance/search/')) {
+      // 過去データ検索用（全範囲・遅い）
+      const parts = action.split('/');
+      const userName = parts[2];
+      const date = parts[3];
+      return handleSearchUserAttendance(userName, date);
+    } else if (action.startsWith('attendance/user/')) {
+      // 通常データ取得（直近のみ・高速）
+      const parts = action.split('/');
+      const userName = parts[2];
+      const date = parts[3];
+      return handleGetUserAttendance(userName, date);
+    } else if (action.startsWith('support/list/')) {
+      const date = action.split('/')[2];
+      return handleGetSupportRecordList(date);
+    } else if (action.startsWith('support/search/')) {
+      // 過去データ検索用（全範囲・遅い）
+      const parts = action.split('/');
+      const date = parts[2];
+      const userName = parts[3];
+      return handleSearchSupportRecord(date, userName);
+    } else if (action.startsWith('support/get/')) {
+      // 通常データ取得（直近のみ・高速）
+      const parts = action.split('/');
+      const date = parts[2];
+      const userName = parts[3];
+      return handleGetSupportRecord(date, userName);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -261,6 +329,10 @@ function doPost(e) {
       return handleCheckin(data);
     } else if (action === 'attendance/checkout') {
       return handleCheckout(data);
+    } else if (action === 'attendance/update') {
+      return handleUpdateAttendance(data);
+    } else if (action === 'support/upsert') {
+      return handleUpsertSupportRecord(data);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -278,19 +350,24 @@ function handleGetUsers() {
   const sheet = getSheet(SHEET_NAMES.MASTER);
   const users = [];
 
-  // 利用者データ行を動的に読み取り（8行目から空白まで）
-  let row = MASTER_CONFIG.USER_DATA_START_ROW;
+  // 【最適化】利用者データを一括取得（8行目から最大500行まで）
+  const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+  const maxRows = 500; // 最大500行まで検索
+  const numCols = 3; // NAME, FURIGANA, STATUS の3列
 
-  while (row <= 1000) {  // 最大1000行まで
-    const name = sheet.getRange(row, MASTER_CONFIG.USER_COLS.NAME).getValue();
+  // 一括取得（C列、D列、E列）
+  const allData = sheet.getRange(startRow, MASTER_CONFIG.USER_COLS.NAME, maxRows, numCols).getValues();
+
+  // データを処理
+  for (let i = 0; i < allData.length; i++) {
+    const name = allData[i][0]; // C列: NAME
+    const furigana = allData[i][1]; // D列: FURIGANA
+    const status = allData[i][2]; // E列: STATUS
 
     // 空白行に達したら終了
     if (!name || name === '') {
       break;
     }
-
-    const furigana = sheet.getRange(row, MASTER_CONFIG.USER_COLS.FURIGANA).getValue();
-    const status = sheet.getRange(row, MASTER_CONFIG.USER_COLS.STATUS).getValue();
 
     // 契約中の利用者のみ返す
     if (status === '契約中') {
@@ -300,8 +377,6 @@ function handleGetUsers() {
         status: status
       });
     }
-
-    row++;
   }
 
   return createSuccessResponse({ users });
@@ -318,22 +393,31 @@ function handleGetDropdowns() {
   const options = {
     // 勤怠用プルダウン
     scheduledUse: [],                                                                                                                                            // 使用しない（scheduledWeeklyを使用）
-    attendanceStatus: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.ATTENDANCE),                                                                           // E列: 出欠
-    tasks: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.MORNING_TASK),                                                                                    // F列: 担当業務（午前・午後共通）
-    healthCondition: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.HEALTH),                                                                                // H列: 本日の体調（8〜29行目）
-    sleepStatus: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.SLEEP),                                                                                     // I列: 睡眠状況（8〜29行目）
-    fatigue: getColumnOptions(sheet, MASTER_CONFIG.CHECKOUT_DROPDOWN_COLS.FATIGUE, MASTER_CONFIG.CHECKOUT_DROPDOWN_START_ROW, MASTER_CONFIG.CHECKOUT_DROPDOWN_END_ROW),  // H列: 疲労感（31〜40行目）
-    stress: getColumnOptions(sheet, MASTER_CONFIG.CHECKOUT_DROPDOWN_COLS.STRESS, MASTER_CONFIG.CHECKOUT_DROPDOWN_START_ROW, MASTER_CONFIG.CHECKOUT_DROPDOWN_END_ROW),    // I列: 心理的負荷（31〜40行目）
+    attendanceStatus: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.ATTENDANCE),                                                                           // K列: 出欠
+    tasks: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.MORNING_TASK),                                                                                    // L列: 担当業務（午前・午後共通）
+    healthCondition: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.HEALTH, MASTER_CONFIG.CHECKIN_DROPDOWN_START_ROW, MASTER_CONFIG.CHECKIN_DROPDOWN_END_ROW),      // N列: 本日の体調（8〜17行目）
+    sleepStatus: getColumnOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.SLEEP, MASTER_CONFIG.CHECKIN_DROPDOWN_START_ROW, MASTER_CONFIG.CHECKIN_DROPDOWN_END_ROW),          // O列: 睡眠状況（8〜17行目）
+    fatigue: getColumnOptions(sheet, MASTER_CONFIG.CHECKOUT_DROPDOWN_COLS.FATIGUE, MASTER_CONFIG.CHECKOUT_DROPDOWN_START_ROW, MASTER_CONFIG.CHECKOUT_DROPDOWN_END_ROW),  // N列: 疲労感（31〜40行目）
+    stress: getColumnOptions(sheet, MASTER_CONFIG.CHECKOUT_DROPDOWN_COLS.STRESS, MASTER_CONFIG.CHECKOUT_DROPDOWN_START_ROW, MASTER_CONFIG.CHECKOUT_DROPDOWN_END_ROW),    // O列: 心理的負荷（31〜40行目）
     lunchBreak: getTimeListOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.LUNCH_BREAK, 8, 25),  // R列: 昼休憩（8〜25行目）
     shortBreak: getTimeListOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.SHORT_BREAK, 8, 25),  // S列: 15分休憩（8〜25行目）
     otherBreak: getTimeListOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.OTHER_BREAK, 8, 25),  // T列: その他休憩（8〜25行目）
     specialNotes: [],                                                                                                                                             // 特記事項（使用しない）
     breaks: [],                                                                                                                                                   // 休憩時間（使用しない）
-    workLocations: [],                                                                                                                                            // 勤務地（使用しない）
-    evaluations: [],                                                                                                                                              // 評価項目（使用しない）
+    workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),  // K列: 勤務地（8〜25行目）
 
     // 曜日別出欠予定用プルダウン（K列、44〜50行目）
     scheduledWeekly: getColumnOptions(sheet, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_COL, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_START_ROW, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_END_ROW), // K列: 曜日別出欠予定
+
+    // 支援記録用プルダウン
+    recorders: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.RECORDER, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),  // V列: 記録者（8〜25行目）
+
+    // 評価項目プルダウン（AD〜AH列、8〜25行目）
+    workEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),           // AD列: 勤怠評価（8〜25行目）
+    employmentEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EMPLOYMENT_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),   // AE列: 就労評価（8〜25行目）
+    workMotivations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_MOTIVATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),     // AF列: 就労意欲（8〜25行目）
+    communications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.COMMUNICATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),         // AG列: 通信連絡対応度（8〜25行目）
+    evaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EVALUATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),               // AH列: 評価（8〜25行目）
 
     // 名簿用プルダウン（L〜S列、44〜50行目）
     rosterStatus: getColumnOptions(sheet, MASTER_CONFIG.ROSTER_DROPDOWN_COLS.STATUS, MASTER_CONFIG.ROSTER_DROPDOWN_START_ROW, MASTER_CONFIG.ROSTER_DROPDOWN_END_ROW),                     // L列: ステータス
@@ -354,6 +438,110 @@ function handleGetDropdowns() {
 }
 
 /**
+ * 評価アラート情報を取得
+ * 支援記録で「在宅支援評価対象」をONにした日から1週間経過でアラート
+ * 支援記録で「施設外評価対象」をONにした日から2週間経過でアラート
+ */
+function handleGetEvaluationAlerts() {
+  const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+
+  const alerts = [];
+  const today = new Date();
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
+  // 支援記録から全データを取得
+  const supportLastRow = supportSheet.getLastRow();
+  if (supportLastRow < 2) {
+    return createSuccessResponse({ alerts: [] });
+  }
+
+  // A列（日時）、B列（利用者名）、AD列（在宅支援評価対象）、AE列（施設外評価対象）を取得
+  const allSupportData = supportSheet.getRange(2, 1, supportLastRow - 1, 38).getValues();
+  const supportData = allSupportData.filter(row => row[0] && row[1]); // 空行を除外
+
+  // 各利用者の最終評価日を集計
+  // キー: 利用者名, 値: { lastHomeDate: Date|null, lastExternalDate: Date|null, hasHomeEval: boolean, hasExternalEval: boolean }
+  const userEvalMap = {};
+
+  for (let i = 0; i < supportData.length; i++) {
+    const row = supportData[i];
+    const userName = row[SUPPORT_COLS.USER_NAME - 1];
+    const recordDate = row[SUPPORT_COLS.DATE - 1];
+    const homeSupportEval = row[SUPPORT_COLS.HOME_SUPPORT_EVAL - 1];
+    const externalEval = row[SUPPORT_COLS.EXTERNAL_EVAL - 1];
+
+    if (!userName) continue;
+
+    // 初期化
+    if (!userEvalMap[userName]) {
+      userEvalMap[userName] = {
+        lastHomeDate: null,
+        lastExternalDate: null,
+        hasHomeEval: false,
+        hasExternalEval: false
+      };
+    }
+
+    // 在宅支援評価対象が○の場合
+    if (homeSupportEval === '○') {
+      userEvalMap[userName].hasHomeEval = true;
+      const evalDate = new Date(recordDate);
+      if (!userEvalMap[userName].lastHomeDate || evalDate > userEvalMap[userName].lastHomeDate) {
+        userEvalMap[userName].lastHomeDate = evalDate;
+      }
+    }
+
+    // 施設外評価対象が○の場合
+    if (externalEval === '○') {
+      userEvalMap[userName].hasExternalEval = true;
+      const evalDate = new Date(recordDate);
+      if (!userEvalMap[userName].lastExternalDate || evalDate > userEvalMap[userName].lastExternalDate) {
+        userEvalMap[userName].lastExternalDate = evalDate;
+      }
+    }
+  }
+
+  // 各利用者についてアラート判定
+  for (const userName in userEvalMap) {
+    const evalInfo = userEvalMap[userName];
+
+    // 在宅支援評価のアラート判定（過去に1回でも○があるユーザーが対象）
+    if (evalInfo.hasHomeEval && evalInfo.lastHomeDate) {
+      const elapsed = today - evalInfo.lastHomeDate;
+      if (elapsed >= ONE_WEEK_MS) {
+        const daysSinceLastEval = Math.floor(elapsed / (24 * 60 * 60 * 1000));
+        alerts.push({
+          userName: userName,
+          alertType: 'home',
+          message: `在宅支援評価が${daysSinceLastEval}日間未入力です`,
+          daysSinceLastEval: daysSinceLastEval,
+          lastEvalDate: formatDate(evalInfo.lastHomeDate)
+        });
+        continue; // 1人につき1アラートのみ
+      }
+    }
+
+    // 施設外評価のアラート判定（過去に1回でも○があるユーザーが対象）
+    if (evalInfo.hasExternalEval && evalInfo.lastExternalDate) {
+      const elapsed = today - evalInfo.lastExternalDate;
+      if (elapsed >= TWO_WEEKS_MS) {
+        const daysSinceLastEval = Math.floor(elapsed / (24 * 60 * 60 * 1000));
+        alerts.push({
+          userName: userName,
+          alertType: 'external',
+          message: `施設外評価が${daysSinceLastEval}日間未入力です`,
+          daysSinceLastEval: daysSinceLastEval,
+          lastEvalDate: formatDate(evalInfo.lastExternalDate)
+        });
+      }
+    }
+  }
+
+  return createSuccessResponse({ alerts: alerts });
+}
+
+/**
  * 指定列のプルダウン選択肢を取得
  */
 function getColumnOptions(sheet, col, startRow, endRow) {
@@ -361,9 +549,13 @@ function getColumnOptions(sheet, col, startRow, endRow) {
   const start = startRow || MASTER_CONFIG.DROPDOWN_START_ROW;
   const end = endRow || MASTER_CONFIG.DROPDOWN_END_ROW;
 
-  // 指定範囲から選択肢を読み取り
-  for (let row = start; row <= end; row++) {
-    const value = sheet.getRange(row, col).getValue();
+  // 【最適化】指定範囲を一括取得
+  const numRows = end - start + 1;
+  const values = sheet.getRange(start, col, numRows, 1).getValues();
+
+  // データを処理
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i][0];
 
     // 空白はスキップ（他の列と行が揃っていない場合があるため）
     if (value && value !== '') {
@@ -380,9 +572,13 @@ function getColumnOptions(sheet, col, startRow, endRow) {
 function getTimeListOptions(sheet, col, startRow, endRow) {
   const options = [];
 
-  // 指定範囲から時間を読み取り
-  for (let row = startRow; row <= endRow; row++) {
-    const value = sheet.getRange(row, col).getValue();
+  // 【最適化】指定範囲を一括取得
+  const numRows = endRow - startRow + 1;
+  const values = sheet.getRange(startRow, col, numRows, 1).getValues();
+
+  // データを処理
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i][0];
 
     // 空白はスキップ
     if (value && value !== '') {
@@ -420,28 +616,27 @@ function handleStaffLogin(data) {
 
   const sheet = getSheet(SHEET_NAMES.MASTER);
 
-  // デバッグ情報を収集
-  const debugInfo = [];
-  debugInfo.push('検索: ' + email);
-  debugInfo.push('列: NAME=V(' + MASTER_CONFIG.STAFF_COLS.NAME + '), EMAIL=X(' + MASTER_CONFIG.STAFF_COLS.EMAIL + '), PASS=Y(' + MASTER_CONFIG.STAFF_COLS.PASSWORD + ')');
-  debugInfo.push('範囲: ' + MASTER_CONFIG.STAFF_DATA_START_ROW + '〜' + MASTER_CONFIG.STAFF_DATA_END_ROW + '行');
+  // 【最適化】職員データを一括取得（V列〜Y列: NAME, ROLE, EMAIL, PASSWORD）
+  const numRows = MASTER_CONFIG.STAFF_DATA_END_ROW - MASTER_CONFIG.STAFF_DATA_START_ROW + 1;
+  const numCols = 4; // V列からY列まで（NAME, ROLE, EMAIL, PASSWORD）
+  const allData = sheet.getRange(
+    MASTER_CONFIG.STAFF_DATA_START_ROW,
+    MASTER_CONFIG.STAFF_COLS.NAME,  // 22列目（V列）から開始
+    numRows,
+    numCols
+  ).getValues();
 
-  // 職員データ行を読み取り
-  for (let row = MASTER_CONFIG.STAFF_DATA_START_ROW; row <= MASTER_CONFIG.STAFF_DATA_END_ROW; row++) {
-    const staffName = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.NAME).getValue();
-    const staffEmail = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.EMAIL).getValue();
-    const staffPassword = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.PASSWORD).getValue();
-
-    // データがある行を記録
-    if (staffName || staffEmail) {
-      debugInfo.push('Row' + row + ': ' + staffName + ' / ' + staffEmail);
-    }
+  // データを検索
+  for (let i = 0; i < allData.length; i++) {
+    const staffName = allData[i][0];     // V列 (22): NAME
+    const staffRole = allData[i][1];     // W列 (23): ROLE
+    const staffEmail = allData[i][2];    // X列 (24): EMAIL
+    const staffPassword = allData[i][3]; // Y列 (25): PASSWORD
 
     // メールアドレスチェック（前後の空白を削除して比較）
     if (staffEmail && String(staffEmail).trim() === String(email).trim()) {
       if (staffPassword && String(staffPassword).trim() === String(password).trim()) {
         const token = generateToken(email);
-        const staffRole = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.ROLE).getValue();
 
         return createSuccessResponse({
           staffName: staffName || '',
@@ -450,12 +645,12 @@ function handleStaffLogin(data) {
           token: token
         });
       } else {
-        return createErrorResponse('パスワード不一致\n\n' + debugInfo.join('\n'));
+        return createErrorResponse('パスワードが正しくありません');
       }
     }
   }
 
-  return createErrorResponse('メール未登録\n\n' + debugInfo.join('\n'));
+  return createErrorResponse('メールアドレスが登録されていません');
 }
 
 /**
@@ -1249,7 +1444,7 @@ function handleDeleteUser(data) {
  */
 function handleCheckin(data) {
   try {
-    const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
+    const sheet = getSheet(SHEET_NAMES.SUPPORT);
     const date = data.date || formatDate(new Date());
     const userName = data.userName;
 
@@ -1258,27 +1453,58 @@ function handleCheckin(data) {
     }
 
     // 同日の同利用者の記録が既にあるかチェック
-    const existingRow = findAttendanceRow(sheet, date, userName);
+    const existingRow = findSupportRow(sheet, date, userName);
     if (existingRow) {
       return createErrorResponse('既に出勤登録されています');
     }
 
-    // 新しい行に追加
+    // 【統合】A列（日時）が空欄の最上行を探す（一括取得で超高速化）
     const lastRow = sheet.getLastRow();
-    const newRow = lastRow + 1;
+    const maxRow = Math.max(lastRow, 200); // 最低でも200行目までチェック
 
-    // 各列にデータを設定
-    sheet.getRange(newRow, ATTENDANCE_COLS.DATE).setValue(date);
-    sheet.getRange(newRow, ATTENDANCE_COLS.USER_NAME).setValue(userName);
+    // A列を一括取得（API呼び出し1回）
+    const dateColumn = sheet.getRange(2, SUPPORT_COLS.DATE, maxRow - 1, 1).getValues();
 
-    if (data.scheduledUse) sheet.getRange(newRow, ATTENDANCE_COLS.SCHEDULED).setValue(data.scheduledUse);
-    if (data.attendance) sheet.getRange(newRow, ATTENDANCE_COLS.ATTENDANCE).setValue(data.attendance);
-    if (data.morningTask) sheet.getRange(newRow, ATTENDANCE_COLS.MORNING_TASK).setValue(data.morningTask);
-    if (data.afternoonTask) sheet.getRange(newRow, ATTENDANCE_COLS.AFTERNOON_TASK).setValue(data.afternoonTask);
-    if (data.healthCondition) sheet.getRange(newRow, ATTENDANCE_COLS.HEALTH).setValue(data.healthCondition);
-    if (data.sleepStatus) sheet.getRange(newRow, ATTENDANCE_COLS.SLEEP).setValue(data.sleepStatus);
-    if (data.checkinComment) sheet.getRange(newRow, ATTENDANCE_COLS.CHECKIN_COMMENT).setValue(data.checkinComment);
-    if (data.checkinTime) sheet.getRange(newRow, ATTENDANCE_COLS.CHECKIN_TIME).setValue(data.checkinTime);
+    // メモリ上で空欄行を検索
+    let newRow = 2;
+    for (let i = 0; i < dateColumn.length; i++) {
+      if (dateColumn[i][0] === '' || dateColumn[i][0] === null) {
+        newRow = i + 2; // 配列インデックス → 行番号に変換
+        break;
+      }
+    }
+
+    // 空欄行が見つからなかった場合は最後に追加
+    if (newRow === 2 && dateColumn[0][0] !== '' && dateColumn[0][0] !== null) {
+      newRow = maxRow + 1;
+    }
+
+    // マスタ設定シートから曜日別出欠予定を自動取得
+    const scheduledAttendance = getUserScheduledAttendance(userName, date);
+    const scheduledValue = scheduledAttendance || data.scheduledUse || '';
+
+    // 【統合】支援記録シートのA列〜P列にデータを書き込み
+    const rowData = [
+      date,                          // A列: 日時
+      userName,                      // B列: 利用者名
+      scheduledValue,                // C列: 出欠（予定）
+      data.attendance || '',         // D列: 出欠
+      data.morningTask || '',        // E列: 担当業務AM
+      data.afternoonTask || '',      // F列: 担当業務PM
+      '',                            // G列: 業務連絡
+      data.healthCondition || '',    // H列: 本日の体調
+      data.sleepStatus || '',        // I列: 睡眠状況
+      data.checkinComment || '',     // J列: 出勤時コメント
+      '',                            // K列: 疲労感
+      '',                            // L列: 心理的負荷
+      '',                            // M列: 退勤時コメント
+      '',                            // N列: （予備）
+      '',                            // O列: （予備）
+      data.checkinTime || ''         // P列: 勤務開始時刻
+    ];
+
+    // A列〜P列を一括入力（API呼び出し1回）
+    sheet.getRange(newRow, SUPPORT_COLS.DATE, 1, 16).setValues([rowData]);
 
     return createSuccessResponse({
       message: '出勤登録が完了しました',
@@ -1294,76 +1520,332 @@ function handleCheckin(data) {
  * 退勤登録
  */
 function handleCheckout(data) {
-  const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
+  const sheet = getSheet(SHEET_NAMES.SUPPORT);
   const date = data.date;
   const userName = data.userName;
   const checkoutTime = data.checkoutTime;
 
-  const rowIndex = findAttendanceRow(sheet, date, userName);
+  const rowIndex = findSupportRow(sheet, date, userName);
 
   if (!rowIndex) {
     return createErrorResponse('出勤記録が見つかりません');
   }
 
-  // 退勤時刻を設定
-  sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_TIME).setValue(checkoutTime);
+  // 【重要】実労時間を計算（数式の代わりに値として保存）
+  const checkinTime = sheet.getRange(rowIndex, SUPPORT_COLS.CHECKIN_TIME).getValue();
+  const workMinutes = calculateWorkMinutes(
+    checkinTime,
+    checkoutTime,
+    data.lunchBreak || '',
+    data.shortBreak || '',
+    data.otherBreak || ''
+  );
 
-  // 退勤時のデータを設定
-  if (data.fatigue) sheet.getRange(rowIndex, ATTENDANCE_COLS.FATIGUE).setValue(data.fatigue);
-  if (data.stress) sheet.getRange(rowIndex, ATTENDANCE_COLS.STRESS).setValue(data.stress);
-  if (data.lunchBreak) sheet.getRange(rowIndex, ATTENDANCE_COLS.LUNCH_BREAK).setValue(data.lunchBreak);
-  if (data.shortBreak) sheet.getRange(rowIndex, ATTENDANCE_COLS.SHORT_BREAK).setValue(data.shortBreak);
-  if (data.otherBreak) sheet.getRange(rowIndex, ATTENDANCE_COLS.OTHER_BREAK).setValue(data.otherBreak);
-  if (data.checkoutComment) sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKOUT_COMMENT).setValue(data.checkoutComment);
+  // 【統合】K列〜U列に退勤データを一括書き込み（11列）
+  const checkoutData = [
+    data.fatigue || '',         // K列: 疲労感
+    data.stress || '',          // L列: 心理的負荷
+    data.checkoutComment || '', // M列: 退勤時コメント
+    '',                         // N列: 予備
+    '',                         // O列: 予備
+    checkinTime,                // P列: 勤務開始時刻（既存値を保持）
+    checkoutTime,               // Q列: 勤務終了時刻
+    data.lunchBreak || '',      // R列: 昼休憩
+    data.shortBreak || '',      // S列: 15分休憩
+    data.otherBreak || '',      // T列: 他休憩時間
+    workMinutes                 // U列: 実労時間
+  ];
 
-  // 実労時間を計算
-  const checkinTime = sheet.getRange(rowIndex, ATTENDANCE_COLS.CHECKIN_TIME).getValue();
-  const lunchBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.LUNCH_BREAK).getValue();
-  const shortBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.SHORT_BREAK).getValue();
-  const otherBreak = sheet.getRange(rowIndex, ATTENDANCE_COLS.OTHER_BREAK).getValue();
-
-  const workMinutes = calculateWorkMinutes(checkinTime, checkoutTime, lunchBreak, shortBreak, otherBreak);
-  sheet.getRange(rowIndex, ATTENDANCE_COLS.WORK_MINUTES).setValue(workMinutes);
+  // K列〜U列を一括入力（11列）
+  sheet.getRange(rowIndex, SUPPORT_COLS.FATIGUE, 1, 11).setValues([checkoutData]);
 
   return createSuccessResponse({
-    message: '退勤登録が完了しました',
-    workMinutes: workMinutes
+    message: '退勤登録が完了しました'
   });
 }
 
 /**
- * 指定日の勤怠一覧取得（逆順走査で高速化）
+ * 指定日の勤怠一覧取得（一括取得で高速化）
  */
 function handleGetDailyAttendance(date) {
-  const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
-  const lastRow = sheet.getLastRow();
-  const records = [];
+  const sheet = getSheet(SHEET_NAMES.SUPPORT);
 
-  // 最終行から2行目へ逆順走査（最新データから検索）
-  for (let row = lastRow; row >= 2; row--) {
-    const rowDate = formatDate(sheet.getRange(row, ATTENDANCE_COLS.DATE).getValue());
+  // 【重要】実データの最下行を取得（空白行・数式のみの行を除外）
+  const actualLastRow = findActualLastRow(sheet, SUPPORT_COLS.USER_NAME);
 
-    if (rowDate === date) {
-      records.push(parseAttendanceRow(sheet, row));
+  if (actualLastRow < 2) {
+    return createSuccessResponse({ records: [] });
+  }
+
+  // 【高速化】実データの最下行から上に最大100行のみ検索
+  const maxSearchRows = Math.min(actualLastRow - 1, 100);
+  const startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+  const searchData = sheet.getRange(startRow, SUPPORT_COLS.DATE, maxSearchRows, 2).getValues();
+  const targetRows = [];
+
+  let emptyRowCount = 0;
+  const maxEmptyRows = 5; // 連続5行空白で終了
+
+  // 空白行をスキップして対象行を特定（逆順）
+  for (let i = searchData.length - 1; i >= 0; i--) {
+    const rowUserName = searchData[i][1];
+
+    // 利用者名が空白の行はスキップ（数式だけの行を除外）
+    if (!rowUserName || rowUserName === '') {
+      emptyRowCount++;
+      if (emptyRowCount >= maxEmptyRows) {
+        break;
+      }
+      continue;
     }
+
+    emptyRowCount = 0;
+    const rowDate = formatDate(searchData[i][0]);
+    if (rowDate === date) {
+      targetRows.push(startRow + i);
+    }
+  }
+
+  // 対象行のみ全カラムを取得
+  const records = [];
+  for (const rowNumber of targetRows) {
+    const rowData = sheet.getRange(rowNumber, 1, 1, 38).getValues()[0];
+    records.push(parseAttendanceRowFromArray(rowData, rowNumber));
   }
 
   return createSuccessResponse({ records });
 }
 
 /**
- * 勤怠データ行を探す（逆順走査で高速化）
+ * 特定利用者の特定日の勤怠データを取得（直近データのみ・高速）
  */
-function findAttendanceRow(sheet, date, userName) {
-  const lastRow = sheet.getLastRow();
+function handleGetUserAttendance(userName, date) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.SUPPORT);
 
-  // 最終行から2行目へ逆順走査（最新データから検索）
-  for (let row = lastRow; row >= 2; row--) {
-    const rowDate = formatDate(sheet.getRange(row, ATTENDANCE_COLS.DATE).getValue());
-    const rowUserName = sheet.getRange(row, ATTENDANCE_COLS.USER_NAME).getValue();
+    // 【重要】実データの最下行を取得（空白行・数式のみの行を除外）
+    const actualLastRow = findActualLastRow(sheet, SUPPORT_COLS.USER_NAME);
+
+    if (actualLastRow < 2) {
+      return createSuccessResponse({ record: null });
+    }
+
+    // 【高速化】実データの最下行から上に最大100行のみ検索
+    const maxSearchRows = Math.min(actualLastRow - 1, 100);
+    const startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+    const searchData = sheet.getRange(startRow, SUPPORT_COLS.DATE, maxSearchRows, 2).getValues();
+
+    let emptyRowCount = 0;
+    const maxEmptyRows = 5; // 連続5行空白で早期終了
+
+    // 下から上に検索（逆順）
+    for (let i = searchData.length - 1; i >= 0; i--) {
+      const rowUserName = searchData[i][1];
+
+      // 利用者名が空白の行はスキップ
+      if (!rowUserName || rowUserName === '') {
+        emptyRowCount++;
+        if (emptyRowCount >= maxEmptyRows) {
+          break; // 連続空白行が多いので終了
+        }
+        continue;
+      }
+
+      emptyRowCount = 0; // データあり、カウントリセット
+      const rowDate = formatDate(searchData[i][0]);
+
+      if (rowDate === date && rowUserName === userName) {
+        // 見つかった行のみ全カラム（28列）を取得
+        const rowNumber = startRow + i;
+        const rowData = sheet.getRange(rowNumber, 1, 1, 38).getValues()[0];
+        const record = parseAttendanceRowFromArray(rowData, rowNumber);
+        return createSuccessResponse({ record });
+      }
+    }
+
+    return createSuccessResponse({ record: null });
+  } catch (error) {
+    return createErrorResponse('勤怠データ取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 特定利用者の特定日の勤怠データを全範囲検索（過去データ用・遅い）
+ */
+function handleSearchUserAttendance(userName, date) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.SUPPORT);
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow < 2) {
+      return createSuccessResponse({ record: null });
+    }
+
+    // 全範囲検索（遅いが過去データも取得可能）
+    const searchData = sheet.getRange(2, SUPPORT_COLS.DATE, lastRow - 1, 2).getValues();
+
+    // 上から順に検索、空白行はスキップ
+    for (let i = 0; i < searchData.length; i++) {
+      const rowUserName = searchData[i][1];
+
+      // 利用者名が空白の行はスキップ
+      if (!rowUserName || rowUserName === '') {
+        continue;
+      }
+
+      const rowDate = formatDate(searchData[i][0]);
+
+      if (rowDate === date && rowUserName === userName) {
+        // 見つかった行のみ全カラム（28列）を取得
+        const rowNumber = i + 2;
+        const rowData = sheet.getRange(rowNumber, 1, 1, 38).getValues()[0];
+        const record = parseAttendanceRowFromArray(rowData, rowNumber);
+        return createSuccessResponse({ record });
+      }
+    }
+
+    return createSuccessResponse({ record: null });
+  } catch (error) {
+    return createErrorResponse('勤怠データ検索エラー: ' + error.message);
+  }
+}
+
+/**
+ * 指定日の出勤予定者一覧を取得（空白行除外＋一括取得で超高速化）
+ */
+function handleGetScheduledUsers(date) {
+  try {
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+    const attendanceSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const dayColumn = getDayOfWeekColumn(date);
+
+    if (!dayColumn) {
+      return createErrorResponse('日付の解析に失敗しました');
+    }
+
+    // 勤怠シートから実際の出勤記録を取得
+    // 【重要】実データの最下行を取得（空白行・数式のみの行を除外）
+    const actualLastRow = findActualLastRow(attendanceSheet, SUPPORT_COLS.USER_NAME);
+    const actualAttendance = {};
+
+    if (actualLastRow >= 2) {
+      // 【高速化】実データの最下行から上に最大100行のみ検索
+      const maxSearchRows = Math.min(actualLastRow - 1, 100);
+      const startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+      const searchData = attendanceSheet.getRange(startRow, SUPPORT_COLS.DATE, maxSearchRows, 2).getValues();
+
+      // 指定日のデータを特定、空白行はスキップ
+      const targetRows = [];
+      let emptyRowCount = 0;
+      const maxEmptyRows = 5;
+
+      for (let i = searchData.length - 1; i >= 0; i--) {
+        const rowUserName = searchData[i][1];
+
+        // 利用者名が空白の行はスキップ（数式だけの行を除外）
+        if (!rowUserName || rowUserName === '') {
+          emptyRowCount++;
+          if (emptyRowCount >= maxEmptyRows) {
+            break;
+          }
+          continue;
+        }
+
+        emptyRowCount = 0;
+        const rowDate = formatDate(searchData[i][0]);
+        if (rowDate === date) {
+          targetRows.push(startRow + i);
+        }
+      }
+
+      // 対象行のみ全カラムを取得
+      for (const rowNumber of targetRows) {
+        const rowData = attendanceSheet.getRange(rowNumber, 1, 1, 38).getValues()[0];
+        const userName = rowData[SUPPORT_COLS.USER_NAME - 1];
+        actualAttendance[userName] = parseAttendanceRowFromArray(rowData, rowNumber);
+      }
+    }
+
+    // 【重要】マスタシートを一括取得（1行ずつ取得しない）
+    const masterDataRange = masterSheet.getDataRange();
+    const masterLastRow = masterDataRange.getLastRow();
+    const scheduledUsers = [];
+
+    if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
+      // 必要な列だけ一括取得（名前、ステータス、曜日列）
+      const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+      const numRows = masterLastRow - startRow + 1;
+      const masterData = masterSheet.getRange(startRow, 1, numRows, dayColumn).getValues();
+
+      for (let i = 0; i < masterData.length; i++) {
+        const name = masterData[i][MASTER_CONFIG.USER_COLS.NAME - 1];
+
+        // 空白行に達したら終了
+        if (!name || name === '') {
+          break;
+        }
+
+        const status = masterData[i][MASTER_CONFIG.USER_COLS.STATUS - 1];
+        const scheduledValue = masterData[i][dayColumn - 1];
+
+        // 契約中かつ出勤予定がある利用者のみ
+        if (status === '契約中' && scheduledValue && scheduledValue !== '') {
+          const userData = {
+            userName: name,
+            scheduledAttendance: scheduledValue,
+            hasCheckedIn: actualAttendance[name] ? true : false,
+            attendance: actualAttendance[name] || null
+          };
+
+          scheduledUsers.push(userData);
+        }
+      }
+    }
+
+    return createSuccessResponse({ scheduledUsers });
+
+  } catch (error) {
+    return createErrorResponse('出勤予定者取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 勤怠データ行を探す（空白行スキップで超高速化）
+ */
+function findSupportRow(sheet, date, userName) {
+  // 【重要】実データの最下行を取得（空白行・数式のみの行を除外）
+  const actualLastRow = findActualLastRow(sheet, SUPPORT_COLS.USER_NAME);
+
+  if (actualLastRow < 2) {
+    return null;
+  }
+
+  // 【高速化】実データの最下行から上に最大100行のみ検索
+  const maxSearchRows = Math.min(actualLastRow - 1, 100);
+  const startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+  const searchData = sheet.getRange(startRow, SUPPORT_COLS.DATE, maxSearchRows, 2).getValues();
+
+  let emptyRowCount = 0;
+  const maxEmptyRows = 5; // 連続5行空白で終了
+
+  // 下から上に検索、空白行はスキップ
+  for (let i = searchData.length - 1; i >= 0; i--) {
+    const rowUserName = searchData[i][1];
+
+    // 利用者名が空白の行はスキップ（数式だけの行を除外）
+    if (!rowUserName || rowUserName === '') {
+      emptyRowCount++;
+      if (emptyRowCount >= maxEmptyRows) {
+        break;
+      }
+      continue;
+    }
+
+    emptyRowCount = 0;
+    const rowDate = formatDate(searchData[i][0]);
 
     if (rowDate === date && rowUserName === userName) {
-      return row;
+      return startRow + i; // 配列インデックス → 行番号に変換
     }
   }
 
@@ -1371,7 +1853,157 @@ function findAttendanceRow(sheet, date, userName) {
 }
 
 /**
- * 勤怠データ行をパース
+ * 勤怠データを更新（支援者用）- 一括更新で高速化
+ */
+function handleUpdateAttendance(data) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.SUPPORT);
+    const date = data.date;
+    const userName = data.userName;
+
+    // 既存の勤怠データを検索
+    const rowIndex = findSupportRow(sheet, date, userName);
+
+    if (!rowIndex) {
+      return createErrorResponse('勤怠データが見つかりません');
+    }
+
+    // 【高速化】既存の行データを一括取得（38列まで取得）
+    const rowData = sheet.getRange(rowIndex, 1, 1, 38).getValues()[0];
+
+    // 更新する項目のみ変更（配列のインデックスは0始まりなので-1）
+    if (data.attendanceStatus !== undefined) {
+      rowData[SUPPORT_COLS.ATTENDANCE - 1] = data.attendanceStatus || '';
+    }
+    if (data.checkinTime !== undefined) {
+      rowData[SUPPORT_COLS.CHECKIN_TIME - 1] = data.checkinTime || '';
+    }
+    if (data.checkoutTime !== undefined) {
+      rowData[SUPPORT_COLS.CHECKOUT_TIME - 1] = data.checkoutTime || '';
+    }
+    if (data.lunchBreak !== undefined) {
+      rowData[SUPPORT_COLS.LUNCH_BREAK - 1] = data.lunchBreak || '';
+    }
+    if (data.shortBreak !== undefined) {
+      rowData[SUPPORT_COLS.SHORT_BREAK - 1] = data.shortBreak || '';
+    }
+    if (data.otherBreak !== undefined) {
+      rowData[SUPPORT_COLS.OTHER_BREAK - 1] = data.otherBreak || '';
+    }
+
+    // 【重要】時刻や休憩時間が更新された場合、実労時間を再計算
+    if (data.checkinTime !== undefined || data.checkoutTime !== undefined ||
+        data.lunchBreak !== undefined || data.shortBreak !== undefined || data.otherBreak !== undefined) {
+      const workMinutes = calculateWorkMinutes(
+        rowData[SUPPORT_COLS.CHECKIN_TIME - 1],
+        rowData[SUPPORT_COLS.CHECKOUT_TIME - 1],
+        rowData[SUPPORT_COLS.LUNCH_BREAK - 1],
+        rowData[SUPPORT_COLS.SHORT_BREAK - 1],
+        rowData[SUPPORT_COLS.OTHER_BREAK - 1]
+      );
+      rowData[SUPPORT_COLS.WORK_MINUTES - 1] = workMinutes;
+    }
+
+    // 【統合】一括で書き込み（API呼び出し1回）
+    sheet.getRange(rowIndex, 1, 1, 38).setValues([rowData]);
+
+    return createSuccessResponse({
+      message: '勤怠データを更新しました',
+      rowId: rowIndex
+    });
+  } catch (error) {
+    return createErrorResponse('勤怠データ更新エラー: ' + error.message);
+  }
+}
+
+/**
+ * 勤怠データ行をパース（配列版：高速）
+ */
+function parseAttendanceRowFromArray(rowData, rowNumber) {
+  // ヘルパー関数：値を文字列に変換（空白の場合はnull）
+  function toStringOrNull(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    return String(value);
+  }
+
+  // ヘルパー関数：時刻をHH:mm形式にフォーマット（Date型とString型の両方に対応）
+  function formatTimeToHHMM(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    // すでにHH:mm形式の文字列の場合はそのまま返す
+    if (typeof value === 'string' && /^\d{1,2}:\d{2}$/.test(value)) {
+      return value;
+    }
+
+    // Date型の場合はHH:mm形式に変換
+    if (value instanceof Date) {
+      const hours = String(value.getHours()).padStart(2, '0');
+      const minutes = String(value.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    // その他の場合は文字列化を試みる
+    const valueStr = String(value);
+    // HH:mm形式のチェック
+    if (/^\d{1,2}:\d{2}$/.test(valueStr)) {
+      return valueStr;
+    }
+
+    return null;
+  }
+
+  // ヘルパー関数：値を整数に変換（エラー値や空白の場合はnull）
+  function toIntOrNull(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    // エラー値（#NUM!、#VALUE!など）をチェック
+    const valueStr = String(value);
+    if (valueStr.startsWith('#')) {
+      return null;
+    }
+    // 数値に変換
+    const num = Number(value);
+    if (isNaN(num)) {
+      return null;
+    }
+    return Math.round(num);
+  }
+
+  return {
+    rowId: rowNumber,
+    date: formatDate(rowData[SUPPORT_COLS.DATE - 1]),
+    userName: toStringOrNull(rowData[SUPPORT_COLS.USER_NAME - 1]),
+    scheduledUse: toStringOrNull(rowData[SUPPORT_COLS.SCHEDULED - 1]),
+    attendance: toStringOrNull(rowData[SUPPORT_COLS.ATTENDANCE - 1]),
+    morningTask: toStringOrNull(rowData[SUPPORT_COLS.MORNING_TASK - 1]),
+    afternoonTask: toStringOrNull(rowData[SUPPORT_COLS.AFTERNOON_TASK - 1]),
+    healthCondition: toStringOrNull(rowData[SUPPORT_COLS.HEALTH - 1]),
+    sleepStatus: toStringOrNull(rowData[SUPPORT_COLS.SLEEP - 1]),
+    checkinComment: toStringOrNull(rowData[SUPPORT_COLS.CHECKIN_COMMENT - 1]),
+    fatigue: toStringOrNull(rowData[SUPPORT_COLS.FATIGUE - 1]),
+    stress: toStringOrNull(rowData[SUPPORT_COLS.STRESS - 1]),
+    checkoutComment: toStringOrNull(rowData[SUPPORT_COLS.CHECKOUT_COMMENT - 1]),
+    checkinTime: formatTimeToHHMM(rowData[SUPPORT_COLS.CHECKIN_TIME - 1]),
+    checkoutTime: formatTimeToHHMM(rowData[SUPPORT_COLS.CHECKOUT_TIME - 1]),
+    lunchBreak: toStringOrNull(rowData[SUPPORT_COLS.LUNCH_BREAK - 1]),
+    shortBreak: toStringOrNull(rowData[SUPPORT_COLS.SHORT_BREAK - 1]),
+    otherBreak: toStringOrNull(rowData[SUPPORT_COLS.OTHER_BREAK - 1]),
+    actualWorkMinutes: toIntOrNull(rowData[SUPPORT_COLS.WORK_MINUTES - 1]),
+    mealService: rowData[SUPPORT_COLS.MEAL_SERVICE - 1] || false,
+    absenceSupport: rowData[SUPPORT_COLS.ABSENCE_SUPPORT - 1] || false,
+    visitSupport: rowData[SUPPORT_COLS.VISIT_SUPPORT - 1] || false,
+    transportService: rowData[SUPPORT_COLS.TRANSPORT - 1] || false,
+    userStatus: toStringOrNull(rowData[SUPPORT_COLS.USER_STATUS - 1])  // Z列: 本人の状況
+  };
+}
+
+/**
+ * 勤怠データ行をパース（シート版：互換性のため残す）
  */
 function parseAttendanceRow(sheet, row) {
   // ヘルパー関数：値を文字列に変換（空白の場合はnull）
@@ -1380,6 +2012,34 @@ function parseAttendanceRow(sheet, row) {
       return null;
     }
     return String(value);
+  }
+
+  // ヘルパー関数：時刻をHH:mm形式にフォーマット（Date型とString型の両方に対応）
+  function formatTimeToHHMM(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    // すでにHH:mm形式の文字列の場合はそのまま返す
+    if (typeof value === 'string' && /^\d{1,2}:\d{2}$/.test(value)) {
+      return value;
+    }
+
+    // Date型の場合はHH:mm形式に変換
+    if (value instanceof Date) {
+      const hours = String(value.getHours()).padStart(2, '0');
+      const minutes = String(value.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    // その他の場合は文字列化を試みる
+    const valueStr = String(value);
+    // HH:mm形式のチェック
+    if (/^\d{1,2}:\d{2}$/.test(valueStr)) {
+      return valueStr;
+    }
+
+    return null;
   }
 
   // ヘルパー関数：値を整数に変換（エラー値や空白の場合はnull）
@@ -1402,28 +2062,29 @@ function parseAttendanceRow(sheet, row) {
 
   return {
     rowId: row,
-    date: formatDate(sheet.getRange(row, ATTENDANCE_COLS.DATE).getValue()),
-    userName: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.USER_NAME).getValue()),
-    scheduledUse: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.SCHEDULED).getValue()),
-    attendance: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.ATTENDANCE).getValue()),
-    morningTask: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.MORNING_TASK).getValue()),
-    afternoonTask: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.AFTERNOON_TASK).getValue()),
-    healthCondition: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.HEALTH).getValue()),
-    sleepStatus: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.SLEEP).getValue()),
-    checkinComment: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.CHECKIN_COMMENT).getValue()),
-    fatigue: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.FATIGUE).getValue()),
-    stress: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.STRESS).getValue()),
-    checkoutComment: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.CHECKOUT_COMMENT).getValue()),
-    checkinTime: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.CHECKIN_TIME).getValue()),
-    checkoutTime: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.CHECKOUT_TIME).getValue()),
-    lunchBreak: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.LUNCH_BREAK).getValue()),
-    shortBreak: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.SHORT_BREAK).getValue()),
-    otherBreak: toStringOrNull(sheet.getRange(row, ATTENDANCE_COLS.OTHER_BREAK).getValue()),
-    actualWorkMinutes: toIntOrNull(sheet.getRange(row, ATTENDANCE_COLS.WORK_MINUTES).getValue()),
-    mealService: sheet.getRange(row, ATTENDANCE_COLS.MEAL_SERVICE).getValue() || false,
-    absenceSupport: sheet.getRange(row, ATTENDANCE_COLS.ABSENCE_SUPPORT).getValue() || false,
-    visitSupport: sheet.getRange(row, ATTENDANCE_COLS.VISIT_SUPPORT).getValue() || false,
-    transportService: sheet.getRange(row, ATTENDANCE_COLS.TRANSPORT).getValue() || false
+    date: formatDate(sheet.getRange(row, SUPPORT_COLS.DATE).getValue()),
+    userName: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.USER_NAME).getValue()),
+    scheduledUse: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.SCHEDULED).getValue()),
+    attendance: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.ATTENDANCE).getValue()),
+    morningTask: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.MORNING_TASK).getValue()),
+    afternoonTask: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.AFTERNOON_TASK).getValue()),
+    healthCondition: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.HEALTH).getValue()),
+    sleepStatus: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.SLEEP).getValue()),
+    checkinComment: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.CHECKIN_COMMENT).getValue()),
+    fatigue: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.FATIGUE).getValue()),
+    stress: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.STRESS).getValue()),
+    checkoutComment: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.CHECKOUT_COMMENT).getValue()),
+    checkinTime: formatTimeToHHMM(sheet.getRange(row, SUPPORT_COLS.CHECKIN_TIME).getValue()),
+    checkoutTime: formatTimeToHHMM(sheet.getRange(row, SUPPORT_COLS.CHECKOUT_TIME).getValue()),
+    lunchBreak: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.LUNCH_BREAK).getValue()),
+    shortBreak: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.SHORT_BREAK).getValue()),
+    otherBreak: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.OTHER_BREAK).getValue()),
+    actualWorkMinutes: toIntOrNull(sheet.getRange(row, SUPPORT_COLS.WORK_MINUTES).getValue()),
+    mealService: sheet.getRange(row, SUPPORT_COLS.MEAL_SERVICE).getValue() || false,
+    absenceSupport: sheet.getRange(row, SUPPORT_COLS.ABSENCE_SUPPORT).getValue() || false,
+    visitSupport: sheet.getRange(row, SUPPORT_COLS.VISIT_SUPPORT).getValue() || false,
+    transportService: sheet.getRange(row, SUPPORT_COLS.TRANSPORT).getValue() || false,
+    userStatus: toStringOrNull(sheet.getRange(row, SUPPORT_COLS.USER_STATUS).getValue())  // Z列: 本人の状況
   };
 }
 
@@ -1459,57 +2120,67 @@ function formatDate(dateValue) {
 }
 
 /**
- * 実労時間計算（分単位）
+ * 日付から曜日列を取得（マスタ設定シートの曜日別出欠予定用）
  */
-function calculateWorkMinutes(checkinTime, checkoutTime, lunchBreak, shortBreak, otherBreak) {
-  if (!checkinTime || !checkoutTime) return 0;
+function getDayOfWeekColumn(dateValue) {
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : new Date(dateValue);
+  const dayOfWeek = date.getDay(); // 0=日曜, 1=月曜, ..., 6=土曜
 
-  const checkin = parseTime(checkinTime);
-  const checkout = parseTime(checkoutTime);
-
-  let totalMinutes = (checkout - checkin) / 60000;
-
-  // 休憩時間を引く
-  totalMinutes -= parseBreakTime(lunchBreak);
-  totalMinutes -= parseBreakTime(shortBreak);
-  totalMinutes -= parseBreakTime(otherBreak);
-
-  return Math.max(0, Math.round(totalMinutes));
+  // 曜日に対応する列を返す
+  switch (dayOfWeek) {
+    case 0: return MASTER_CONFIG.USER_COLS.SCHEDULED_SUN; // 日曜
+    case 1: return MASTER_CONFIG.USER_COLS.SCHEDULED_MON; // 月曜
+    case 2: return MASTER_CONFIG.USER_COLS.SCHEDULED_TUE; // 火曜
+    case 3: return MASTER_CONFIG.USER_COLS.SCHEDULED_WED; // 水曜
+    case 4: return MASTER_CONFIG.USER_COLS.SCHEDULED_THU; // 木曜
+    case 5: return MASTER_CONFIG.USER_COLS.SCHEDULED_FRI; // 金曜
+    case 6: return MASTER_CONFIG.USER_COLS.SCHEDULED_SAT; // 土曜
+    default: return null;
+  }
 }
 
 /**
- * 時刻文字列をDateオブジェクトに変換
+ * マスタ設定シートから利用者の曜日別出欠予定を取得（一括取得で超高速化）
  */
-function parseTime(timeStr) {
-  if (!timeStr) return new Date();
+function getUserScheduledAttendance(userName, dateValue) {
+  try {
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+    const dayColumn = getDayOfWeekColumn(dateValue);
 
-  const timeString = String(timeStr);
-  const today = new Date();
+    if (!dayColumn) {
+      return null;
+    }
 
-  if (timeString.includes(':')) {
-    const [hours, minutes] = timeString.split(':').map(Number);
-    today.setHours(hours, minutes, 0, 0);
+    // A列（利用者名）と該当曜日列を一括取得（API呼び出し1回）
+    // 8行目から200行目までの範囲を取得
+    const nameCol = MASTER_CONFIG.USER_COLS.NAME;
+    const maxRows = 200;
+
+    // 利用者名列を一括取得
+    const namesRange = masterSheet.getRange(MASTER_CONFIG.USER_DATA_START_ROW, nameCol, maxRows, 1).getValues();
+    // 該当曜日列を一括取得
+    const scheduledRange = masterSheet.getRange(MASTER_CONFIG.USER_DATA_START_ROW, dayColumn, maxRows, 1).getValues();
+
+    // メモリ上で検索
+    for (let i = 0; i < namesRange.length; i++) {
+      const name = namesRange[i][0];
+
+      // 空白行に達したら終了
+      if (!name || name === '') {
+        break;
+      }
+
+      // 利用者名が一致したら、該当曜日の出欠予定を返す
+      if (name === userName) {
+        const scheduledValue = scheduledRange[i][0];
+        return scheduledValue || null;
+      }
+    }
+
+    return null; // 利用者が見つからない場合
+  } catch (error) {
+    return null; // エラーの場合はnullを返す
   }
-
-  return today;
-}
-
-/**
- * 休憩時間を分に変換
- */
-function parseBreakTime(breakValue) {
-  if (!breakValue) return 0;
-
-  const breakString = String(breakValue);
-
-  // "1:00" 形式の場合
-  if (breakString.includes(':')) {
-    const [hours, minutes] = breakString.split(':').map(Number);
-    return (hours * 60) + minutes;
-  }
-
-  // 数値の場合
-  return parseInt(breakString) || 0;
 }
 
 /**
@@ -1539,3 +2210,464 @@ function createErrorResponse(message) {
     .createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+// === 支援記録API ===
+
+/**
+ * 指定日・利用者の支援記録を取得（直近データのみ・高速）
+ */
+function handleGetSupportRecord(date, userName) {
+  try {
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+
+    // 【重要】実データの最下行を取得（空白行・数式のみの行を除外）
+    const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
+
+    if (actualLastRow < 2) {
+      return createSuccessResponse({ record: null });
+    }
+
+    // 【高速化】実データの最下行から上に最大100行のみ検索
+    const maxSearchRows = Math.min(actualLastRow - 1, 100);
+    const startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+    const searchData = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, maxSearchRows, 2).getValues();
+
+    let emptyRowCount = 0;
+    const maxEmptyRows = 5; // 連続5行空白で早期終了
+
+    // 下から上に検索（逆順）
+    for (let i = searchData.length - 1; i >= 0; i--) {
+      const rowUserName = searchData[i][1];
+
+      // 利用者名が空白の行はスキップ
+      if (!rowUserName || rowUserName === '') {
+        emptyRowCount++;
+        if (emptyRowCount >= maxEmptyRows) {
+          break; // 連続空白行が多いので終了
+        }
+        continue;
+      }
+
+      emptyRowCount = 0; // データあり、カウントリセット
+      const rowDate = formatDate(searchData[i][0]);
+
+      if (rowDate === date && rowUserName === userName) {
+        // 見つかった行のみ全カラム（38列）を取得
+        const rowNumber = startRow + i;
+        const rowData = supportSheet.getRange(rowNumber, 1, 1, 38).getValues()[0];
+        const record = parseSupportRecordFromArray(rowData, rowNumber);
+        return createSuccessResponse({ record });
+      }
+    }
+
+    return createSuccessResponse({ record: null });
+  } catch (error) {
+    return createErrorResponse('支援記録取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 指定日・利用者の支援記録を全範囲検索（過去データ用・遅い）
+ */
+function handleSearchSupportRecord(date, userName) {
+  try {
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const lastRow = supportSheet.getLastRow();
+
+    if (lastRow < 2) {
+      return createSuccessResponse({ record: null });
+    }
+
+    // 全範囲検索（遅いが過去データも取得可能）
+    const searchData = supportSheet.getRange(2, SUPPORT_COLS.DATE, lastRow - 1, 2).getValues();
+
+    // 上から順に検索、空白行はスキップ
+    for (let i = 0; i < searchData.length; i++) {
+      const rowUserName = searchData[i][1];
+
+      // 利用者名が空白の行はスキップ
+      if (!rowUserName || rowUserName === '') {
+        continue;
+      }
+
+      const rowDate = formatDate(searchData[i][0]);
+
+      if (rowDate === date && rowUserName === userName) {
+        // 見つかった行のみ全カラム（38列）を取得
+        const rowNumber = i + 2;
+        const rowData = supportSheet.getRange(rowNumber, 1, 1, 38).getValues()[0];
+        const record = parseSupportRecordFromArray(rowData, rowNumber);
+        return createSuccessResponse({ record });
+      }
+    }
+
+    return createSuccessResponse({ record: null });
+  } catch (error) {
+    return createErrorResponse('支援記録検索エラー: ' + error.message);
+  }
+}
+
+/**
+ * 指定日の支援記録一覧を取得
+ */
+function handleGetSupportRecordList(date) {
+  try {
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+
+    // 【重要】実データの最下行を取得（空白行・数式のみの行を除外）
+    const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
+
+    if (actualLastRow < 2) {
+      return createSuccessResponse({ records: [] });
+    }
+
+    // 【高速化】実データの最下行から上に最大100行のみ検索
+    const maxSearchRows = Math.min(actualLastRow - 1, 100);
+    const startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+    const searchData = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, maxSearchRows, 2).getValues();
+    const targetRows = [];
+
+    let emptyRowCount = 0;
+    const maxEmptyRows = 5; // 連続5行空白で終了
+
+    // 空白行をスキップして対象行を特定（逆順）
+    for (let i = searchData.length - 1; i >= 0; i--) {
+      const rowUserName = searchData[i][1];
+
+      // 利用者名が空白の行はスキップ（数式だけの行を除外）
+      if (!rowUserName || rowUserName === '') {
+        emptyRowCount++;
+        if (emptyRowCount >= maxEmptyRows) {
+          break;
+        }
+        continue;
+      }
+
+      emptyRowCount = 0;
+      const rowDate = formatDate(searchData[i][0]);
+      if (rowDate === date) {
+        targetRows.push(startRow + i);
+      }
+    }
+
+    // 対象行のみ全カラムを取得
+    const records = [];
+    for (const rowNumber of targetRows) {
+      const rowData = supportSheet.getRange(rowNumber, 1, 1, 38).getValues()[0];
+      records.push(parseSupportRecordFromArray(rowData, rowNumber));
+    }
+
+    return createSuccessResponse({ records });
+  } catch (error) {
+    return createErrorResponse('支援記録一覧取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 支援記録を作成または更新
+ */
+function handleUpsertSupportRecord(data) {
+  try {
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const attendanceSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const date = data.date;
+    const userName = data.userName;
+
+    // 既存の支援記録を検索
+    const existingRow = findSupportRecordRow(supportSheet, date, userName);
+
+    // 勤怠データを取得（A-Y列用）
+    const attendanceData = getAttendanceDataForSupport(attendanceSheet, date, userName);
+
+    if (!attendanceData) {
+      return createErrorResponse('勤怠データが見つかりません');
+    }
+
+    // A-Y列のデータ（勤怠から）
+    const baseData = [
+      attendanceData.date,              // A列: 日時
+      attendanceData.userName,          // B列: 利用者名
+      attendanceData.scheduled,         // C列: 出欠（予定）
+      attendanceData.attendance,        // D列: 出欠
+      attendanceData.morningTask,       // E列: 担当業務AM
+      attendanceData.afternoonTask,     // F列: 担当業務PM
+      attendanceData.workplace,         // G列: 業務連絡
+      attendanceData.health,            // H列: 本日の体調
+      attendanceData.sleep,             // I列: 睡眠状況
+      attendanceData.checkinComment,    // J列: 出勤時利用者コメント
+      attendanceData.fatigue,           // K列: 疲労感
+      attendanceData.stress,            // L列: 心理的負荷
+      attendanceData.checkoutComment,   // M列: 退勤時利用者コメント
+      '',                               // N列: 予備
+      '',                               // O列: 予備
+      attendanceData.checkinTime,       // P列: 勤務開始時刻
+      attendanceData.checkoutTime,      // Q列: 勤務終了時刻
+      attendanceData.lunchBreak,        // R列: 昼休憩
+      attendanceData.shortBreak,        // S列: 15分休憩
+      attendanceData.otherBreak,        // T列: 他休憩時間
+      attendanceData.workMinutes,       // U列: 実労時間
+      attendanceData.mealService,       // V列: 食事提供
+      attendanceData.absenceSupport,    // W列: 欠席対応
+      attendanceData.visitSupport,      // X列: 訪問支援
+      attendanceData.transport          // Y列: 送迎
+    ];
+
+    // Z-AL列のデータ（手動入力）
+    const supportData = [
+      data.userStatus || '',            // Z列: 本人の状況
+      data.workLocation || '',          // AA列: 勤務地
+      data.recorder || '',              // AB列: 記録者
+      '',                               // AC列: 予備
+      data.homeSupportEval || '',       // AD列: 在宅支援評価対象
+      data.externalEval || '',          // AE列: 施設外評価対象
+      data.workGoal || '',              // AF列: 作業目標
+      data.workEval || '',              // AG列: 勤務評価
+      data.employmentEval || '',        // AH列: 就労評価
+      data.workMotivation || '',        // AI列: 就労意欲
+      data.communication || '',         // AJ列: 通信連絡対応
+      data.evaluation || '',            // AK列: 評価
+      data.userFeedback || ''           // AL列: 利用者の感想
+    ];
+
+    const allData = baseData.concat(supportData);
+
+    if (existingRow) {
+      // 更新
+      supportSheet.getRange(existingRow, 1, 1, 38).setValues([allData]);
+      return createSuccessResponse({
+        message: '支援記録を更新しました',
+        rowId: existingRow
+      });
+    } else {
+      // 新規作成 - 最終行の次に追加
+      const newRow = supportSheet.getLastRow() + 1;
+      supportSheet.getRange(newRow, 1, 1, 38).setValues([allData]);
+      return createSuccessResponse({
+        message: '支援記録を作成しました',
+        rowId: newRow
+      });
+    }
+  } catch (error) {
+    return createErrorResponse('支援記録保存エラー: ' + error.message);
+  }
+}
+
+/**
+ * 支援記録の行を検索
+ */
+function findSupportRecordRow(sheet, date, userName) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const dataRange = sheet.getRange(2, SUPPORT_COLS.DATE, lastRow - 1, 2).getValues();
+
+  for (let i = dataRange.length - 1; i >= 0; i--) {
+    const rowDate = formatDate(dataRange[i][0]);
+    const rowUserName = dataRange[i][1];
+    if (rowDate === date && rowUserName === userName) {
+      return i + 2;
+    }
+  }
+  return null;
+}
+
+/**
+ * 勤怠データを支援記録用に取得
+ */
+function getAttendanceDataForSupport(sheet, date, userName) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const allData = sheet.getRange(2, 1, lastRow - 1, 28).getValues();
+
+  for (let i = allData.length - 1; i >= 0; i--) {
+    const rowData = allData[i];
+    const rowDate = formatDate(rowData[SUPPORT_COLS.DATE - 1]);
+    const rowUserName = rowData[SUPPORT_COLS.USER_NAME - 1];
+
+    if (rowDate === date && rowUserName === userName) {
+      return {
+        date: rowData[SUPPORT_COLS.DATE - 1],
+        userName: rowData[SUPPORT_COLS.USER_NAME - 1],
+        scheduled: rowData[SUPPORT_COLS.SCHEDULED - 1],
+        attendance: rowData[SUPPORT_COLS.ATTENDANCE - 1],
+        morningTask: rowData[SUPPORT_COLS.MORNING_TASK - 1],
+        afternoonTask: rowData[SUPPORT_COLS.AFTERNOON_TASK - 1],
+        workplace: rowData[SUPPORT_COLS.WORKPLACE - 1],
+        health: rowData[SUPPORT_COLS.HEALTH - 1],
+        sleep: rowData[SUPPORT_COLS.SLEEP - 1],
+        checkinComment: rowData[SUPPORT_COLS.CHECKIN_COMMENT - 1],
+        fatigue: rowData[SUPPORT_COLS.FATIGUE - 1],
+        stress: rowData[SUPPORT_COLS.STRESS - 1],
+        checkoutComment: rowData[SUPPORT_COLS.CHECKOUT_COMMENT - 1],
+        checkinTime: rowData[SUPPORT_COLS.CHECKIN_TIME - 1],
+        checkoutTime: rowData[SUPPORT_COLS.CHECKOUT_TIME - 1],
+        lunchBreak: rowData[SUPPORT_COLS.LUNCH_BREAK - 1],
+        shortBreak: rowData[SUPPORT_COLS.SHORT_BREAK - 1],
+        otherBreak: rowData[SUPPORT_COLS.OTHER_BREAK - 1],
+        workMinutes: rowData[SUPPORT_COLS.WORK_MINUTES - 1],
+        mealService: rowData[SUPPORT_COLS.MEAL_SERVICE - 1],
+        absenceSupport: rowData[SUPPORT_COLS.ABSENCE_SUPPORT - 1],
+        visitSupport: rowData[SUPPORT_COLS.VISIT_SUPPORT - 1],
+        transport: rowData[SUPPORT_COLS.TRANSPORT - 1]
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * 配列データから支援記録オブジェクトを作成
+ */
+function parseSupportRecordFromArray(rowData, rowId) {
+  return {
+    rowId: rowId,
+    // A-Y列: 勤怠データ
+    date: formatDate(rowData[SUPPORT_COLS.DATE - 1]),
+    userName: rowData[SUPPORT_COLS.USER_NAME - 1],
+    scheduled: rowData[SUPPORT_COLS.SCHEDULED - 1],
+    attendance: rowData[SUPPORT_COLS.ATTENDANCE - 1],
+    morningTask: rowData[SUPPORT_COLS.MORNING_TASK - 1],
+    afternoonTask: rowData[SUPPORT_COLS.AFTERNOON_TASK - 1],
+    workplace: rowData[SUPPORT_COLS.WORKPLACE - 1],
+    health: rowData[SUPPORT_COLS.HEALTH - 1],
+    sleep: rowData[SUPPORT_COLS.SLEEP - 1],
+    checkinComment: rowData[SUPPORT_COLS.CHECKIN_COMMENT - 1],
+    fatigue: rowData[SUPPORT_COLS.FATIGUE - 1],
+    stress: rowData[SUPPORT_COLS.STRESS - 1],
+    checkoutComment: rowData[SUPPORT_COLS.CHECKOUT_COMMENT - 1],
+    checkinTime: rowData[SUPPORT_COLS.CHECKIN_TIME - 1],
+    checkoutTime: rowData[SUPPORT_COLS.CHECKOUT_TIME - 1],
+    lunchBreak: rowData[SUPPORT_COLS.LUNCH_BREAK - 1],
+    shortBreak: rowData[SUPPORT_COLS.SHORT_BREAK - 1],
+    otherBreak: rowData[SUPPORT_COLS.OTHER_BREAK - 1],
+    workMinutes: rowData[SUPPORT_COLS.WORK_MINUTES - 1],
+    mealService: rowData[SUPPORT_COLS.MEAL_SERVICE - 1],
+    absenceSupport: rowData[SUPPORT_COLS.ABSENCE_SUPPORT - 1],
+    visitSupport: rowData[SUPPORT_COLS.VISIT_SUPPORT - 1],
+    transport: rowData[SUPPORT_COLS.TRANSPORT - 1],
+    // Z-AL列: 支援記録データ
+    userStatus: rowData[SUPPORT_COLS.USER_STATUS - 1],
+    workLocation: rowData[SUPPORT_COLS.WORK_LOCATION - 1],
+    recorder: rowData[SUPPORT_COLS.RECORDER - 1],
+    homeSupportEval: rowData[SUPPORT_COLS.HOME_SUPPORT_EVAL - 1],
+    externalEval: rowData[SUPPORT_COLS.EXTERNAL_EVAL - 1],
+    workGoal: rowData[SUPPORT_COLS.WORK_GOAL - 1],
+    workEval: rowData[SUPPORT_COLS.WORK_EVAL - 1],
+    employmentEval: rowData[SUPPORT_COLS.EMPLOYMENT_EVAL - 1],
+    workMotivation: rowData[SUPPORT_COLS.WORK_MOTIVATION - 1],
+    communication: rowData[SUPPORT_COLS.COMMUNICATION - 1],
+    evaluation: rowData[SUPPORT_COLS.EVALUATION - 1],
+    userFeedback: rowData[SUPPORT_COLS.USER_FEEDBACK - 1]
+  };
+}
+
+// ========================================
+// ユーティリティ関数
+// ========================================
+
+/**
+ * 時刻をシリアル値に変換（文字列/Date型 → 0〜1の小数）
+ */
+function timeStringToSerial(timeStr) {
+  if (!timeStr || timeStr === '') return 0;
+
+  // 既に数値（シリアル値）の場合はそのまま返す
+  if (typeof timeStr === 'number') return timeStr;
+
+  // Date型オブジェクトの場合
+  if (timeStr instanceof Date) {
+    const hours = timeStr.getHours();
+    const minutes = timeStr.getMinutes();
+    const seconds = timeStr.getSeconds();
+    // シリアル値に変換（1日=1.0なので、時間を24で割る）
+    return (hours + minutes / 60 + seconds / 3600) / 24;
+  }
+
+  // HH:mm形式の文字列を分解
+  const match = String(timeStr).match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return 0;
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+
+  // シリアル値に変換（1日=1.0なので、時間を24で割る）
+  return (hours + minutes / 60) / 24;
+}
+
+/**
+ * 実労時間を計算（数式の代わり）
+ * 計算式: (終了時刻 - 開始時刻 - 昼休憩 - 15分休憩 - 他休憩) * 24
+ */
+function calculateWorkMinutes(checkinTime, checkoutTime, lunchBreak, shortBreak, otherBreak) {
+  // いずれかが空の場合は計算しない
+  if (!checkoutTime || checkoutTime === '') {
+    return '';
+  }
+
+  try {
+    // 時刻をシリアル値に変換
+    const checkout = timeStringToSerial(checkoutTime);
+    const checkin = timeStringToSerial(checkinTime);
+
+    // 休憩時間も時刻形式（HH:mm）またはDate型の可能性があるため、シリアル値に変換
+    const lunch = timeStringToSerial(lunchBreak);
+    const short = timeStringToSerial(shortBreak);
+    const other = timeStringToSerial(otherBreak);
+
+    // 計算: (終了 - 開始 - 昼 - 15分 - 他) * 24 = 実労時間（時間）
+    const result = (checkout - checkin - lunch - short - other) * 24;
+
+    // 小数第2位で四捨五入（例: 7.5時間、8.25時間）
+    // 0以下の場合は0を返す
+    return result > 0 ? Math.round(result * 100) / 100 : 0;
+  } catch (error) {
+    Logger.log('calculateWorkMinutes エラー: ' + error.message);
+    return 0;
+  }
+}
+
+/**
+ * 実際にデータがある最下行を見つける（空白行・数式のみの行を除外）
+ * 【最適化】最後の500行だけを検索し、末尾から逆順に探索
+ *
+ * @param {Sheet} sheet - 対象シート
+ * @param {number} userNameColumn - 検索対象列（通常はB列=2）
+ * @return {number} 実際にデータがある最下行番号
+ */
+function findActualLastRow(sheet, userNameColumn) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 1;
+
+  // 【最適化】最後の500行だけを取得（または全体が500行未満ならすべて）
+  const SEARCH_RANGE = 500;
+  const searchRange = Math.min(SEARCH_RANGE, lastRow - 1);
+  const startRow = Math.max(2, lastRow - searchRange + 1);
+
+  // 検索範囲のデータを取得
+  const data = sheet.getRange(startRow, userNameColumn, searchRange, 1).getValues();
+
+  // 末尾から逆順に探索して、5行連続空白が続いたらそこを終端とみなす
+  let consecutiveEmpty = 0;
+  let actualLast = 1;
+
+  for (let i = data.length - 1; i >= 0; i--) {
+    const value = data[i][0];
+    if (value && value !== '') {
+      // データ発見 → これが最終行
+      actualLast = startRow + i;
+      break;
+    } else {
+      // 空白行
+      consecutiveEmpty++;
+      if (consecutiveEmpty >= 5) {
+        // 5行連続空白 → 直後の行を最終行とする
+        actualLast = startRow + i + 5;
+        break;
+      }
+    }
+  }
+
+  return Math.max(1, actualLast);
+}
+

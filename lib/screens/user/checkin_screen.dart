@@ -51,8 +51,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
   /// プルダウンの選択肢を読み込む
   Future<void> _loadDropdownOptions() async {
     try {
-      // 強制的に最新データを取得（キャッシュを使わない）
-      final options = await _masterService.getDropdownOptions(forceRefresh: true);
+      final options = await _masterService.getDropdownOptions();
       setState(() {
         _dropdownOptions = options;
         _isLoading = false;

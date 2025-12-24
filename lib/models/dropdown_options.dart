@@ -13,9 +13,14 @@ class DropdownOptions {
   final List<String> specialNotes;        // 特記事項
   final List<String> breaks;              // 休憩時間
   final List<String> workLocations;       // 勤務地
-  final List<String> evaluations;         // 評価項目
   final List<String> scheduledWeekly;     // 曜日別出欠予定
   final List<String> recorders;           // 記録者
+  // 評価項目プルダウン
+  final List<String> workEvaluations;     // 勤怠評価
+  final List<String> employmentEvaluations; // 就労評価（品質・生産性）
+  final List<String> workMotivations;     // 就労意欲
+  final List<String> communications;      // 通信連絡対応度
+  final List<String> evaluations;         // 評価
   // 名簿用プルダウン
   final List<String> rosterStatus;        // ステータス
   final List<String> lifeProtection;      // 生活保護
@@ -43,9 +48,13 @@ class DropdownOptions {
     required this.specialNotes,
     required this.breaks,
     required this.workLocations,
-    required this.evaluations,
     required this.scheduledWeekly,
     required this.recorders,
+    required this.workEvaluations,
+    required this.employmentEvaluations,
+    required this.workMotivations,
+    required this.communications,
+    required this.evaluations,
     required this.rosterStatus,
     required this.lifeProtection,
     required this.disabilityPension,
@@ -74,9 +83,13 @@ class DropdownOptions {
       specialNotes: List<String>.from(json['specialNotes'] ?? []),
       breaks: List<String>.from(json['breaks'] ?? []),
       workLocations: List<String>.from(json['workLocations'] ?? []),
-      evaluations: List<String>.from(json['evaluations'] ?? []),
       scheduledWeekly: List<String>.from(json['scheduledWeekly'] ?? []),
       recorders: List<String>.from(json['recorders'] ?? []),
+      workEvaluations: List<String>.from(json['workEvaluations'] ?? []),
+      employmentEvaluations: List<String>.from(json['employmentEvaluations'] ?? []),
+      workMotivations: List<String>.from(json['workMotivations'] ?? []),
+      communications: List<String>.from(json['communications'] ?? []),
+      evaluations: List<String>.from(json['evaluations'] ?? []),
       rosterStatus: List<String>.from(json['rosterStatus'] ?? []),
       lifeProtection: List<String>.from(json['lifeProtection'] ?? []),
       disabilityPension: List<String>.from(json['disabilityPension'] ?? []),

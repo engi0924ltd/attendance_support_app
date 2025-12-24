@@ -23,6 +23,7 @@ class Attendance {
   final bool absenceSupport;        // 欠席対応加算（AD列）
   final bool visitSupport;          // 訪問支援加算（AE列）
   final bool transportService;      // 送迎加算（AF列）
+  final String? userStatus;         // 本人の状況（Z列：支援記録）
 
   Attendance({
     this.rowId,
@@ -48,6 +49,7 @@ class Attendance {
     this.absenceSupport = false,
     this.visitSupport = false,
     this.transportService = false,
+    this.userStatus,
   });
 
   // スプレッドシートから受け取ったデータを勤怠データに変換
@@ -76,6 +78,7 @@ class Attendance {
       absenceSupport: json['absenceSupport'] ?? false,
       visitSupport: json['visitSupport'] ?? false,
       transportService: json['transportService'] ?? false,
+      userStatus: json['userStatus']?.toString(),
     );
   }
 
@@ -105,6 +108,10 @@ class Attendance {
       'absenceSupport': absenceSupport,
       'visitSupport': visitSupport,
       'transportService': transportService,
+      'userStatus': userStatus,
     };
   }
+
+  /// 支援記録が登録されているかどうか（Z列に入力があるか）
+  bool get hasSupportRecord => userStatus != null && userStatus!.isNotEmpty;
 }

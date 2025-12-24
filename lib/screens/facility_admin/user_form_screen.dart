@@ -207,8 +207,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
   /// プルダウン選択肢を読み込む
   Future<void> _loadDropdownOptions() async {
     try {
-      // キャッシュをクリアして最新データを取得
-      final options = await _masterService.getDropdownOptions(forceRefresh: true);
+      final options = await _masterService.getDropdownOptions();
 
       setState(() {
         _dropdownOptions = options;

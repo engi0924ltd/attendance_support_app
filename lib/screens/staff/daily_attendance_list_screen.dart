@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../models/attendance.dart';
 import '../../services/attendance_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/master_service.dart';
 import '../../config/constants.dart';
 import '../common/menu_selection_screen.dart';
 import 'user_list_screen.dart';
@@ -26,8 +27,10 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     with SingleTickerProviderStateMixin {
   final AttendanceService _attendanceService = AttendanceService();
   final AuthService _authService = AuthService();
+  final MasterService _masterService = MasterService();
   List<Attendance> _attendances = [];
   List<Map<String, dynamic>> _scheduledUsers = [];
+  Map<String, EvaluationAlert> _evaluationAlerts = {}; // 利用者名→アラート情報
   bool _isLoading = true;
   String? _errorMessage;
   DateTime _selectedDate = DateTime.now();
@@ -51,7 +54,20 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     await Future.wait([
       _loadAttendances(),
       _loadScheduledUsers(),
+      _loadEvaluationAlerts(),
     ]);
+  }
+
+  /// 評価アラート情報を読み込む
+  Future<void> _loadEvaluationAlerts() async {
+    try {
+      final alerts = await _masterService.getEvaluationAlerts();
+      setState(() {
+        _evaluationAlerts = {for (var alert in alerts) alert.userName: alert};
+      });
+    } catch (e) {
+      // エラー時は無視（アラートが表示されないだけ）
+    }
   }
 
   /// 勤怠一覧を読み込む
@@ -450,7 +466,11 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
                 _buildTaskText(attendance),
               if (hasComment)
                 _buildCommentAlert(attendance),
+              // 支援記録未登録アラート表示
+              _buildSupportRecordAlert(attendance),
             ],
+            // 評価アラート表示
+            _buildEvaluationAlert(userName),
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
@@ -542,6 +562,10 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
               _buildTaskText(attendance),
             if (hasComment)
               _buildCommentAlert(attendance),
+            // 支援記録未登録アラート表示
+            _buildSupportRecordAlert(attendance),
+            // 評価アラート表示
+            _buildEvaluationAlert(attendance.userName),
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
@@ -666,6 +690,81 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
               style: const TextStyle(
                 fontSize: 13,
                 color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 評価アラートを表示
+  Widget _buildEvaluationAlert(String userName) {
+    final alert = _evaluationAlerts[userName];
+    if (alert == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.red.shade100,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.red.shade300, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.priority_high,
+            size: 18,
+            color: Colors.red,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              alert.alertMessage,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 支援記録未登録アラートを表示
+  Widget _buildSupportRecordAlert(Attendance? attendance) {
+    // 支援記録未登録の場合に表示（勤怠時間の登録有無に関わらず）
+    if (attendance == null) return const SizedBox.shrink();
+    if (attendance.hasSupportRecord) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.purple.shade100,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.purple.shade300, width: 1),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.edit_note,
+            size: 18,
+            color: Colors.purple,
+          ),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '支援記録が未登録です',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
