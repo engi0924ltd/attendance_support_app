@@ -27,6 +27,9 @@ dependencies:
   # URLを開く（ブラウザやスプレッドシートを開く道具）
   url_launcher: ^6.2.0
 
+  # グラフ描画（健康状態の推移表示）
+  fl_chart: ^0.69.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

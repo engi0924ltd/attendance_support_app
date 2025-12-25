@@ -7,6 +7,7 @@ import '../../services/attendance_service.dart';
 import '../../services/support_service.dart';
 import '../../services/master_service.dart';
 import '../../config/constants.dart';
+import '../../widgets/health_line_chart.dart';
 
 /// 利用者詳細画面（勤怠表示・編集 + 支援記録入力）
 class UserDetailScreen extends StatefulWidget {
@@ -34,6 +35,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   SupportRecord? _supportRecord;
   DropdownOptions? _dropdownOptions;
   String? _errorMessage;
+  List<Attendance> _healthHistory = []; // 過去7回分の健康データ
 
   // 勤怠編集用の状態変数
   String? _editedAttendanceStatus;
@@ -74,6 +76,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   /// データ読み込み
   Future<void> _loadData() async {
     try {
+      if (!mounted) return;
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -83,17 +86,24 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         DateFormat(AppConstants.dateFormat).parse(widget.date),
       );
 
-      // 勤怠データ、支援記録、プルダウンオプションを並行取得
+      // 勤怠データ、支援記録、プルダウンオプション、健康履歴を並行取得
       final results = await Future.wait([
         _attendanceService.getUserAttendance(widget.userName, dateStr),
         _supportService.getSupportRecord(dateStr, widget.userName),
         _masterService.getDropdownOptions(),
+        _attendanceService.getUserHistory(widget.userName),
       ]);
+
+      // 非同期処理後のmountedチェック
+      if (!mounted) return;
 
       setState(() {
         _attendance = results[0] as Attendance?;
         _supportRecord = results[1] as SupportRecord?;
         _dropdownOptions = results[2] as DropdownOptions?;
+        // 過去7回分の健康データを取得（新しい順）
+        final allHistory = results[3] as List<Attendance>;
+        _healthHistory = allHistory.take(7).toList();
         _isLoading = false;
 
         // 勤怠データがあれば編集用変数に設定（文字列に変換）
@@ -124,6 +134,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         }
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'データの読み込みに失敗しました\n$e';
         _isLoading = false;
@@ -269,6 +280,14 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // 健康推移グラフセクション
+                      if (_healthHistory.isNotEmpty) ...[
+                        _buildHealthGraphsSection(),
+                        const SizedBox(height: 16),
+                        const Divider(thickness: 2),
+                        const SizedBox(height: 16),
+                      ],
+
                       // 勤怠データセクション
                       _buildAttendanceSection(),
                       const SizedBox(height: 24),
@@ -280,6 +299,88 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                     ],
                   ),
                 ),
+    );
+  }
+
+  /// 健康推移グラフセクション（2列×2段）
+  Widget _buildHealthGraphsSection() {
+    // 健康履歴を古い順に並べ替え（グラフ表示用）
+    final sortedHistory = _healthHistory.reversed.toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.show_chart, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            const Text(
+              '健康推移（過去7回分）',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // 2列×2段のグリッド
+        Row(
+          children: [
+            Expanded(
+              child: HealthLineChartCard(
+                dataPoints: extractHealthData(sortedHistory, HealthMetricType.healthCondition),
+                type: HealthMetricType.healthCondition,
+                onTap: () => HealthChartDetailDialog.show(
+                  context,
+                  dataPoints: extractHealthData(sortedHistory, HealthMetricType.healthCondition),
+                  type: HealthMetricType.healthCondition,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: HealthLineChartCard(
+                dataPoints: extractHealthData(sortedHistory, HealthMetricType.sleepStatus),
+                type: HealthMetricType.sleepStatus,
+                onTap: () => HealthChartDetailDialog.show(
+                  context,
+                  dataPoints: extractHealthData(sortedHistory, HealthMetricType.sleepStatus),
+                  type: HealthMetricType.sleepStatus,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: HealthLineChartCard(
+                dataPoints: extractHealthData(sortedHistory, HealthMetricType.fatigue),
+                type: HealthMetricType.fatigue,
+                onTap: () => HealthChartDetailDialog.show(
+                  context,
+                  dataPoints: extractHealthData(sortedHistory, HealthMetricType.fatigue),
+                  type: HealthMetricType.fatigue,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: HealthLineChartCard(
+                dataPoints: extractHealthData(sortedHistory, HealthMetricType.stress),
+                type: HealthMetricType.stress,
+                onTap: () => HealthChartDetailDialog.show(
+                  context,
+                  dataPoints: extractHealthData(sortedHistory, HealthMetricType.stress),
+                  type: HealthMetricType.stress,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

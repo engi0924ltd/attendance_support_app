@@ -110,4 +110,28 @@ class AttendanceService {
 
     return records.map((json) => Attendance.fromJson(json)).toList();
   }
+
+  /// 複数利用者の健康履歴をバッチ取得（過去7回分）
+  Future<Map<String, List<Map<String, dynamic>>>> getHealthBatch(
+    List<String> userNames,
+  ) async {
+    if (userNames.isEmpty) {
+      return {};
+    }
+
+    final encodedNames = Uri.encodeComponent(userNames.join(','));
+    final response = await _apiService.get('attendance/health-batch/$encodedNames');
+
+    final Map<String, dynamic> healthData = response['healthData'] ?? {};
+
+    // 型変換
+    final result = <String, List<Map<String, dynamic>>>{};
+    healthData.forEach((userName, records) {
+      if (records is List) {
+        result[userName] = records.map((r) => Map<String, dynamic>.from(r)).toList();
+      }
+    });
+
+    return result;
+  }
 }

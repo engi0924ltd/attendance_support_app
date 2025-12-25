@@ -5,6 +5,7 @@ import '../../services/attendance_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/master_service.dart';
 import '../../config/constants.dart';
+import '../../widgets/health_line_chart.dart';
 import '../common/menu_selection_screen.dart';
 import 'user_list_screen.dart';
 import 'user_detail_screen.dart';
@@ -32,6 +33,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   List<Attendance> _attendances = [];
   List<Map<String, dynamic>> _scheduledUsers = [];
   Map<String, EvaluationAlert> _evaluationAlerts = {}; // 利用者名→アラート情報
+  Map<String, List<HealthDataPoint>> _healthHistory = {}; // 利用者名→健康履歴
   bool _isLoading = true;
   String? _errorMessage;
   DateTime _selectedDate = DateTime.now();
@@ -57,6 +59,50 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
       _loadScheduledUsers(),
       _loadEvaluationAlerts(),
     ]);
+    // 健康履歴を非同期で読み込み（UI表示をブロックしない）
+    _loadHealthBatch();
+  }
+
+  /// 健康履歴をバッチで読み込む
+  Future<void> _loadHealthBatch() async {
+    try {
+      // 出勤者と予定者のユーザー名を収集
+      final userNames = <String>{};
+      for (final a in _attendances) {
+        userNames.add(a.userName);
+      }
+      for (final s in _scheduledUsers) {
+        final userName = s['userName'] as String?;
+        if (userName != null) {
+          userNames.add(userName);
+        }
+      }
+
+      if (userNames.isEmpty) return;
+
+      final batchData = await _attendanceService.getHealthBatch(userNames.toList());
+
+      // 健康データをHealthDataPointに変換
+      final healthHistory = <String, List<HealthDataPoint>>{};
+      batchData.forEach((userName, records) {
+        healthHistory[userName] = records.map((r) {
+          final healthValue = r['healthCondition'] as String?;
+          return HealthDataPoint(
+            date: r['date'] as String? ?? '',
+            value: _extractNum(healthValue),
+            label: healthValue,
+          );
+        }).toList();
+      });
+
+      if (mounted) {
+        setState(() {
+          _healthHistory = healthHistory;
+        });
+      }
+    } catch (e) {
+      // エラー時は無視（グラフが表示されないだけ）
+    }
   }
 
   /// 評価アラート情報を読み込む
@@ -380,12 +426,13 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     );
   }
 
-  /// 出勤予定者カード
+  /// 出勤予定者カード（2カラムレイアウト：左に情報、右にグラフ）
   Widget _buildScheduledUserCard(Map<String, dynamic> scheduledUser) {
     final userName = scheduledUser['userName'] as String;
     final scheduledAttendance = scheduledUser['scheduledAttendance'] as String;
     final hasCheckedIn = scheduledUser['hasCheckedIn'] as bool;
     final attendance = scheduledUser['attendance'] as Attendance?;
+    final healthData = _healthHistory[userName] ?? [];
 
     // 状態判定
     final bool hasNotCheckedIn = !hasCheckedIn;
@@ -426,57 +473,8 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       color: cardColor,
-      child: ListTile(
-        leading: Icon(
-          statusIcon,
-          color: statusIconColor,
-          size: 32,
-        ),
-        title: Row(
-          children: [
-            Text(
-              userName,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                scheduledAttendance,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(statusText),
-            if (attendance != null) ...[
-              const SizedBox(height: 4),
-              _buildAttendanceStatusText(attendance),
-              if (attendance.morningTask != null || attendance.afternoonTask != null)
-                _buildTaskText(attendance),
-              if (hasComment)
-                _buildCommentAlert(attendance),
-              // 支援記録未登録アラート表示
-              _buildSupportRecordAlert(attendance),
-            ],
-            // 評価アラート表示
-            _buildEvaluationAlert(userName),
-          ],
-        ),
-        trailing: const Icon(Icons.chevron_right),
+      child: InkWell(
         onTap: () async {
-          // 利用者詳細画面へ遷移
           final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
           final result = await Navigator.push(
             context,
@@ -487,19 +485,104 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
               ),
             ),
           );
-          // 画面から戻ってきたらデータを再読み込み
           if (result == true) {
             _loadData();
           }
         },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            children: [
+              // 左側：ステータスアイコン + 情報（半分）
+              Expanded(
+                flex: 1,
+                child: Row(
+                  children: [
+                    Icon(statusIcon, color: statusIconColor, size: 22),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  userName,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Text(scheduledAttendance, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(statusText, style: TextStyle(fontSize: 10, color: Colors.grey.shade700)),
+                          if (attendance != null) ...[
+                            _buildAttendanceStatusText(attendance),
+                            _buildCompactAlerts(attendance),
+                          ],
+                          if (attendance == null) _buildScheduledCompactAlerts(userName),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // 中央の区切り線
+              Container(
+                width: 1,
+                height: 60,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+              ),
+              // 右側：本日の体調グラフ（半分）
+              Expanded(
+                flex: 1,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: MiniHealthLineChart(
+                    dataPoints: healthData,
+                    type: HealthMetricType.healthCondition,
+                    height: 60,
+                    width: 130,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  /// 勤怠カード
+  /// 予定者用コンパクトアラート（出勤前）
+  Widget _buildScheduledCompactAlerts(String userName) {
+    final hasEvaluationAlert = _evaluationAlerts.containsKey(userName);
+
+    if (!hasEvaluationAlert) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: _buildCompactAlertChip('評価アラート', Colors.red),
+    );
+  }
+
+  /// 勤怠カード（2カラムレイアウト：左に情報、右にグラフ）
   Widget _buildAttendanceCard(Attendance attendance) {
     final hasComment = attendance.checkinComment != null || attendance.checkoutComment != null;
     final hasNotCheckedOut = attendance.checkinTime != null && attendance.checkoutTime == null;
+    final healthData = _healthHistory[attendance.userName] ?? [];
 
     // 背景色の優先順位：未退勤 > コメント
     Color? cardColor;
@@ -512,66 +595,8 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       color: cardColor,
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: _getStatusColor(attendance.attendanceStatus),
-          child: Text(
-            attendance.userName.substring(0, 1),
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
-        title: Row(
-          children: [
-            Text(
-              attendance.userName,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            if (hasNotCheckedOut) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.yellow.shade700,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  '未退勤',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-            if (hasComment) ...[
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.comment,
-                size: 18,
-                color: Colors.orange,
-              ),
-            ],
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            _buildAttendanceStatusText(attendance),
-            if (attendance.morningTask != null || attendance.afternoonTask != null)
-              _buildTaskText(attendance),
-            if (hasComment)
-              _buildCommentAlert(attendance),
-            // 支援記録未登録アラート表示
-            _buildSupportRecordAlert(attendance),
-            // 評価アラート表示
-            _buildEvaluationAlert(attendance.userName),
-          ],
-        ),
-        trailing: const Icon(Icons.chevron_right),
+      child: InkWell(
         onTap: () async {
-          // 利用者詳細画面へ遷移
           final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
           final result = await Navigator.push(
             context,
@@ -582,13 +607,150 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
               ),
             ),
           );
-          // 画面から戻ってきたらデータを再読み込み
           if (result == true) {
             _loadData();
           }
         },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            children: [
+              // 左側：アバター + 情報（半分）
+              Expanded(
+                flex: 1,
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: _getStatusColor(attendance.attendanceStatus),
+                      child: Text(
+                        attendance.userName.isNotEmpty ? attendance.userName.substring(0, 1) : '?',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  attendance.userName,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (hasNotCheckedOut) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.yellow.shade700,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: const Text('未退勤', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                              if (hasComment)
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 3),
+                                  child: Icon(Icons.comment, size: 12, color: Colors.orange),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          _buildAttendanceStatusText(attendance),
+                          _buildCompactAlerts(attendance),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // 中央の区切り線
+              Container(
+                width: 1,
+                height: 60,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+              ),
+              // 右側：本日の体調グラフ（半分）
+              Expanded(
+                flex: 1,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: MiniHealthLineChart(
+                    dataPoints: healthData,
+                    type: HealthMetricType.healthCondition,
+                    height: 60,
+                    width: 130,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  /// コンパクトなアラート表示（カード用）
+  Widget _buildCompactAlerts(Attendance attendance) {
+    final hasComment = attendance.checkinComment != null || attendance.checkoutComment != null;
+    final hasSupportRecord = attendance.hasSupportRecord;
+    final hasEvaluationAlert = _evaluationAlerts.containsKey(attendance.userName);
+
+    final alerts = <Widget>[];
+
+    if (!hasSupportRecord) {
+      alerts.add(_buildCompactAlertChip('支援記録未登録', Colors.purple));
+    }
+    if (hasComment) {
+      alerts.add(_buildCompactAlertChip('コメント有', Colors.orange));
+    }
+    if (hasEvaluationAlert) {
+      alerts.add(_buildCompactAlertChip('評価アラート', Colors.red));
+    }
+
+    if (alerts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 2,
+        children: alerts,
+      ),
+    );
+  }
+
+  Widget _buildCompactAlertChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  int? _extractNum(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final match = RegExp(r'^\d+').firstMatch(value);
+    return match != null ? int.tryParse(match.group(0)!) : null;
   }
 
   /// 出欠状態に応じた色
@@ -625,153 +787,6 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     }
 
     return Text('出欠: $status$timeText');
-  }
-
-  /// 午前・午後の業務を1行で表示するテキスト
-  Widget _buildTaskText(Attendance attendance) {
-    final morningTask = attendance.morningTask;
-    final afternoonTask = attendance.afternoonTask;
-
-    // 両方ある場合
-    if (morningTask != null && afternoonTask != null) {
-      return Text('業務: 午前 $morningTask / 午後 $afternoonTask');
-    }
-    // 午前のみ
-    else if (morningTask != null) {
-      return Text('業務: 午前 $morningTask');
-    }
-    // 午後のみ
-    else if (afternoonTask != null) {
-      return Text('業務: 午後 $afternoonTask');
-    }
-
-    return const SizedBox.shrink();
-  }
-
-  /// コメントアラートを表示
-  Widget _buildCommentAlert(Attendance attendance) {
-    final checkinComment = attendance.checkinComment;
-    final checkoutComment = attendance.checkoutComment;
-
-    String commentText = '';
-
-    // 両方ある場合
-    if (checkinComment != null && checkoutComment != null) {
-      commentText = '出勤時「$checkinComment」/ 退勤時「$checkoutComment」';
-    }
-    // 出勤時のみ
-    else if (checkinComment != null) {
-      commentText = '出勤時「$checkinComment」';
-    }
-    // 退勤時のみ
-    else if (checkoutComment != null) {
-      commentText = '退勤時「$checkoutComment」';
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade100,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.orange.shade300, width: 1),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.warning_amber,
-            size: 18,
-            color: Colors.orange,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'コメント: $commentText',
-              style: const TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 評価アラートを表示
-  Widget _buildEvaluationAlert(String userName) {
-    final alert = _evaluationAlerts[userName];
-    if (alert == null) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.red.shade100,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.red.shade300, width: 1),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.priority_high,
-            size: 18,
-            color: Colors.red,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              alert.alertMessage,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 支援記録未登録アラートを表示
-  Widget _buildSupportRecordAlert(Attendance? attendance) {
-    // 支援記録未登録の場合に表示（勤怠時間の登録有無に関わらず）
-    if (attendance == null) return const SizedBox.shrink();
-    if (attendance.hasSupportRecord) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.purple.shade100,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.purple.shade300, width: 1),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.edit_note,
-            size: 18,
-            color: Colors.purple,
-          ),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '支援記録が未登録です',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   /// ドロワーメニュー

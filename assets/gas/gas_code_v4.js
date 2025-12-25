@@ -295,6 +295,10 @@ function doGet(e) {
       // 利用者の過去記録一覧を取得
       const userName = decodeURIComponent(action.split('/')[2]);
       return handleGetUserHistory(userName);
+    } else if (action.startsWith('attendance/health-batch/')) {
+      // 複数利用者の健康履歴をバッチ取得
+      const userNames = decodeURIComponent(action.split('/')[2]).split(',');
+      return handleGetHealthBatch(userNames);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -2046,6 +2050,70 @@ function handleGetUserHistory(userName) {
     return createSuccessResponse({ records });
   } catch (error) {
     return createErrorResponse('履歴取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 複数利用者の健康履歴をバッチ取得（カード表示用）
+ * 各利用者の直近7回分の健康データ（日付、体調）のみ返す
+ * ※高速化のため、検索範囲を150行に制限し、必要最小限の列のみ取得
+ */
+function handleGetHealthBatch(userNames) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.SUPPORT);
+    const actualLastRow = findActualLastRow(sheet, SUPPORT_COLS.USER_NAME);
+
+    if (actualLastRow < 2 || !userNames || userNames.length === 0) {
+      return createSuccessResponse({ healthData: {} });
+    }
+
+    const MAX_RECORDS_PER_USER = 7;
+    const MAX_SEARCH_ROWS = 150; // 高速化のため150行に削減
+
+    // 検索対象の行範囲を決定
+    const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+    const startRow = Math.max(2, actualLastRow - searchRows + 1);
+
+    // 必要な列のみ取得（A:日付, B:利用者名, H:体調）= 8列のみ
+    const colsToFetch = 8;
+    const allData = sheet.getRange(startRow, 1, searchRows, colsToFetch).getValues();
+
+    // 対象ユーザーをSetに変換（高速検索用）
+    const targetUsers = new Set(userNames);
+    const userCount = userNames.length;
+    let completedUsers = 0;
+
+    // 結果を格納するオブジェクト
+    const healthData = {};
+    userNames.forEach(name => { healthData[name] = []; });
+
+    // 逆順（新しい順）で検索
+    for (let i = allData.length - 1; i >= 0 && completedUsers < userCount; i--) {
+      const rowUserName = String(allData[i][SUPPORT_COLS.USER_NAME - 1] || '');
+
+      if (targetUsers.has(rowUserName)) {
+        const userRecords = healthData[rowUserName];
+        if (userRecords.length < MAX_RECORDS_PER_USER) {
+          const date = allData[i][SUPPORT_COLS.DATE - 1];
+          const dateStr = date instanceof Date
+            ? Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy/MM/dd')
+            : String(date || '');
+
+          userRecords.push({
+            date: dateStr,
+            healthCondition: String(allData[i][SUPPORT_COLS.HEALTH - 1] || '')
+          });
+
+          if (userRecords.length >= MAX_RECORDS_PER_USER) {
+            completedUsers++;
+          }
+        }
+      }
+    }
+
+    return createSuccessResponse({ healthData });
+  } catch (error) {
+    return createErrorResponse('健康履歴バッチ取得エラー: ' + error.message);
   }
 }
 
