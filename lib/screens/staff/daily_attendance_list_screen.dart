@@ -32,7 +32,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   final MasterService _masterService = MasterService();
   List<Attendance> _attendances = [];
   List<Map<String, dynamic>> _scheduledUsers = [];
-  Map<String, EvaluationAlert> _evaluationAlerts = {}; // 利用者名→アラート情報
+  Map<String, List<EvaluationAlert>> _evaluationAlerts = {}; // 利用者名→アラート情報リスト
   Map<String, List<HealthDataPoint>> _healthHistory = {}; // 利用者名→健康履歴
   bool _isLoading = true;
   String? _errorMessage;
@@ -109,8 +109,13 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   Future<void> _loadEvaluationAlerts() async {
     try {
       final alerts = await _masterService.getEvaluationAlerts();
+      // 同一ユーザーの複数アラートをグループ化
+      final Map<String, List<EvaluationAlert>> groupedAlerts = {};
+      for (var alert in alerts) {
+        groupedAlerts.putIfAbsent(alert.userName, () => []).add(alert);
+      }
       setState(() {
-        _evaluationAlerts = {for (var alert in alerts) alert.userName: alert};
+        _evaluationAlerts = groupedAlerts;
       });
     } catch (e) {
       // エラー時は無視（アラートが表示されないだけ）
@@ -568,14 +573,29 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
 
   /// 予定者用コンパクトアラート（出勤前）
   Widget _buildScheduledCompactAlerts(String userName) {
-    final hasEvaluationAlert = _evaluationAlerts.containsKey(userName);
-
-    if (!hasEvaluationAlert) return const SizedBox.shrink();
+    final alerts = _evaluationAlerts[userName];
+    if (alerts == null || alerts.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 4),
-      child: _buildCompactAlertChip('評価アラート', Colors.red),
+      child: _buildCompactAlertChip(_getEvaluationAlertLabel(alerts), Colors.red),
     );
+  }
+
+  /// 評価アラートのラベルを取得
+  String _getEvaluationAlertLabel(List<EvaluationAlert> alerts) {
+    if (alerts.length >= 2) {
+      // 両方のアラートがある場合
+      return '評価アラート';
+    }
+    // 1つのみの場合、種類に応じて表示
+    final alertType = alerts.first.alertType;
+    if (alertType == 'external') {
+      return '施設外評価アラート';
+    } else if (alertType == 'home') {
+      return '在宅評価アラート';
+    }
+    return '評価アラート';
   }
 
   /// 勤怠カード（2カラムレイアウト：左に情報、右にグラフ）
@@ -702,7 +722,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   Widget _buildCompactAlerts(Attendance attendance) {
     final hasComment = attendance.checkinComment != null || attendance.checkoutComment != null;
     final hasSupportRecord = attendance.hasSupportRecord;
-    final hasEvaluationAlert = _evaluationAlerts.containsKey(attendance.userName);
+    final evaluationAlerts = _evaluationAlerts[attendance.userName];
 
     final alerts = <Widget>[];
 
@@ -712,8 +732,8 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     if (hasComment) {
       alerts.add(_buildCompactAlertChip('コメント有', Colors.orange));
     }
-    if (hasEvaluationAlert) {
-      alerts.add(_buildCompactAlertChip('評価アラート', Colors.red));
+    if (evaluationAlerts != null && evaluationAlerts.isNotEmpty) {
+      alerts.add(_buildCompactAlertChip(_getEvaluationAlertLabel(evaluationAlerts), Colors.red));
     }
 
     if (alerts.isEmpty) return const SizedBox.shrink();
@@ -730,16 +750,16 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
 
   Widget _buildCompactAlertChip(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.5),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 9,
+          fontSize: 12,
           color: color,
           fontWeight: FontWeight.bold,
         ),

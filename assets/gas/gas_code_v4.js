@@ -573,7 +573,7 @@ function handleGetEvaluationAlerts() {
           daysSinceLastEval: daysSinceLastEval,
           lastEvalDate: formatDate(evalInfo.lastHomeDate)
         });
-        continue;
+        // continueを削除：施設外アラートも同時にチェックする
       }
     }
 
@@ -600,9 +600,9 @@ function handleGetEvaluationAlerts() {
 
     // 在宅予定があるが一度も評価していない
     if (schedule.needsHomeEval && (!evalInfo || !evalInfo.hasHomeEval)) {
-      // 既にこのユーザーのアラートがなければ追加
-      const hasAlert = alerts.some(a => a.userName === userName);
-      if (!hasAlert) {
+      // 既にこのユーザーの在宅アラートがなければ追加
+      const hasHomeAlert = alerts.some(a => a.userName === userName && a.alertType === 'home');
+      if (!hasHomeAlert) {
         alerts.push({
           userName: userName,
           alertType: 'home',
@@ -610,14 +610,14 @@ function handleGetEvaluationAlerts() {
           daysSinceLastEval: 0,
           lastEvalDate: null
         });
-        continue;
       }
     }
 
     // 施設外予定があるが一度も評価していない
     if (schedule.needsExternalEval && (!evalInfo || !evalInfo.hasExternalEval)) {
-      const hasAlert = alerts.some(a => a.userName === userName);
-      if (!hasAlert) {
+      // 既にこのユーザーの施設外アラートがなければ追加
+      const hasExternalAlert = alerts.some(a => a.userName === userName && a.alertType === 'external');
+      if (!hasExternalAlert) {
         alerts.push({
           userName: userName,
           alertType: 'external',
@@ -2057,13 +2057,30 @@ function handleGetUserHistory(userName) {
  * 複数利用者の健康履歴をバッチ取得（カード表示用）
  * 各利用者の直近7回分の健康データ（日付、体調）のみ返す
  * ※高速化のため、検索範囲を150行に制限し、必要最小限の列のみ取得
+ * ※キャッシュ機能により、5分間は同じデータを再利用
  */
 function handleGetHealthBatch(userNames) {
   try {
+    if (!userNames || userNames.length === 0) {
+      return createSuccessResponse({ healthData: {} });
+    }
+
+    // キャッシュキーを生成
+    const cacheKey = getHealthBatchCacheKey(userNames);
+
+    // キャッシュからデータを取得
+    const cachedData = getCacheData(cacheKey);
+    if (cachedData) {
+      console.log('キャッシュヒット: ' + cacheKey);
+      return createSuccessResponse({ healthData: cachedData, cached: true });
+    }
+
+    console.log('キャッシュミス: ' + cacheKey);
+
     const sheet = getSheet(SHEET_NAMES.SUPPORT);
     const actualLastRow = findActualLastRow(sheet, SUPPORT_COLS.USER_NAME);
 
-    if (actualLastRow < 2 || !userNames || userNames.length === 0) {
+    if (actualLastRow < 2) {
       return createSuccessResponse({ healthData: {} });
     }
 
@@ -2111,7 +2128,10 @@ function handleGetHealthBatch(userNames) {
       }
     }
 
-    return createSuccessResponse({ healthData });
+    // キャッシュに保存（5分間有効）
+    setCacheData(cacheKey, healthData, 300);
+
+    return createSuccessResponse({ healthData, cached: false });
   } catch (error) {
     return createErrorResponse('健康履歴バッチ取得エラー: ' + error.message);
   }
@@ -2290,6 +2310,66 @@ function parseAttendanceRow(sheet, row) {
 }
 
 // === ヘルパー関数 ===
+
+// === キャッシュ関連 ===
+
+/**
+ * キャッシュからデータを取得
+ * @param {string} key - キャッシュキー
+ * @returns {Object|null} キャッシュされたデータ、またはnull
+ */
+function getCacheData(key) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get(key);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    return null;
+  } catch (error) {
+    console.log('キャッシュ取得エラー: ' + error.message);
+    return null;
+  }
+}
+
+/**
+ * キャッシュにデータを保存
+ * @param {string} key - キャッシュキー
+ * @param {Object} data - 保存するデータ
+ * @param {number} ttl - キャッシュ有効期間（秒）、デフォルト300秒（5分）
+ */
+function setCacheData(key, data, ttl = 300) {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.put(key, JSON.stringify(data), ttl);
+  } catch (error) {
+    console.log('キャッシュ保存エラー: ' + error.message);
+  }
+}
+
+/**
+ * 特定のキャッシュを削除
+ * @param {string} key - 削除するキャッシュキー
+ */
+function deleteCacheData(key) {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.remove(key);
+  } catch (error) {
+    console.log('キャッシュ削除エラー: ' + error.message);
+  }
+}
+
+/**
+ * health-batch用のキャッシュキーを生成
+ * @param {Array} userNames - ユーザー名の配列
+ * @returns {string} キャッシュキー
+ */
+function getHealthBatchCacheKey(userNames) {
+  // ユーザー名をソートして一貫したキーを生成
+  const sortedNames = userNames.slice().sort();
+  return 'health_batch_' + sortedNames.join('_').substring(0, 200);
+}
 
 /**
  * シート取得
