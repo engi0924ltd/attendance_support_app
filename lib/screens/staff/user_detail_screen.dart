@@ -36,6 +36,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   DropdownOptions? _dropdownOptions;
   String? _errorMessage;
   List<Attendance> _healthHistory = []; // 過去7回分の健康データ
+  List<EvaluationAlert> _evaluationAlerts = []; // この利用者の評価アラート
 
   // 勤怠編集用の状態変数
   String? _editedAttendanceStatus;
@@ -86,12 +87,13 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         DateFormat(AppConstants.dateFormat).parse(widget.date),
       );
 
-      // 勤怠データ、支援記録、プルダウンオプション、健康履歴を並行取得
+      // 勤怠データ、支援記録、プルダウンオプション、健康履歴、評価アラートを並行取得
       final results = await Future.wait([
         _attendanceService.getUserAttendance(widget.userName, dateStr),
         _supportService.getSupportRecord(dateStr, widget.userName),
         _masterService.getDropdownOptions(),
         _attendanceService.getUserHistory(widget.userName),
+        _masterService.getEvaluationAlerts(),
       ]);
 
       // 非同期処理後のmountedチェック
@@ -104,6 +106,9 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         // 過去7回分の健康データを取得（新しい順）
         final allHistory = results[3] as List<Attendance>;
         _healthHistory = allHistory.take(7).toList();
+        // この利用者の評価アラートのみフィルタリング
+        final allAlerts = results[4] as List<EvaluationAlert>;
+        _evaluationAlerts = allAlerts.where((a) => a.userName == widget.userName).toList();
         _isLoading = false;
 
         // 勤怠データがあれば編集用変数に設定（文字列に変換）
@@ -613,6 +618,11 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 8),
+
+          // 評価アラート表示
+          if (_evaluationAlerts.isNotEmpty) _buildEvaluationAlertBanner(),
+
           const SizedBox(height: 16),
 
           // Z列: 支援記録（幅いっぱい）※必須
@@ -976,6 +986,49 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           );
         }
       },
+    );
+  }
+
+  /// 評価アラートバナー
+  Widget _buildEvaluationAlertBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '評価アラート',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade700,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ..._evaluationAlerts.map((alert) => Padding(
+            padding: const EdgeInsets.only(left: 28, bottom: 4),
+            child: Text(
+              '• ${alert.message}',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontSize: 13,
+              ),
+            ),
+          )),
+        ],
+      ),
     );
   }
 }
