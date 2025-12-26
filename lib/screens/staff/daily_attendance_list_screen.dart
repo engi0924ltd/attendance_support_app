@@ -135,18 +135,18 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
       final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
       final attendances = await _attendanceService.getDailyAttendance(dateStr);
 
-      // 退勤未登録の人を上位に並べ替え
+      // 支援記録未登録の人を上位に並べ替え
       attendances.sort((a, b) {
-        final aHasCheckout = a.checkoutTime != null;
-        final bHasCheckout = b.checkoutTime != null;
+        final aHasSupportRecord = a.hasSupportRecord;
+        final bHasSupportRecord = b.hasSupportRecord;
 
-        // 両方未退勤または両方退勤済みの場合は名前順
-        if (aHasCheckout == bHasCheckout) {
-          return a.userName.compareTo(b.userName);
+        // 支援記録未登録を上位に
+        if (aHasSupportRecord != bHasSupportRecord) {
+          return aHasSupportRecord ? 1 : -1;
         }
 
-        // 未退勤(checkoutTime == null)を上位に
-        return aHasCheckout ? 1 : -1;
+        // 同じ状態の場合は名前順
+        return a.userName.compareTo(b.userName);
       });
 
       setState(() {
@@ -171,6 +171,33 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
 
       final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
       final scheduledUsers = await _attendanceService.getScheduledUsers(dateStr);
+
+      // 並び順: 未登録 → 登録済み・支援記録未登録 → 完了
+      scheduledUsers.sort((a, b) {
+        final aHasCheckedIn = a['hasCheckedIn'] as bool;
+        final bHasCheckedIn = b['hasCheckedIn'] as bool;
+        final aAttendance = a['attendance'] as Attendance?;
+        final bAttendance = b['attendance'] as Attendance?;
+
+        // 優先度を計算（数値が小さいほど上位）
+        int getPriority(bool hasCheckedIn, Attendance? attendance) {
+          if (!hasCheckedIn) return 0; // 出勤未登録 → 最上部
+          if (attendance != null && !attendance.hasSupportRecord) return 1; // 支援記録未登録 → 中段
+          return 2; // 完了 → 下部
+        }
+
+        final aPriority = getPriority(aHasCheckedIn, aAttendance);
+        final bPriority = getPriority(bHasCheckedIn, bAttendance);
+
+        if (aPriority != bPriority) {
+          return aPriority.compareTo(bPriority);
+        }
+
+        // 同じ優先度の場合は名前順
+        final aName = a['userName'] as String;
+        final bName = b['userName'] as String;
+        return aName.compareTo(bName);
+      });
 
       setState(() {
         _scheduledUsers = scheduledUsers;
