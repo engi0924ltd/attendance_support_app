@@ -29,6 +29,7 @@ class _UserListScreenState extends State<UserListScreen> {
   /// 利用者一覧を読み込む
   Future<void> _loadUsers() async {
     try {
+      if (!mounted) return;
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -36,12 +37,14 @@ class _UserListScreenState extends State<UserListScreen> {
 
       final users = await _userService.getUserList();
 
+      if (!mounted) return;
       setState(() {
         _users = users;
         _applyFilters();
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = '利用者一覧の読み込みに失敗しました\n$e';
         _isLoading = false;

@@ -5,6 +5,7 @@ import '../../services/facility_service.dart';
 import '../../services/master_auth_service.dart';
 import '../common/menu_selection_screen.dart';
 import '../facility_admin/facility_admin_dashboard_screen.dart';
+import '../facility_admin/chatwork_settings_screen.dart';
 import '../../models/facility_admin.dart';
 import 'facility_registration_screen.dart';
 import 'facility_setup_wizard_screen.dart';
@@ -136,6 +137,23 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
 
     // 更新成功した場合は施設一覧を再読み込み
+    if (result == true) {
+      _loadFacilities();
+    }
+  }
+
+  /// Chatwork設定画面へ遷移
+  void _openChatworkSettings(Facility facility) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatworkSettingsScreen(
+          facility: facility,
+        ),
+      ),
+    );
+
+    // 保存成功した場合は施設一覧を再読み込み
     if (result == true) {
       _loadFacilities();
     }
@@ -281,6 +299,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                               onLogin: () => _loginAsFacility(facility),
                               onSetup: () => _setupFacility(facility),
                               onEdit: () => _editFacility(facility),
+                              onChatwork: () => _openChatworkSettings(facility),
                             )),
 
                       const SizedBox(height: 24),
@@ -316,12 +335,14 @@ class _FacilityCard extends StatelessWidget {
   final VoidCallback onLogin;
   final VoidCallback onSetup;
   final VoidCallback onEdit;
+  final VoidCallback onChatwork;
 
   const _FacilityCard({
     required this.facility,
     required this.onLogin,
     required this.onSetup,
     required this.onEdit,
+    required this.onChatwork,
   });
 
   @override
@@ -432,7 +453,7 @@ class _FacilityCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            // ボタン
+            // ボタン（1行目：編集・Chatwork）
             Row(
               children: [
                 Expanded(
@@ -450,15 +471,11 @@ class _FacilityCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: onSetup,
-                    icon: const Icon(Icons.settings, size: 18),
-                    label: Text(
-                      facility.isSetupComplete ? 'GAS更新' : 'セットアップ',
-                    ),
+                    onPressed: onChatwork,
+                    icon: const Icon(Icons.chat, size: 18),
+                    label: const Text('Chatwork'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: facility.isSetupComplete
-                          ? Colors.deepPurple
-                          : Colors.orange,
+                      backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -467,6 +484,26 @@ class _FacilityCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
+            // ボタン（2行目：GAS更新/セットアップ）
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onSetup,
+                icon: const Icon(Icons.settings, size: 18),
+                label: Text(
+                  facility.isSetupComplete ? 'GAS更新' : 'セットアップ',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: facility.isSetupComplete
+                      ? Colors.deepPurple
+                      : Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // ボタン（3行目：施設としてログイン）
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(

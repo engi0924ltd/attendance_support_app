@@ -39,6 +39,14 @@ class MasterService {
     return users;
   }
 
+  /// 全利用者一覧を取得（退所済み含む）
+  /// 過去の実績記録画面用
+  Future<List<User>> getAllUsers() async {
+    final response = await _apiService.get('master/all-users');
+    final List<dynamic> userList = response['users'] ?? [];
+    return userList.map((json) => User.fromJson(json)).toList();
+  }
+
   /// キャッシュされた利用者一覧を取得
   Future<List<User>?> _getCachedUsers() async {
     try {

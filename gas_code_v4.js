@@ -299,6 +299,9 @@ function doGet(e) {
       // 複数利用者の健康履歴をバッチ取得
       const userNames = decodeURIComponent(action.split('/')[2]).split(',');
       return handleGetHealthBatch(userNames);
+    } else if (action === 'chatwork/users') {
+      // Chatworkルームを持つ利用者一覧を取得
+      return handleGetChatworkUsers();
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -341,6 +344,12 @@ function doPost(e) {
       return handleUpdateAttendance(data);
     } else if (action === 'support/upsert') {
       return handleUpsertSupportRecord(data);
+    } else if (action === 'chatwork/broadcast') {
+      // Chatwork一斉送信
+      return handleChatworkBroadcast(data);
+    } else if (action === 'chatwork/set-api-key') {
+      // Chatwork APIキーを設定
+      return handleSetChatworkApiKey(data);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -2950,5 +2959,161 @@ function findActualLastRow(sheet, userNameColumn) {
   }
 
   return Math.max(1, actualLast);
+}
+
+// === Chatwork連携機能 ===
+
+/**
+ * Chatworkルームを持つ利用者一覧を取得
+ */
+function handleGetChatworkUsers() {
+  try {
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+    const lastRow = rosterSheet.getLastRow();
+
+    if (lastRow < 2) {
+      return createSuccessResponse({ users: [] });
+    }
+
+    const users = [];
+
+    // B列（氏名）、E列（ステータス）、G列（ChatWorkルームID）を一括取得
+    const data = rosterSheet.getRange(2, 1, lastRow - 1, 8).getValues();
+
+    for (let i = 0; i < data.length; i++) {
+      const userName = data[i][ROSTER_COLS.NAME - 1];  // B列（2）
+      const status = data[i][ROSTER_COLS.STATUS - 1];  // E列（5）
+      const chatworkRoomId = data[i][ROSTER_COLS.CHATWORK_ID - 1];  // G列（7）
+
+      // 有効な利用者のみ
+      if (userName && status !== '退所' && status !== '就労') {
+        users.push({
+          userName: userName,
+          status: status || '',
+          chatworkRoomId: chatworkRoomId ? String(chatworkRoomId) : null
+        });
+      }
+    }
+
+    return createSuccessResponse({ users: users });
+
+  } catch (error) {
+    return createErrorResponse('Chatworkユーザー取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * Chatwork一斉メッセージ送信
+ */
+function handleChatworkBroadcast(data) {
+  try {
+    const message = data.message;
+
+    if (!message) {
+      return createErrorResponse('メッセージが指定されていません');
+    }
+
+    // Chatwork APIキーを取得（スクリプトプロパティから）
+    const apiKey = PropertiesService.getScriptProperties().getProperty('CHATWORK_API_KEY');
+
+    if (!apiKey) {
+      return createErrorResponse('Chatwork APIキーが設定されていません。管理者に連絡してください。');
+    }
+
+    // Chatworkルームを持つ利用者を取得
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+    const lastRow = rosterSheet.getLastRow();
+
+    if (lastRow < 2) {
+      return createErrorResponse('送信先の利用者がいません');
+    }
+
+    // B列（氏名）、E列（ステータス）、G列（ChatWorkルームID）を取得
+    const userData = rosterSheet.getRange(2, 1, lastRow - 1, 8).getValues();
+
+    let sentCount = 0;
+    let failedCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < userData.length; i++) {
+      const userName = userData[i][ROSTER_COLS.NAME - 1];
+      const status = userData[i][ROSTER_COLS.STATUS - 1];
+      const roomId = userData[i][ROSTER_COLS.CHATWORK_ID - 1];
+
+      // 有効な利用者でルームIDがある場合のみ送信
+      if (userName && status !== '退所' && status !== '就労' && roomId) {
+        try {
+          sendChatworkMessage(apiKey, String(roomId), message);
+          sentCount++;
+          // API制限対策：少し待機
+          Utilities.sleep(200);
+        } catch (e) {
+          failedCount++;
+          errors.push(userName + ': ' + e.message);
+        }
+      }
+    }
+
+    return createSuccessResponse({
+      message: '送信完了',
+      sentCount: sentCount,
+      failedCount: failedCount,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error) {
+    return createErrorResponse('Chatwork送信エラー: ' + error.message);
+  }
+}
+
+/**
+ * Chatwork APIでメッセージを送信
+ */
+function sendChatworkMessage(apiKey, roomId, message) {
+  const url = 'https://api.chatwork.com/v2/rooms/' + roomId + '/messages';
+
+  const options = {
+    method: 'post',
+    headers: {
+      'X-ChatWorkToken': apiKey
+    },
+    payload: {
+      body: message
+    },
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(url, options);
+  const responseCode = response.getResponseCode();
+
+  if (responseCode !== 200) {
+    const responseBody = response.getContentText();
+    throw new Error('APIエラー(' + responseCode + '): ' + responseBody);
+  }
+
+  return JSON.parse(response.getContentText());
+}
+
+/**
+ * Chatwork APIキーをスクリプトプロパティに設定
+ */
+function handleSetChatworkApiKey(data) {
+  try {
+    const apiKey = data.apiKey;
+
+    if (!apiKey) {
+      return createErrorResponse('APIキーが指定されていません');
+    }
+
+    // スクリプトプロパティに保存
+    PropertiesService.getScriptProperties().setProperty('CHATWORK_API_KEY', apiKey);
+
+    return createSuccessResponse({
+      message: 'Chatwork APIキーを設定しました'
+    });
+
+  } catch (error) {
+    return createErrorResponse('APIキー設定エラー: ' + error.message);
+  }
 }
 

@@ -10,6 +10,7 @@ import '../common/menu_selection_screen.dart';
 import 'user_list_screen.dart';
 import 'user_detail_screen.dart';
 import 'past_records_screen.dart';
+import 'chatwork_broadcast_screen.dart';
 
 /// 本日の出勤一覧画面（支援者用）
 class DailyAttendanceListScreen extends StatefulWidget {
@@ -878,6 +879,50 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
                 MaterialPageRoute(
                   builder: (context) => PastRecordsScreen(
                     staffName: widget.staffName,
+                  ),
+                ),
+              );
+            },
+          ),
+          // チャットワーク連絡セクション
+          const Padding(
+            padding: EdgeInsets.only(left: 16, top: 8, bottom: 4),
+            child: Text(
+              'チャットワーク連絡',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.campaign, color: Colors.red),
+            title: const Text('一斉送信'),
+            subtitle: const Text('全員にメッセージを送信', style: TextStyle(fontSize: 12)),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatworkBroadcastScreen(
+                    mode: ChatworkSendMode.broadcast,
+                  ),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_search, color: Colors.red),
+            title: const Text('選択送信'),
+            subtitle: const Text('選択した人にメッセージを送信', style: TextStyle(fontSize: 12)),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatworkBroadcastScreen(
+                    mode: ChatworkSendMode.selective,
                   ),
                 ),
               );

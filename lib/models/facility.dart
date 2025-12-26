@@ -14,6 +14,7 @@ class Facility {
   final String? timeRounding; // 時間設定（「オン」または「オフ」）
   final String? facilityCode; // 施設コード（6桁数字、複数PC設定用）
   final String? facilityPassword; // 施設パスワード（8桁英数字、複数PC設定用）
+  final String? chatworkApiKey; // ChatWork APIキー
 
   Facility({
     required this.facilityId,
@@ -30,6 +31,7 @@ class Facility {
     this.timeRounding,
     this.facilityCode,
     this.facilityPassword,
+    this.chatworkApiKey,
   });
 
   factory Facility.fromJson(Map<String, dynamic> json) {
@@ -48,6 +50,7 @@ class Facility {
       timeRounding: json['timeRounding']?.toString(),
       facilityCode: json['facilityCode']?.toString(),
       facilityPassword: json['facilityPassword']?.toString(),
+      chatworkApiKey: json['chatworkApiKey']?.toString(),
     );
   }
 
@@ -67,6 +70,7 @@ class Facility {
       'timeRounding': timeRounding,
       'facilityCode': facilityCode,
       'facilityPassword': facilityPassword,
+      'chatworkApiKey': chatworkApiKey,
     };
   }
 

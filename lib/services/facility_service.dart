@@ -56,4 +56,14 @@ class FacilityService {
     });
     return response;
   }
+
+  /// 施設のChatWork APIキーを更新
+  Future<Map<String, dynamic>> updateChatworkApiKey(
+      String facilityId, String apiKey) async {
+    final response = await _apiService.post('facility/update-chatwork-api-key', {
+      'facilityId': facilityId,
+      'chatworkApiKey': apiKey,
+    });
+    return response;
+  }
 }

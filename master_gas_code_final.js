@@ -29,7 +29,7 @@ const MASTER_SHEET_CONFIG = {
     CREATED_AT: 8,         // H列: 作成日時
     UPDATED_AT: 9,         // I列: 更新日時
     STATUS: 10,            // J列: ステータス
-    MEMO: 11,              // K列: 備考
+    CHATWORK_API_KEY: 11,  // K列: ChatWork APIキー
     DRIVE_FOLDER_ID: 12,   // L列: ドライブフォルダID
     ADDRESS: 13,           // M列: 施設住所
     PHONE: 14,             // N列: 施設電話番号
@@ -90,6 +90,9 @@ function doPost(e) {
         break;
       case 'facility/update-gas-url':
         response = handleUpdateFacilityGasUrl(data);
+        break;
+      case 'facility/update-chatwork-api-key':
+        response = handleUpdateChatworkApiKey(data);
         break;
       case 'facility/delete':
         response = handleDeleteFacility(data);
@@ -512,7 +515,6 @@ function handleCreateFacility(data) {
     facilitySheet.getRange(newRow, cols.CREATED_AT).setValue(now);
     facilitySheet.getRange(newRow, cols.UPDATED_AT).setValue(now);
     facilitySheet.getRange(newRow, cols.STATUS).setValue('有効');
-    facilitySheet.getRange(newRow, cols.MEMO).setValue(data.memo || '');
     facilitySheet.getRange(newRow, cols.DRIVE_FOLDER_ID).setValue(facilityFolderId || '');
     facilitySheet.getRange(newRow, cols.ADDRESS).setValue(data.address || '');
     facilitySheet.getRange(newRow, cols.PHONE).setValue(data.phone || '');
@@ -585,9 +587,6 @@ function handleUpdateFacility(data) {
         }
         if (data.phone !== undefined) {
           facilitySheet.getRange(row, cols.PHONE).setValue(data.phone);
-        }
-        if (data.memo !== undefined) {
-          facilitySheet.getRange(row, cols.MEMO).setValue(data.memo);
         }
         if (data.capacity !== undefined) {
           facilitySheet.getRange(row, cols.CAPACITY).setValue(data.capacity);
@@ -670,6 +669,52 @@ function handleUpdateFacilityGasUrl(data) {
 
   } catch (error) {
     return createErrorResponse('GAS URL更新エラー: ' + error.toString());
+  }
+}
+
+/**
+ * 施設のChatWork APIキーを更新
+ */
+function handleUpdateChatworkApiKey(data) {
+  try {
+    // バリデーション
+    if (!data.facilityId) {
+      return createErrorResponse('施設IDが指定されていません');
+    }
+    if (!data.chatworkApiKey) {
+      return createErrorResponse('ChatWork APIキーを入力してください');
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const facilitySheet = ss.getSheetByName(MASTER_SHEET_CONFIG.FACILITY_MASTER_SHEET);
+
+    if (!facilitySheet) {
+      return createErrorResponse('システムエラー: 施設マスタシートが見つかりません');
+    }
+
+    const lastRow = facilitySheet.getLastRow();
+
+    // 施設IDで該当行を検索
+    for (let row = MASTER_SHEET_CONFIG.DATA_START_ROW; row <= lastRow; row++) {
+      const facilityId = facilitySheet.getRange(row, MASTER_SHEET_CONFIG.FACILITY_COLS.FACILITY_ID).getValue();
+
+      if (facilityId && facilityId.toString() === data.facilityId.toString()) {
+        // ChatWork APIキーを更新
+        const cols = MASTER_SHEET_CONFIG.FACILITY_COLS;
+        facilitySheet.getRange(row, cols.CHATWORK_API_KEY).setValue(data.chatworkApiKey);
+        facilitySheet.getRange(row, cols.UPDATED_AT).setValue(new Date());
+
+        return createSuccessResponse({
+          message: 'ChatWork APIキーを更新しました',
+          facilityId: facilityId.toString()
+        });
+      }
+    }
+
+    return createErrorResponse('施設が見つかりません');
+
+  } catch (error) {
+    return createErrorResponse('ChatWork APIキー更新エラー: ' + error.toString());
   }
 }
 
@@ -817,7 +862,7 @@ function parseFacilityRow(sheet, row) {
     createdAt: toStringOrNull(sheet.getRange(row, cols.CREATED_AT).getValue()),
     updatedAt: toStringOrNull(sheet.getRange(row, cols.UPDATED_AT).getValue()),
     status: toStringOrNull(sheet.getRange(row, cols.STATUS).getValue()),
-    memo: toStringOrNull(sheet.getRange(row, cols.MEMO).getValue()),
+    chatworkApiKey: toStringOrNull(sheet.getRange(row, cols.CHATWORK_API_KEY).getValue()),
     driveFolderId: toStringOrNull(sheet.getRange(row, cols.DRIVE_FOLDER_ID).getValue()),
     address: toStringOrNull(sheet.getRange(row, cols.ADDRESS).getValue()),
     phone: toStringOrNull(sheet.getRange(row, cols.PHONE).getValue()),

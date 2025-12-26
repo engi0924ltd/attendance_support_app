@@ -134,4 +134,33 @@ class AttendanceService {
 
     return result;
   }
+
+  /// Chatworkルームを持つ利用者一覧を取得
+  Future<List<Map<String, dynamic>>> getChatworkUsers() async {
+    final response = await _apiService.get('chatwork/users');
+
+    final List<dynamic> users = response['users'] ?? [];
+
+    return users.map((user) => Map<String, dynamic>.from(user)).toList();
+  }
+
+  /// Chatworkメッセージを送信（選択送信対応）
+  Future<Map<String, dynamic>> sendChatworkBroadcast(
+    String message, {
+    List<String>? selectedUsers,
+  }) async {
+    final response = await _apiService.post('chatwork/broadcast', {
+      'message': message,
+      if (selectedUsers != null) 'selectedUsers': selectedUsers,
+    });
+    return response;
+  }
+
+  /// Chatwork APIキーを施設GASに設定
+  Future<Map<String, dynamic>> setChatworkApiKey(String apiKey) async {
+    final response = await _apiService.post('chatwork/set-api-key', {
+      'apiKey': apiKey,
+    });
+    return response;
+  }
 }

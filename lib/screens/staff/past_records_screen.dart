@@ -6,6 +6,12 @@ import '../../services/master_service.dart';
 import '../../widgets/searchable_dropdown.dart';
 import 'user_detail_screen.dart';
 
+/// 検索モード
+enum SearchMode {
+  byUser,  // 利用者別
+  byDate,  // 日付別
+}
+
 /// 過去の実績記録画面（支援者用）
 class PastRecordsScreen extends StatefulWidget {
   final String staffName;
@@ -23,8 +29,17 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
   final AttendanceService _attendanceService = AttendanceService();
   final MasterService _masterService = MasterService();
 
+  // 検索モード
+  SearchMode _searchMode = SearchMode.byUser;
+
+  // 利用者別検索用
   List<User> _users = [];
   String? _selectedUserName;
+
+  // 日付別検索用
+  DateTime _selectedDate = DateTime.now();
+
+  // 共通
   List<Attendance> _records = [];
   bool _isLoadingUsers = true;
   bool _isLoadingRecords = false;
@@ -36,7 +51,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
     _loadUsers();
   }
 
-  /// 利用者一覧を読み込む
+  /// 利用者一覧を読み込む（退所済み含む）
   Future<void> _loadUsers() async {
     try {
       setState(() {
@@ -44,7 +59,8 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
         _errorMessage = null;
       });
 
-      final users = await _masterService.getActiveUsers();
+      // 過去の実績記録は退所済みも含めて全利用者を表示
+      final users = await _masterService.getAllUsers();
 
       setState(() {
         _users = users;
@@ -59,7 +75,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
   }
 
   /// 選択した利用者の過去記録を読み込む
-  Future<void> _loadRecords() async {
+  Future<void> _loadRecordsByUser() async {
     if (_selectedUserName == null) return;
 
     try {
@@ -79,6 +95,46 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
         _errorMessage = '記録の読み込みに失敗しました\n$e';
         _isLoadingRecords = false;
       });
+    }
+  }
+
+  /// 選択した日付の全員の記録を読み込む
+  Future<void> _loadRecordsByDate() async {
+    try {
+      setState(() {
+        _isLoadingRecords = true;
+        _errorMessage = null;
+      });
+
+      final dateStr = '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}';
+      final records = await _attendanceService.getDailyAttendance(dateStr);
+
+      setState(() {
+        _records = records;
+        _isLoadingRecords = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = '記録の読み込みに失敗しました\n$e';
+        _isLoadingRecords = false;
+      });
+    }
+  }
+
+  /// 日付選択ダイアログを表示
+  Future<void> _selectDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      locale: const Locale('ja'),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+      _loadRecordsByDate();
     }
   }
 
@@ -122,11 +178,119 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
       ),
       body: Column(
         children: [
-          // 利用者選択プルダウン
-          _buildUserSelector(),
+          // 検索モード切り替え
+          _buildSearchModeToggle(),
+          // 利用者選択 or 日付選択
+          _searchMode == SearchMode.byUser
+              ? _buildUserSelector()
+              : _buildDateSelector(),
           // 記録一覧
           Expanded(
             child: _buildRecordsList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 検索モード切り替えトグル
+  Widget _buildSearchModeToggle() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      color: Colors.orange.shade50,
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (_searchMode != SearchMode.byUser) {
+                  setState(() {
+                    _searchMode = SearchMode.byUser;
+                    _records = [];
+                  });
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _searchMode == SearchMode.byUser
+                      ? Colors.orange
+                      : Colors.white,
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(8),
+                  ),
+                  border: Border.all(color: Colors.orange),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.person_search,
+                      size: 20,
+                      color: _searchMode == SearchMode.byUser
+                          ? Colors.white
+                          : Colors.orange,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '利用者別',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _searchMode == SearchMode.byUser
+                            ? Colors.white
+                            : Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (_searchMode != SearchMode.byDate) {
+                  setState(() {
+                    _searchMode = SearchMode.byDate;
+                    _records = [];
+                  });
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _searchMode == SearchMode.byDate
+                      ? Colors.orange
+                      : Colors.white,
+                  borderRadius: const BorderRadius.horizontal(
+                    right: Radius.circular(8),
+                  ),
+                  border: Border.all(color: Colors.orange),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.calendar_month,
+                      size: 20,
+                      color: _searchMode == SearchMode.byDate
+                          ? Colors.white
+                          : Colors.orange,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '日付別',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _searchMode == SearchMode.byDate
+                            ? Colors.white
+                            : Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -164,12 +328,14 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
               : SearchableDropdown<User>(
                   value: _users.where((u) => u.name == _selectedUserName).firstOrNull,
                   items: _users,
-                  itemLabel: (user) => user.name,
+                  itemLabel: (user) => user.status != '契約中'
+                      ? '${user.name}（${user.status}）'
+                      : user.name,
                   onChanged: (user) {
                     setState(() {
                       _selectedUserName = user?.name;
                     });
-                    _loadRecords();
+                    _loadRecordsByUser();
                   },
                   hint: '名前を入力して検索...',
                 ),
@@ -178,9 +344,88 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
     );
   }
 
+  /// 日付選択UI
+  Widget _buildDateSelector() {
+    const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+    final weekday = weekdays[_selectedDate.weekday - 1];
+    final dateFormatted = '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day} ($weekday)';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '日付を選択',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: _selectDate,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.orange.shade300),
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.orange.shade50,
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_today, color: Colors.orange.shade700),
+                  const SizedBox(width: 12),
+                  Text(
+                    dateFormatted,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.arrow_drop_down, color: Colors.orange.shade700),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // 検索ボタン
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _loadRecordsByDate,
+              icon: const Icon(Icons.search),
+              label: const Text('この日の記録を検索'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 記録一覧
   Widget _buildRecordsList() {
-    if (_selectedUserName == null) {
+    // 利用者別モードで未選択の場合
+    if (_searchMode == SearchMode.byUser && _selectedUserName == null) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -189,6 +434,26 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
             SizedBox(height: 16),
             Text(
               '利用者を選択してください',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 日付別モードで未検索の場合
+    if (_searchMode == SearchMode.byDate && _records.isEmpty && !_isLoadingRecords && _errorMessage == null) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.calendar_month, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              '日付を選択して検索してください',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey,
@@ -217,7 +482,9 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _loadRecords,
+              onPressed: _searchMode == SearchMode.byUser
+                  ? _loadRecordsByUser
+                  : _loadRecordsByDate,
               child: const Text('再試行'),
             ),
           ],
@@ -245,7 +512,9 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadRecords,
+      onRefresh: _searchMode == SearchMode.byUser
+          ? _loadRecordsByUser
+          : _loadRecordsByDate,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _records.length,
@@ -310,7 +579,11 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
           );
           // 画面から戻ってきたらデータを再読み込み
           if (result == true) {
-            _loadRecords();
+            if (_searchMode == SearchMode.byUser) {
+              _loadRecordsByUser();
+            } else {
+              _loadRecordsByDate();
+            }
           }
         },
         borderRadius: BorderRadius.circular(12),
@@ -319,7 +592,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 日付行
+              // 日付行または利用者名行
               Row(
                 children: [
                   Container(
@@ -328,16 +601,35 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
+                      color: _searchMode == SearchMode.byDate
+                          ? Colors.green.shade100
+                          : Colors.blue.shade100,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(
-                      '$dateFormatted ($weekday)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade900,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_searchMode == SearchMode.byDate) ...[
+                          Icon(
+                            Icons.person,
+                            size: 16,
+                            color: Colors.green.shade900,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          _searchMode == SearchMode.byDate
+                              ? record.userName ?? '---'
+                              : '$dateFormatted ($weekday)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: _searchMode == SearchMode.byDate
+                                ? Colors.green.shade900
+                                : Colors.blue.shade900,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
