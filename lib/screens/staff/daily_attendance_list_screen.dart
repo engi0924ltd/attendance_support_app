@@ -11,6 +11,7 @@ import 'user_list_screen.dart';
 import 'user_detail_screen.dart';
 import 'past_records_screen.dart';
 import 'chatwork_broadcast_screen.dart';
+import 'analytics_screen.dart';
 
 /// 本日の出勤一覧画面（支援者用）
 class DailyAttendanceListScreen extends StatefulWidget {
@@ -865,6 +866,20 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
                 context,
                 MaterialPageRoute(
                   builder: (context) => const UserListScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.analytics, color: Colors.indigo),
+            title: const Text('分析'),
+            subtitle: const Text('施設全体・個人の統計', style: TextStyle(fontSize: 12)),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AnalyticsScreen(),
                 ),
               );
             },

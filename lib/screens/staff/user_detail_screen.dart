@@ -49,6 +49,13 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   // 支援記録入力用コントローラー
   final TextEditingController _userStatusController = TextEditingController();
   String? _editedWorkLocation;  // Dropdown用に変更
+
+  /// 出欠状況が欠勤系（勤務地不要）かどうかを判定
+  bool get _isAbsent =>
+      _editedAttendanceStatus == '欠勤' ||
+      _editedAttendanceStatus == '事前連絡あり欠勤' ||
+      _editedAttendanceStatus == '非利用日' ||
+      _editedAttendanceStatus == '休養中';
   String? _editedRecorder;      // Dropdown用に変更
   bool _isHomeSupportEval = false;   // 在宅支援評価対象（チェックボックス）
   bool _isExternalEval = false;      // 施設外評価対象（チェックボックス）
@@ -149,16 +156,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
 
   /// 勤怠データと支援記録を統合保存
   Future<void> _saveAll() async {
-    if (_attendance == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('勤怠データがありません。先に出勤・退勤登録を行ってください。'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
     // 出欠の必須チェック
     if (_editedAttendanceStatus == null || _editedAttendanceStatus!.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -182,7 +179,8 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       return;
     }
 
-    if (_editedWorkLocation == null || _editedWorkLocation!.trim().isEmpty) {
+    // 欠席でない場合のみ勤務地を必須チェック
+    if (!_isAbsent && (_editedWorkLocation == null || _editedWorkLocation!.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('勤務地を選択してください。'),
@@ -391,14 +389,56 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
 
   /// 勤怠データセクション
   Widget _buildAttendanceSection() {
+    // 勤怠データがない場合は最小限のフォームを表示（欠席登録用）
     if (_attendance == null) {
       return Card(
-        color: Colors.orange.shade50,
-        child: const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text(
-            '勤怠データがありません。\n先に出勤・退勤登録を行ってください。',
-            style: TextStyle(color: Colors.orange),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '勤怠情報（新規登録）',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '利用者の出勤登録がありません。\n出欠状況を選択して登録できます。',
+                  style: TextStyle(color: Colors.blue, fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // 日時 & 利用者名（横並び）
+              _buildTwoColumnRow(
+                _buildInfoRow('日時', widget.date),
+                _buildInfoRow('利用者名', widget.userName),
+              ),
+              const SizedBox(height: 16),
+              // 出欠（編集可能）
+              _buildEditableDropdown(
+                '出欠',
+                _editedAttendanceStatus,
+                _dropdownOptions?.attendanceStatus ?? [],
+                (value) => setState(() {
+                  _editedAttendanceStatus = value;
+                  // 欠勤系に変更した場合は勤務地をクリア
+                  if (value == '欠勤' || value == '事前連絡あり欠勤' ||
+                      value == '非利用日' || value == '休養中') {
+                    _editedWorkLocation = null;
+                  }
+                }),
+                allowNull: false,
+              ),
+            ],
           ),
         ),
       );
@@ -432,7 +472,14 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 '出欠',
                 _editedAttendanceStatus,
                 _dropdownOptions?.attendanceStatus ?? [],
-                (value) => setState(() => _editedAttendanceStatus = value),
+                (value) => setState(() {
+                  _editedAttendanceStatus = value;
+                  // 欠勤系に変更した場合は勤務地をクリア
+                  if (value == '欠勤' || value == '事前連絡あり欠勤' ||
+                      value == '非利用日' || value == '休養中') {
+                    _editedWorkLocation = null;
+                  }
+                }),
                 allowNull: false,
               ),
             ),
@@ -638,21 +685,27 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 勤務地 & 記録者（横並び）※両方必須
+          // 勤務地 & 記録者（横並び）※勤務地は欠席以外で必須
           _buildTwoColumnRow(
             DropdownButtonFormField<String>(
-              value: _editedWorkLocation != null &&
+              value: _isAbsent
+                  ? null  // 欠席時は選択値をクリア
+                  : (_editedWorkLocation != null &&
                      _editedWorkLocation!.trim().isNotEmpty &&
                      (_dropdownOptions?.workLocations ?? [])
                          .map((e) => e.trim())
                          .toSet()
                          .contains(_editedWorkLocation!.trim())
-                  ? _editedWorkLocation!.trim()
-                  : null,
+                      ? _editedWorkLocation!.trim()
+                      : null),
               decoration: InputDecoration(
-                labelText: '勤務地 *',
-                labelStyle: TextStyle(color: Colors.red.shade700),
+                labelText: _isAbsent ? '勤務地（欠席のため不要）' : '勤務地 *',
+                labelStyle: TextStyle(
+                  color: _isAbsent ? Colors.grey : Colors.red.shade700,
+                ),
                 border: const OutlineInputBorder(),
+                filled: _isAbsent,
+                fillColor: _isAbsent ? Colors.grey.shade200 : null,
               ),
               items: [
                 ...(_dropdownOptions?.workLocations ?? [])
@@ -666,7 +719,9 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   );
                 }),
               ],
-              onChanged: (value) => setState(() => _editedWorkLocation = value),
+              onChanged: _isAbsent
+                  ? null  // 欠席時は変更不可
+                  : (value) => setState(() => _editedWorkLocation = value),
             ),
             DropdownButtonFormField<String>(
               value: _editedRecorder != null &&

@@ -163,4 +163,54 @@ class AttendanceService {
     });
     return response;
   }
+
+  /// 施設全体の統計を取得
+  Future<Map<String, dynamic>> getFacilityStats() async {
+    final response = await _apiService.get('analytics/facility-stats');
+    return response;
+  }
+
+  /// 曜日別出勤予定を取得（詳細データ付き）
+  Future<Map<String, dynamic>> getWeeklyScheduleWithDetails() async {
+    final response = await _apiService.get('analytics/weekly-schedule');
+    final Map<String, dynamic> scheduleData = response['schedule'] ?? {};
+    final Map<String, dynamic> detailsData = response['details'] ?? {};
+
+    // schedule型変換
+    final schedule = <String, Map<String, int>>{};
+    scheduleData.forEach((weekday, types) {
+      if (types is Map) {
+        schedule[weekday] = {};
+        types.forEach((type, count) {
+          schedule[weekday]![type.toString()] = (count as num).toInt();
+        });
+      }
+    });
+
+    // details型変換
+    final details = <String, Map<String, Map<String, int>>>{};
+    detailsData.forEach((weekday, categories) {
+      if (categories is Map) {
+        details[weekday] = {};
+        categories.forEach((category, values) {
+          if (values is Map) {
+            details[weekday]![category.toString()] = {};
+            values.forEach((value, count) {
+              details[weekday]![category.toString()]![value.toString()] =
+                  (count as num).toInt();
+            });
+          }
+        });
+      }
+    });
+
+    return {'schedule': schedule, 'details': details};
+  }
+
+  /// 利用者個人の統計を取得
+  Future<Map<String, dynamic>> getUserStats(String userName) async {
+    final encodedName = Uri.encodeComponent(userName);
+    final response = await _apiService.get('analytics/user-stats/$encodedName');
+    return response;
+  }
 }
