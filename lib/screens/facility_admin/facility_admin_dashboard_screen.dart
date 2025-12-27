@@ -4,6 +4,7 @@ import '../common/menu_selection_screen.dart';
 import '../../services/master_auth_service.dart';
 import 'staff_list_screen.dart';
 import 'user_list_screen.dart';
+import 'daily_attendance_screen.dart';
 
 /// 施設管理者ダッシュボード画面
 class FacilityAdminDashboardScreen extends StatelessWidget {
@@ -71,12 +72,12 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // 本日の勤怠一覧（準備中）
+            // 本日の勤怠一覧
             _DashboardMenuItem(
               title: '本日の勤怠一覧',
               icon: Icons.today,
               color: Colors.green,
-              onTap: () => _showComingSoonDialog(context, '本日の勤怠一覧'),
+              onTap: () => _navigateToDailyAttendance(context),
             ),
             const SizedBox(height: 12),
 
@@ -118,6 +119,24 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  void _navigateToDailyAttendance(BuildContext context) {
+    if (admin.gasUrl == null || admin.gasUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('GAS URLが設定されていません')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FacilityAdminDailyAttendanceScreen(
+          gasUrl: admin.gasUrl!,
+          facilityName: admin.facilityName,
+        ),
       ),
     );
   }

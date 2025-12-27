@@ -84,11 +84,12 @@ const MASTER_CONFIG = {
     JOB_TYPE: 26    // Z列: 職種（元T列から+6列）
   },
 
-  // 支援記録用プルダウン選択肢（K列、V列、AD〜AH列、8〜25行目）
+  // 支援記録用プルダウン選択肢（AB列、V列、AD〜AH列、8〜25行目）
   SUPPORT_DROPDOWN_START_ROW: 8,
   SUPPORT_DROPDOWN_END_ROW: 25,
+  WORK_LOCATION_DROPDOWN_END_ROW: 20,  // 勤務地は8〜20行目
   SUPPORT_DROPDOWN_COLS: {
-    WORK_LOCATION: 11,    // K列: 勤務地
+    WORK_LOCATION: 28,    // AB列: 勤務地
     RECORDER: 22,         // V列: 記録者（職員名と同じ列）
     WORK_EVAL: 30,        // AD列: 勤怠評価
     EMPLOYMENT_EVAL: 31,  // AE列: 就労評価（品質・生産性）
@@ -462,7 +463,7 @@ function handleGetDropdowns() {
     otherBreak: getTimeListOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.OTHER_BREAK, 8, 25),  // T列: その他休憩（8〜25行目）
     specialNotes: [],                                                                                                                                             // 特記事項（使用しない）
     breaks: [],                                                                                                                                                   // 休憩時間（使用しない）
-    workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),  // K列: 勤務地（8〜25行目）
+    workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_END_ROW),  // AB列: 勤務地（8〜20行目）
 
     // 曜日別出欠予定用プルダウン（K列、44〜50行目）
     scheduledWeekly: getColumnOptions(sheet, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_COL, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_START_ROW, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_END_ROW), // K列: 曜日別出欠予定
@@ -506,10 +507,8 @@ function handleGetEvaluationAlerts() {
   const cacheKey = 'evaluation_alerts';
   const cachedData = getCacheData(cacheKey);
   if (cachedData) {
-    console.log('キャッシュヒット: ' + cacheKey);
     return createSuccessResponse({ alerts: cachedData, cached: true });
   }
-  console.log('キャッシュミス: ' + cacheKey);
 
   const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
   const masterSheet = getSheet(SHEET_NAMES.MASTER);
@@ -823,24 +822,35 @@ function generateToken(email) {
 function handleGetStaffList() {
   try {
     const sheet = getSheet(SHEET_NAMES.MASTER);
-    const staffList = [];
+    const startRow = MASTER_CONFIG.STAFF_DATA_START_ROW;
+    const endRow = MASTER_CONFIG.STAFF_DATA_END_ROW;
+    const numRows = endRow - startRow + 1;
 
-    // 8行目から200行目まで走査
-    for (let row = MASTER_CONFIG.STAFF_DATA_START_ROW; row <= MASTER_CONFIG.STAFF_DATA_END_ROW; row++) {
-      const name = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.NAME).getValue();
-      const email = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.EMAIL).getValue();
+    // 必要な列を一括取得（V:名前, W:権限, X:メール, Z:職種）
+    const nameCol = MASTER_CONFIG.STAFF_COLS.NAME;      // V列 = 22
+    const roleCol = MASTER_CONFIG.STAFF_COLS.ROLE;      // W列 = 23
+    const emailCol = MASTER_CONFIG.STAFF_COLS.EMAIL;    // X列 = 24
+    const jobTypeCol = MASTER_CONFIG.STAFF_COLS.JOB_TYPE; // Z列 = 26
+
+    // V列からZ列まで一括取得（22列目から26列目 = 5列分）
+    const allData = sheet.getRange(startRow, nameCol, numRows, jobTypeCol - nameCol + 1).getValues();
+
+    const staffList = [];
+    for (let i = 0; i < allData.length; i++) {
+      const row = allData[i];
+      const name = row[0];                        // V列（配列インデックス0）
+      const role = row[roleCol - nameCol];        // W列
+      const email = row[emailCol - nameCol];      // X列
+      const jobType = row[jobTypeCol - nameCol];  // Z列
 
       // 名前とメールアドレスが両方入力されている行のみ取得
       if (name && email) {
-        const role = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.ROLE).getValue();
-        const jobType = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.JOB_TYPE).getValue();
-
         staffList.push({
           name: name,
           email: email,
           role: role || '従業員',
           jobType: jobType || null,
-          rowNumber: row
+          rowNumber: startRow + i
         });
       }
     }
@@ -854,6 +864,7 @@ function handleGetStaffList() {
 
 /**
  * 職員を新規登録
+ * 一括取得・一括書き込みで高速化
  */
 function handleCreateStaff(data) {
   try {
@@ -877,38 +888,43 @@ function handleCreateStaff(data) {
     }
 
     const sheet = getSheet(SHEET_NAMES.MASTER);
-    const lastRow = sheet.getLastRow();
+    const cols = MASTER_CONFIG.STAFF_COLS;
+    const startRow = MASTER_CONFIG.STAFF_DATA_START_ROW;
+    const endRow = MASTER_CONFIG.STAFF_DATA_END_ROW;
+    const numRows = endRow - startRow + 1;
 
-    // メールアドレスの重複チェック
-    for (let row = MASTER_CONFIG.STAFF_DATA_START_ROW; row <= lastRow; row++) {
-      const existingEmail = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.EMAIL).getValue();
-      if (existingEmail && existingEmail.toLowerCase() === data.email.toLowerCase()) {
+    // V列からZ列まで一括取得（名前、権限、メール、パスワード、職種）
+    const allData = sheet.getRange(startRow, cols.NAME, numRows, cols.JOB_TYPE - cols.NAME + 1).getValues();
+
+    // メールアドレスの重複チェックと空行探しを同時に実行
+    let newRow = -1;
+    const emailColIndex = cols.EMAIL - cols.NAME; // 配列内のメール列インデックス
+    const nameColIndex = 0; // 名前は最初の列
+
+    for (let i = 0; i < allData.length; i++) {
+      const row = allData[i];
+      const existingEmail = row[emailColIndex];
+      const existingName = row[nameColIndex];
+
+      // メール重複チェック
+      if (existingEmail && existingEmail.toString().toLowerCase() === data.email.toLowerCase()) {
         return createErrorResponse('このメールアドレスは既に登録されています');
       }
-    }
 
-    // 空行を探す（P列が空の行）
-    let newRow = -1;
-    for (let row = MASTER_CONFIG.STAFF_DATA_START_ROW; row <= lastRow; row++) {
-      const existingName = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.NAME).getValue();
-      if (!existingName || existingName === '') {
-        newRow = row;
-        break;
+      // 空行を探す（最初に見つかった空行を記録）
+      if (newRow === -1 && (!existingName || existingName === '')) {
+        newRow = startRow + i;
       }
     }
 
     // 空行が見つからなければ最後に追加
     if (newRow === -1) {
-      newRow = lastRow + 1;
+      newRow = startRow + allData.length;
     }
 
-    // データを書き込む
-    const cols = MASTER_CONFIG.STAFF_COLS;
-    sheet.getRange(newRow, cols.NAME).setValue(data.name);
-    sheet.getRange(newRow, cols.ROLE).setValue(data.role);
-    sheet.getRange(newRow, cols.EMAIL).setValue(data.email);
-    sheet.getRange(newRow, cols.PASSWORD).setValue(data.password);
-    sheet.getRange(newRow, cols.JOB_TYPE).setValue(data.jobType || '');
+    // データを一括書き込み
+    const writeData = [[data.name, data.role, data.email, data.password, data.jobType || '']];
+    sheet.getRange(newRow, cols.NAME, 1, 5).setValues(writeData);
 
     return createSuccessResponse({
       message: '職員を登録しました',
@@ -928,6 +944,7 @@ function handleCreateStaff(data) {
 
 /**
  * 職員情報を更新
+ * 一括取得・一括書き込みで高速化
  */
 function handleUpdateStaff(data) {
   try {
@@ -954,27 +971,32 @@ function handleUpdateStaff(data) {
     }
 
     const sheet = getSheet(SHEET_NAMES.MASTER);
-    const lastRow = sheet.getLastRow();
+    const cols = MASTER_CONFIG.STAFF_COLS;
+    const startRow = MASTER_CONFIG.STAFF_DATA_START_ROW;
+    const endRow = MASTER_CONFIG.STAFF_DATA_END_ROW;
+    const numRows = endRow - startRow + 1;
 
-    // メールアドレスの重複チェック（自分自身の行は除外）
-    for (let row = MASTER_CONFIG.STAFF_DATA_START_ROW; row <= lastRow; row++) {
-      if (row === data.rowNumber) continue; // 自分自身はスキップ
+    // メール列を一括取得して重複チェック
+    const emailData = sheet.getRange(startRow, cols.EMAIL, numRows, 1).getValues();
+    for (let i = 0; i < emailData.length; i++) {
+      const currentRow = startRow + i;
+      if (currentRow === data.rowNumber) continue; // 自分自身はスキップ
 
-      const existingEmail = sheet.getRange(row, MASTER_CONFIG.STAFF_COLS.EMAIL).getValue();
-      if (existingEmail && existingEmail.toLowerCase() === data.email.toLowerCase()) {
+      const existingEmail = emailData[i][0];
+      if (existingEmail && existingEmail.toString().toLowerCase() === data.email.toLowerCase()) {
         return createErrorResponse('このメールアドレスは既に登録されています');
       }
     }
 
-    // データを更新
-    const cols = MASTER_CONFIG.STAFF_COLS;
-    sheet.getRange(data.rowNumber, cols.NAME).setValue(data.name);
-    sheet.getRange(data.rowNumber, cols.ROLE).setValue(data.role);
-    sheet.getRange(data.rowNumber, cols.EMAIL).setValue(data.email);
-    if (data.password) {
-      sheet.getRange(data.rowNumber, cols.PASSWORD).setValue(data.password);
+    // 現在のパスワードを取得（パスワード未指定時に使用）
+    let password = data.password;
+    if (!password) {
+      password = sheet.getRange(data.rowNumber, cols.PASSWORD).getValue();
     }
-    sheet.getRange(data.rowNumber, cols.JOB_TYPE).setValue(data.jobType || '');
+
+    // データを一括書き込み
+    const writeData = [[data.name, data.role, data.email, password, data.jobType || '']];
+    sheet.getRange(data.rowNumber, cols.NAME, 1, 5).setValues(writeData);
 
     return createSuccessResponse({
       message: '職員情報を更新しました',
@@ -1135,17 +1157,121 @@ function writeToRosterSheet(rosterSheet, rowNumber, data) {
 }
 
 /**
+ * 名簿_2025シートに利用者データを一括書き込み（パフォーマンス最適化版）
+ * 50+回のsetValue()を1回のsetValues()に統合
+ */
+function writeToRosterSheetBatch(rosterSheet, rowNumber, data) {
+  const cols = ROSTER_COLS;
+  const maxCol = cols.NOTES; // 60列目が最後
+
+  // 既存データを取得（更新時に上書きしない列を保持）
+  const existingData = rosterSheet.getRange(rowNumber, 1, 1, maxCol).getValues()[0];
+
+  // 新しいデータ配列を作成（既存データをベースに更新）
+  const rowData = [...existingData];
+
+  // ヘルパー関数: undefinedでなければ値を設定（空文字も許可）
+  const setIfDefined = (colIndex, value) => {
+    if (value !== undefined) {
+      rowData[colIndex - 1] = value === null ? '' : value;
+    }
+  };
+
+  // 基本情報
+  setIfDefined(cols.NAME, data.name);
+  setIfDefined(cols.NAME_KANA, data.furigana);
+  setIfDefined(cols.STATUS, data.status);
+
+  // 連絡先情報
+  setIfDefined(cols.MOBILE_PHONE, data.mobilePhone);
+  setIfDefined(cols.CHATWORK_ID, data.chatworkId);
+  setIfDefined(cols.MAIL, data.mail);
+  setIfDefined(cols.EMERGENCY_CONTACT1, data.emergencyContact1);
+  setIfDefined(cols.EMERGENCY_PHONE1, data.emergencyPhone1);
+  setIfDefined(cols.EMERGENCY_CONTACT2, data.emergencyContact2);
+  setIfDefined(cols.EMERGENCY_PHONE2, data.emergencyPhone2);
+
+  // 住所情報
+  setIfDefined(cols.POSTAL_CODE, data.postalCode);
+  setIfDefined(cols.PREFECTURE, data.prefecture);
+  setIfDefined(cols.CITY, data.city);
+  setIfDefined(cols.WARD, data.ward);
+  setIfDefined(cols.ADDRESS, data.address);
+  setIfDefined(cols.ADDRESS2, data.address2);
+
+  // 詳細情報
+  setIfDefined(cols.BIRTH_DATE, data.birthDate);
+  setIfDefined(cols.LIFE_PROTECTION, data.lifeProtection);
+  setIfDefined(cols.DISABILITY_PENSION, data.disabilityPension);
+  setIfDefined(cols.DISABILITY_NUMBER, data.disabilityNumber);
+  setIfDefined(cols.DISABILITY_GRADE, data.disabilityGrade);
+  setIfDefined(cols.DISABILITY_TYPE, data.disabilityType);
+  setIfDefined(cols.HANDBOOK_VALID, data.handbookValid);
+  setIfDefined(cols.MUNICIPAL_NUMBER, data.municipalNumber);
+  setIfDefined(cols.CERTIFICATE_NUMBER, data.certificateNumber);
+  setIfDefined(cols.DECISION_PERIOD1, data.decisionPeriod1);
+  setIfDefined(cols.DECISION_PERIOD2, data.decisionPeriod2);
+  setIfDefined(cols.APPLICABLE_START, data.applicableStart);
+  setIfDefined(cols.APPLICABLE_END, data.applicableEnd);
+  setIfDefined(cols.SUPPLY_AMOUNT, data.supplyAmount);
+  setIfDefined(cols.SUPPORT_LEVEL, data.supportLevel);
+  setIfDefined(cols.USE_START_DATE, data.useStartDate);
+
+  // 期間計算（自動計算列は書き込まない：USE_PERIOD, PLAN_UPDATE）
+  setIfDefined(cols.INITIAL_ADDITION, data.initialAddition);
+
+  // 相談支援事業所
+  setIfDefined(cols.CONSULTATION_FACILITY, data.consultationFacility);
+  setIfDefined(cols.CONSULTATION_STAFF, data.consultationStaff);
+  setIfDefined(cols.CONSULTATION_CONTACT, data.consultationContact);
+
+  // グループホーム
+  setIfDefined(cols.GH_FACILITY, data.ghFacility);
+  setIfDefined(cols.GH_STAFF, data.ghStaff);
+  setIfDefined(cols.GH_CONTACT, data.ghContact);
+
+  // その他関係機関
+  setIfDefined(cols.OTHER_FACILITY, data.otherFacility);
+  setIfDefined(cols.OTHER_STAFF, data.otherStaff);
+  setIfDefined(cols.OTHER_CONTACT, data.otherContact);
+
+  // 工賃振込先情報
+  setIfDefined(cols.BANK_NAME, data.bankName);
+  setIfDefined(cols.BANK_CODE, data.bankCode);
+  setIfDefined(cols.BRANCH_NAME, data.branchName);
+  setIfDefined(cols.BRANCH_CODE, data.branchCode);
+  setIfDefined(cols.ACCOUNT_NUMBER, data.accountNumber);
+
+  // 退所・就労情報
+  setIfDefined(cols.LEAVE_DATE, data.leaveDate);
+  setIfDefined(cols.LEAVE_REASON, data.leaveReason);
+  setIfDefined(cols.WORK_NAME, data.workName);
+  setIfDefined(cols.WORK_CONTACT, data.workContact);
+  setIfDefined(cols.WORK_CONTENT, data.workContent);
+  setIfDefined(cols.CONTRACT_TYPE, data.contractType);
+  setIfDefined(cols.EMPLOYMENT_SUPPORT, data.employmentSupport);
+  setIfDefined(cols.NOTES, data.notes);
+
+  // 一括書き込み（1回のAPI呼び出しで60列分を書き込み）
+  rosterSheet.getRange(rowNumber, 1, 1, maxCol).setValues([rowData]);
+}
+
+/**
  * 名簿_2025シートから利用者データを削除
  */
 function deleteFromRosterSheet(rosterSheet, name) {
-  // 名簿_2025シートの3行目から利用者名を検索
+  // 名簿_2025シートの3行目から利用者名を一括取得して検索
   const lastRow = rosterSheet.getLastRow();
-  for (let row = 3; row <= lastRow; row++) {
-    const rosterName = rosterSheet.getRange(row, ROSTER_COLS.NAME).getValue();
-    if (rosterName === name) {
-      // 該当行の全列をクリア
-      rosterSheet.getRange(row, 1, 1, 60).clearContent();
-      return true;
+  const numRows = Math.max(0, lastRow - 2);
+
+  if (numRows > 0) {
+    const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+    for (let i = 0; i < nameData.length; i++) {
+      if (nameData[i][0] === name) {
+        // 該当行の全列をクリア
+        rosterSheet.getRange(3 + i, 1, 1, 60).clearContent();
+        return true;
+      }
     }
   }
   return false;
@@ -1153,141 +1279,140 @@ function deleteFromRosterSheet(rosterSheet, name) {
 
 /**
  * 利用者一覧を取得（全員：契約中 + 退所済み）
+ * 一括取得で高速化
  */
 function handleGetUserList() {
   try {
     const sheet = getSheet(SHEET_NAMES.MASTER);
     const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
-    const userList = [];
+    const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+    const numRows = 200 - startRow + 1; // 8〜200行
 
-    // 8行目から200行目まで走査（空白行で終了）
-    for (let row = MASTER_CONFIG.USER_DATA_START_ROW; row <= 200; row++) {
-      const name = sheet.getRange(row, MASTER_CONFIG.USER_COLS.NAME).getValue();
+    // マスタ設定シートからA〜J列を一括取得
+    const masterData = sheet.getRange(startRow, 1, numRows, 10).getValues();
+
+    // 名簿シートから全データを一括取得（3行目〜最終行、A〜BH列=60列）
+    const rosterLastRow = rosterSheet.getLastRow();
+    const rosterNumRows = Math.max(0, rosterLastRow - 2);
+    let rosterMap = {};
+
+    if (rosterNumRows > 0) {
+      const rosterData = rosterSheet.getRange(3, 1, rosterNumRows, 60).getValues();
+      // 名前をキーにしたマップを作成（行番号も保持）
+      for (let i = 0; i < rosterData.length; i++) {
+        const name = rosterData[i][ROSTER_COLS.NAME - 1]; // B列 = index 1
+        if (name) {
+          rosterMap[name] = { rowIndex: i, rowNumber: i + 3, data: rosterData[i] };
+        }
+      }
+    }
+
+    const userList = [];
+    const cols = MASTER_CONFIG.USER_COLS;
+
+    for (let i = 0; i < masterData.length; i++) {
+      const row = masterData[i];
+      const name = row[cols.NAME - 1];      // A列
+      const furigana = row[cols.FURIGANA - 1]; // B列
 
       // 空白行に達したら終了
       if (!name || name === '') {
         break;
       }
 
-      const furigana = sheet.getRange(row, MASTER_CONFIG.USER_COLS.FURIGANA).getValue();
-
       // 名前とフリガナが両方入力されている行のみ取得
       if (furigana) {
-        const status = sheet.getRange(row, MASTER_CONFIG.USER_COLS.STATUS).getValue();
-
-        // 曜日別出欠予定を取得
-        const scheduledMon = sheet.getRange(row, MASTER_CONFIG.USER_COLS.SCHEDULED_MON).getValue();
-        const scheduledTue = sheet.getRange(row, MASTER_CONFIG.USER_COLS.SCHEDULED_TUE).getValue();
-        const scheduledWed = sheet.getRange(row, MASTER_CONFIG.USER_COLS.SCHEDULED_WED).getValue();
-        const scheduledThu = sheet.getRange(row, MASTER_CONFIG.USER_COLS.SCHEDULED_THU).getValue();
-        const scheduledFri = sheet.getRange(row, MASTER_CONFIG.USER_COLS.SCHEDULED_FRI).getValue();
-        const scheduledSat = sheet.getRange(row, MASTER_CONFIG.USER_COLS.SCHEDULED_SAT).getValue();
-        const scheduledSun = sheet.getRange(row, MASTER_CONFIG.USER_COLS.SCHEDULED_SUN).getValue();
-
-        // 名簿_2025シートから詳細情報を取得
-        let rosterRow = -1;
-        const rosterLastRow = rosterSheet.getLastRow();
-
-        // 名簿シートで同じ名前の行を探す
-        for (let r = 3; r <= rosterLastRow; r++) {
-          const rosterName = rosterSheet.getRange(r, ROSTER_COLS.NAME).getValue();
-          if (rosterName === name) {
-            rosterRow = r;
-            break;
-          }
-        }
-
-        // 基本情報（マスタ設定から）+ 詳細情報（名簿シートから）
         const userObj = {
-          // 基本情報
           name: name,
           furigana: furigana,
-          status: status || '契約中',
-          scheduledMon: scheduledMon || '',
-          scheduledTue: scheduledTue || '',
-          scheduledWed: scheduledWed || '',
-          scheduledThu: scheduledThu || '',
-          scheduledFri: scheduledFri || '',
-          scheduledSat: scheduledSat || '',
-          scheduledSun: scheduledSun || '',
-          rowNumber: row
+          status: row[cols.STATUS - 1] || '契約中',
+          scheduledMon: row[cols.SCHEDULED_MON - 1] || '',
+          scheduledTue: row[cols.SCHEDULED_TUE - 1] || '',
+          scheduledWed: row[cols.SCHEDULED_WED - 1] || '',
+          scheduledThu: row[cols.SCHEDULED_THU - 1] || '',
+          scheduledFri: row[cols.SCHEDULED_FRI - 1] || '',
+          scheduledSat: row[cols.SCHEDULED_SAT - 1] || '',
+          scheduledSun: row[cols.SCHEDULED_SUN - 1] || '',
+          rowNumber: startRow + i
         };
 
-        // 名簿シートにデータがある場合、全60フィールドを追加
-        if (rosterRow !== -1) {
-          const cols = ROSTER_COLS;
+        // 名簿シートにデータがある場合、詳細情報を追加
+        const rosterInfo = rosterMap[name];
+        if (rosterInfo) {
+          const r = rosterInfo.data;
+          const rc = ROSTER_COLS;
 
-          userObj.rosterRowNumber = rosterRow;
+          userObj.rosterRowNumber = rosterInfo.rowNumber;
 
           // 連絡先情報
-          userObj.mobilePhone = rosterSheet.getRange(rosterRow, cols.MOBILE_PHONE).getValue() || '';
-          userObj.chatworkId = rosterSheet.getRange(rosterRow, cols.CHATWORK_ID).getValue() || '';
-          userObj.mail = rosterSheet.getRange(rosterRow, cols.MAIL).getValue() || '';
-          userObj.emergencyContact1 = rosterSheet.getRange(rosterRow, cols.EMERGENCY_CONTACT1).getValue() || '';
-          userObj.emergencyPhone1 = rosterSheet.getRange(rosterRow, cols.EMERGENCY_PHONE1).getValue() || '';
-          userObj.emergencyContact2 = rosterSheet.getRange(rosterRow, cols.EMERGENCY_CONTACT2).getValue() || '';
-          userObj.emergencyPhone2 = rosterSheet.getRange(rosterRow, cols.EMERGENCY_PHONE2).getValue() || '';
+          userObj.mobilePhone = r[rc.MOBILE_PHONE - 1] || '';
+          userObj.chatworkId = r[rc.CHATWORK_ID - 1] || '';
+          userObj.mail = r[rc.MAIL - 1] || '';
+          userObj.emergencyContact1 = r[rc.EMERGENCY_CONTACT1 - 1] || '';
+          userObj.emergencyPhone1 = r[rc.EMERGENCY_PHONE1 - 1] || '';
+          userObj.emergencyContact2 = r[rc.EMERGENCY_CONTACT2 - 1] || '';
+          userObj.emergencyPhone2 = r[rc.EMERGENCY_PHONE2 - 1] || '';
 
           // 住所情報
-          userObj.postalCode = rosterSheet.getRange(rosterRow, cols.POSTAL_CODE).getValue() || '';
-          userObj.prefecture = rosterSheet.getRange(rosterRow, cols.PREFECTURE).getValue() || '';
-          userObj.city = rosterSheet.getRange(rosterRow, cols.CITY).getValue() || '';
-          userObj.ward = rosterSheet.getRange(rosterRow, cols.WARD).getValue() || '';
-          userObj.address = rosterSheet.getRange(rosterRow, cols.ADDRESS).getValue() || '';
-          userObj.address2 = rosterSheet.getRange(rosterRow, cols.ADDRESS2).getValue() || '';
+          userObj.postalCode = r[rc.POSTAL_CODE - 1] || '';
+          userObj.prefecture = r[rc.PREFECTURE - 1] || '';
+          userObj.city = r[rc.CITY - 1] || '';
+          userObj.ward = r[rc.WARD - 1] || '';
+          userObj.address = r[rc.ADDRESS - 1] || '';
+          userObj.address2 = r[rc.ADDRESS2 - 1] || '';
 
           // 詳細情報
-          userObj.birthDate = rosterSheet.getRange(rosterRow, cols.BIRTH_DATE).getValue() || '';
-          userObj.lifeProtection = rosterSheet.getRange(rosterRow, cols.LIFE_PROTECTION).getValue() || '';
-          userObj.disabilityPension = rosterSheet.getRange(rosterRow, cols.DISABILITY_PENSION).getValue() || '';
-          userObj.disabilityNumber = rosterSheet.getRange(rosterRow, cols.DISABILITY_NUMBER).getValue() || '';
-          userObj.disabilityGrade = rosterSheet.getRange(rosterRow, cols.DISABILITY_GRADE).getValue() || '';
-          userObj.disabilityType = rosterSheet.getRange(rosterRow, cols.DISABILITY_TYPE).getValue() || '';
-          userObj.handbookValid = rosterSheet.getRange(rosterRow, cols.HANDBOOK_VALID).getValue() || '';
-          userObj.municipalNumber = rosterSheet.getRange(rosterRow, cols.MUNICIPAL_NUMBER).getValue() || '';
-          userObj.certificateNumber = rosterSheet.getRange(rosterRow, cols.CERTIFICATE_NUMBER).getValue() || '';
-          userObj.decisionPeriod1 = rosterSheet.getRange(rosterRow, cols.DECISION_PERIOD1).getValue() || '';
-          userObj.decisionPeriod2 = rosterSheet.getRange(rosterRow, cols.DECISION_PERIOD2).getValue() || '';
-          userObj.applicableStart = rosterSheet.getRange(rosterRow, cols.APPLICABLE_START).getValue() || '';
-          userObj.applicableEnd = rosterSheet.getRange(rosterRow, cols.APPLICABLE_END).getValue() || '';
-          userObj.supplyAmount = rosterSheet.getRange(rosterRow, cols.SUPPLY_AMOUNT).getValue() || '';
-          userObj.supportLevel = rosterSheet.getRange(rosterRow, cols.SUPPORT_LEVEL).getValue() || '';
-          userObj.useStartDate = rosterSheet.getRange(rosterRow, cols.USE_START_DATE).getValue() || '';
+          userObj.birthDate = r[rc.BIRTH_DATE - 1] || '';
+          userObj.lifeProtection = r[rc.LIFE_PROTECTION - 1] || '';
+          userObj.disabilityPension = r[rc.DISABILITY_PENSION - 1] || '';
+          userObj.disabilityNumber = r[rc.DISABILITY_NUMBER - 1] || '';
+          userObj.disabilityGrade = r[rc.DISABILITY_GRADE - 1] || '';
+          userObj.disabilityType = r[rc.DISABILITY_TYPE - 1] || '';
+          userObj.handbookValid = r[rc.HANDBOOK_VALID - 1] || '';
+          userObj.municipalNumber = r[rc.MUNICIPAL_NUMBER - 1] || '';
+          userObj.certificateNumber = r[rc.CERTIFICATE_NUMBER - 1] || '';
+          userObj.decisionPeriod1 = r[rc.DECISION_PERIOD1 - 1] || '';
+          userObj.decisionPeriod2 = r[rc.DECISION_PERIOD2 - 1] || '';
+          userObj.applicableStart = r[rc.APPLICABLE_START - 1] || '';
+          userObj.applicableEnd = r[rc.APPLICABLE_END - 1] || '';
+          userObj.supplyAmount = r[rc.SUPPLY_AMOUNT - 1] || '';
+          userObj.supportLevel = r[rc.SUPPORT_LEVEL - 1] || '';
+          userObj.useStartDate = r[rc.USE_START_DATE - 1] || '';
 
           // 期間計算
-          userObj.initialAddition = rosterSheet.getRange(rosterRow, cols.INITIAL_ADDITION).getValue() || '';
+          userObj.initialAddition = r[rc.INITIAL_ADDITION - 1] || '';
 
           // 相談支援事業所
-          userObj.consultationFacility = rosterSheet.getRange(rosterRow, cols.CONSULTATION_FACILITY).getValue() || '';
-          userObj.consultationStaff = rosterSheet.getRange(rosterRow, cols.CONSULTATION_STAFF).getValue() || '';
-          userObj.consultationContact = rosterSheet.getRange(rosterRow, cols.CONSULTATION_CONTACT).getValue() || '';
+          userObj.consultationFacility = r[rc.CONSULTATION_FACILITY - 1] || '';
+          userObj.consultationStaff = r[rc.CONSULTATION_STAFF - 1] || '';
+          userObj.consultationContact = r[rc.CONSULTATION_CONTACT - 1] || '';
 
           // グループホーム
-          userObj.ghFacility = rosterSheet.getRange(rosterRow, cols.GH_FACILITY).getValue() || '';
-          userObj.ghStaff = rosterSheet.getRange(rosterRow, cols.GH_STAFF).getValue() || '';
-          userObj.ghContact = rosterSheet.getRange(rosterRow, cols.GH_CONTACT).getValue() || '';
+          userObj.ghFacility = r[rc.GH_FACILITY - 1] || '';
+          userObj.ghStaff = r[rc.GH_STAFF - 1] || '';
+          userObj.ghContact = r[rc.GH_CONTACT - 1] || '';
 
           // その他関係機関
-          userObj.otherFacility = rosterSheet.getRange(rosterRow, cols.OTHER_FACILITY).getValue() || '';
-          userObj.otherStaff = rosterSheet.getRange(rosterRow, cols.OTHER_STAFF).getValue() || '';
-          userObj.otherContact = rosterSheet.getRange(rosterRow, cols.OTHER_CONTACT).getValue() || '';
+          userObj.otherFacility = r[rc.OTHER_FACILITY - 1] || '';
+          userObj.otherStaff = r[rc.OTHER_STAFF - 1] || '';
+          userObj.otherContact = r[rc.OTHER_CONTACT - 1] || '';
 
           // 工賃振込先情報
-          userObj.bankName = rosterSheet.getRange(rosterRow, cols.BANK_NAME).getValue() || '';
-          userObj.bankCode = rosterSheet.getRange(rosterRow, cols.BANK_CODE).getValue() || '';
-          userObj.branchName = rosterSheet.getRange(rosterRow, cols.BRANCH_NAME).getValue() || '';
-          userObj.branchCode = rosterSheet.getRange(rosterRow, cols.BRANCH_CODE).getValue() || '';
-          userObj.accountNumber = rosterSheet.getRange(rosterRow, cols.ACCOUNT_NUMBER).getValue() || '';
+          userObj.bankName = r[rc.BANK_NAME - 1] || '';
+          userObj.bankCode = r[rc.BANK_CODE - 1] || '';
+          userObj.branchName = r[rc.BRANCH_NAME - 1] || '';
+          userObj.branchCode = r[rc.BRANCH_CODE - 1] || '';
+          userObj.accountNumber = r[rc.ACCOUNT_NUMBER - 1] || '';
 
           // 退所・就労情報
-          userObj.leaveDate = rosterSheet.getRange(rosterRow, cols.LEAVE_DATE).getValue() || '';
-          userObj.leaveReason = rosterSheet.getRange(rosterRow, cols.LEAVE_REASON).getValue() || '';
-          userObj.workName = rosterSheet.getRange(rosterRow, cols.WORK_NAME).getValue() || '';
-          userObj.workContact = rosterSheet.getRange(rosterRow, cols.WORK_CONTACT).getValue() || '';
-          userObj.workContent = rosterSheet.getRange(rosterRow, cols.WORK_CONTENT).getValue() || '';
-          userObj.contractType = rosterSheet.getRange(rosterRow, cols.CONTRACT_TYPE).getValue() || '';
-          userObj.employmentSupport = rosterSheet.getRange(rosterRow, cols.EMPLOYMENT_SUPPORT).getValue() || '';
-          userObj.notes = rosterSheet.getRange(rosterRow, cols.NOTES).getValue() || '';
+          userObj.leaveDate = r[rc.LEAVE_DATE - 1] || '';
+          userObj.leaveReason = r[rc.LEAVE_REASON - 1] || '';
+          userObj.workName = r[rc.WORK_NAME - 1] || '';
+          userObj.workContact = r[rc.WORK_CONTACT - 1] || '';
+          userObj.workContent = r[rc.WORK_CONTENT - 1] || '';
+          userObj.contractType = r[rc.CONTRACT_TYPE - 1] || '';
+          userObj.employmentSupport = r[rc.EMPLOYMENT_SUPPORT - 1] || '';
+          userObj.notes = r[rc.NOTES - 1] || '';
         }
 
         userList.push(userObj);
@@ -1303,6 +1428,7 @@ function handleGetUserList() {
 
 /**
  * 利用者を新規登録
+ * 一括取得・一括書き込みで高速化
  */
 function handleCreateUser(data) {
   try {
@@ -1318,67 +1444,71 @@ function handleCreateUser(data) {
     }
 
     const sheet = getSheet(SHEET_NAMES.MASTER);
-    const lastRow = sheet.getLastRow();
+    const cols = MASTER_CONFIG.USER_COLS;
+    const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+    const numRows = 200 - startRow + 1;
 
-    // 同じ名前の利用者が既に存在するかチェック
-    for (let row = MASTER_CONFIG.USER_DATA_START_ROW; row <= lastRow; row++) {
-      const existingName = sheet.getRange(row, MASTER_CONFIG.USER_COLS.NAME).getValue();
+    // マスタ設定シートのA列（名前）を一括取得
+    const nameData = sheet.getRange(startRow, cols.NAME, numRows, 1).getValues();
+
+    // 名前の重複チェックと空行探しを同時に実行
+    let newRow = -1;
+    for (let i = 0; i < nameData.length; i++) {
+      const existingName = nameData[i][0];
+
+      // 名前重複チェック
       if (existingName && existingName === data.name) {
         return createErrorResponse('この利用者名は既に登録されています');
       }
-    }
 
-    // 空行を探す（A列が空の行）
-    let newRow = -1;
-    for (let row = MASTER_CONFIG.USER_DATA_START_ROW; row <= lastRow; row++) {
-      const existingName = sheet.getRange(row, MASTER_CONFIG.USER_COLS.NAME).getValue();
-      if (!existingName || existingName === '') {
-        newRow = row;
-        break;
+      // 空行を探す（最初に見つかった空行を記録）
+      if (newRow === -1 && (!existingName || existingName === '')) {
+        newRow = startRow + i;
       }
     }
 
     // 空行が見つからなければ最後に追加
     if (newRow === -1) {
-      newRow = lastRow + 1;
+      newRow = startRow + nameData.length;
     }
 
-    // データを書き込む（マスタ設定シート）
-    const cols = MASTER_CONFIG.USER_COLS;
-    sheet.getRange(newRow, cols.NAME).setValue(data.name);
-    sheet.getRange(newRow, cols.FURIGANA).setValue(data.furigana);
-    sheet.getRange(newRow, cols.STATUS).setValue(data.status);
-
-    // 曜日別出欠予定を書き込む
-    sheet.getRange(newRow, cols.SCHEDULED_MON).setValue(data.scheduledMon || '');
-    sheet.getRange(newRow, cols.SCHEDULED_TUE).setValue(data.scheduledTue || '');
-    sheet.getRange(newRow, cols.SCHEDULED_WED).setValue(data.scheduledWed || '');
-    sheet.getRange(newRow, cols.SCHEDULED_THU).setValue(data.scheduledThu || '');
-    sheet.getRange(newRow, cols.SCHEDULED_FRI).setValue(data.scheduledFri || '');
-    sheet.getRange(newRow, cols.SCHEDULED_SAT).setValue(data.scheduledSat || '');
-    sheet.getRange(newRow, cols.SCHEDULED_SUN).setValue(data.scheduledSun || '');
+    // マスタ設定シートにデータを一括書き込み（A〜J列）
+    const masterWriteData = [[
+      data.name,
+      data.furigana,
+      data.status,
+      data.scheduledMon || '',
+      data.scheduledTue || '',
+      data.scheduledWed || '',
+      data.scheduledThu || '',
+      data.scheduledFri || '',
+      data.scheduledSat || '',
+      data.scheduledSun || ''
+    ]];
+    sheet.getRange(newRow, cols.NAME, 1, 10).setValues(masterWriteData);
 
     // 名簿_2025シートにも書き込む
     const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
-    let rosterRow = 3; // 名簿シートは3行目からデータ開始
     const rosterLastRow = rosterSheet.getLastRow();
+    const rosterNumRows = Math.max(0, rosterLastRow - 2);
 
-    // 名簿シートの空行を探す（B列が空の行）
-    for (let row = 3; row <= rosterLastRow; row++) {
-      const existingName = rosterSheet.getRange(row, ROSTER_COLS.NAME).getValue();
-      if (!existingName || existingName === '') {
-        rosterRow = row;
-        break;
+    // 名簿シートのB列（名前）を一括取得
+    let rosterRow = 3;
+    if (rosterNumRows > 0) {
+      const rosterNameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, rosterNumRows, 1).getValues();
+      rosterRow = rosterLastRow + 1; // デフォルトは最後
+
+      for (let i = 0; i < rosterNameData.length; i++) {
+        const existingName = rosterNameData[i][0];
+        if (!existingName || existingName === '') {
+          rosterRow = 3 + i;
+          break;
+        }
       }
     }
 
-    // 空行が見つからなければ最後に追加
-    if (rosterRow === 3 && rosterSheet.getRange(3, ROSTER_COLS.NAME).getValue()) {
-      rosterRow = rosterLastRow + 1;
-    }
-
     // 名簿シートにデータを書き込む
-    writeToRosterSheet(rosterSheet, rosterRow, data);
+    writeToRosterSheetBatch(rosterSheet, rosterRow, data);
 
     return createSuccessResponse({
       message: '利用者を登録しました',
@@ -1422,54 +1552,68 @@ function handleUpdateUser(data) {
       return createErrorResponse('契約状態は「契約中」または「退所済み」を指定してください');
     }
 
+    // 退所日が入力されている場合は自動的に契約状態を「退所済み」に変更
+    if (data.leaveDate && data.leaveDate !== '') {
+      data.status = '退所済み';
+    }
+
     const sheet = getSheet(SHEET_NAMES.MASTER);
-    const lastRow = sheet.getLastRow();
+    const cols = MASTER_CONFIG.USER_COLS;
+    const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+    const numRows = 200 - startRow + 1;
 
-    // 同じ名前の利用者が既に存在するかチェック（自分自身の行は除外）
-    for (let row = MASTER_CONFIG.USER_DATA_START_ROW; row <= lastRow; row++) {
-      if (row === data.rowNumber) continue; // 自分自身はスキップ
+    // マスタ設定シートのA列（名前）を一括取得
+    const nameData = sheet.getRange(startRow, cols.NAME, numRows, 1).getValues();
 
-      const existingName = sheet.getRange(row, MASTER_CONFIG.USER_COLS.NAME).getValue();
+    // 元の利用者名を取得（名簿シート更新のため）
+    const originalName = nameData[data.rowNumber - startRow][0];
+
+    // 名前重複チェック（自分自身の行は除外）
+    for (let i = 0; i < nameData.length; i++) {
+      const actualRow = startRow + i;
+      if (actualRow === data.rowNumber) continue; // 自分自身はスキップ
+
+      const existingName = nameData[i][0];
       if (existingName && existingName === data.name) {
         return createErrorResponse('この利用者名は既に登録されています');
       }
     }
 
-    // 元の利用者名を取得（名簿シート更新のため）
-    const originalName = sheet.getRange(data.rowNumber, MASTER_CONFIG.USER_COLS.NAME).getValue();
-
-    // データを更新（マスタ設定シート）
-    const cols = MASTER_CONFIG.USER_COLS;
-    sheet.getRange(data.rowNumber, cols.NAME).setValue(data.name);
-    sheet.getRange(data.rowNumber, cols.FURIGANA).setValue(data.furigana);
-    sheet.getRange(data.rowNumber, cols.STATUS).setValue(data.status);
-
-    // 曜日別出欠予定を更新
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_MON).setValue(data.scheduledMon || '');
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_TUE).setValue(data.scheduledTue || '');
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_WED).setValue(data.scheduledWed || '');
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_THU).setValue(data.scheduledThu || '');
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_FRI).setValue(data.scheduledFri || '');
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_SAT).setValue(data.scheduledSat || '');
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_SUN).setValue(data.scheduledSun || '');
+    // マスタ設定シートにデータを一括書き込み（A〜J列）
+    const masterWriteData = [[
+      data.name,
+      data.furigana,
+      data.status,
+      data.scheduledMon || '',
+      data.scheduledTue || '',
+      data.scheduledWed || '',
+      data.scheduledThu || '',
+      data.scheduledFri || '',
+      data.scheduledSat || '',
+      data.scheduledSun || ''
+    ]];
+    sheet.getRange(data.rowNumber, cols.NAME, 1, 10).setValues(masterWriteData);
 
     // 名簿_2025シートも更新
     const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
     const rosterLastRow = rosterSheet.getLastRow();
+    const rosterNumRows = Math.max(0, rosterLastRow - 2);
 
-    // 元の名前で名簿シートの行を検索
+    // 名簿シートのB列（名前）を一括取得して行を検索
     let rosterRow = -1;
-    for (let row = 3; row <= rosterLastRow; row++) {
-      const rosterName = rosterSheet.getRange(row, ROSTER_COLS.NAME).getValue();
-      if (rosterName === originalName) {
-        rosterRow = row;
-        break;
+    if (rosterNumRows > 0) {
+      const rosterNameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, rosterNumRows, 1).getValues();
+      for (let i = 0; i < rosterNameData.length; i++) {
+        if (rosterNameData[i][0] === originalName) {
+          rosterRow = 3 + i;
+          break;
+        }
       }
     }
 
     // 名簿シートの行が見つかった場合のみ更新
     if (rosterRow !== -1) {
-      writeToRosterSheet(rosterSheet, rosterRow, data);
+      writeToRosterSheetBatch(rosterSheet, rosterRow, data);
     }
 
     return createSuccessResponse({
@@ -1519,23 +1663,29 @@ function handleChangeUserStatus(data) {
     // 名簿_2025シートも更新
     const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
     const rosterLastRow = rosterSheet.getLastRow();
+    const rosterNumRows = Math.max(0, rosterLastRow - 2);
 
-    // 元の名前で名簿シートの行を検索
-    for (let row = 3; row <= rosterLastRow; row++) {
-      const rosterName = rosterSheet.getRange(row, ROSTER_COLS.NAME).getValue();
-      if (rosterName === userName) {
-        // 名簿シートのステータスも更新
-        rosterSheet.getRange(row, ROSTER_COLS.STATUS).setValue(data.status);
+    // 名簿シートのB列（名前）を一括取得して行を検索
+    if (rosterNumRows > 0) {
+      const rosterNameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, rosterNumRows, 1).getValues();
+      for (let i = 0; i < rosterNameData.length; i++) {
+        if (rosterNameData[i][0] === userName) {
+          const rosterRow = 3 + i;
+          // 名簿シートのステータスと退所日を一括更新
+          const leaveDate = (data.status === '退所済み' && data.leaveDate)
+            ? data.leaveDate
+            : (data.status === '契約中' ? '' : null);
 
-        // 退所日も更新（退所済みに変更する場合のみ）
-        if (data.status === '退所済み' && data.leaveDate) {
-          rosterSheet.getRange(row, ROSTER_COLS.LEAVE_DATE).setValue(data.leaveDate);
-        } else if (data.status === '契約中') {
-          // 契約中に戻す場合は退所日をクリア
-          rosterSheet.getRange(row, ROSTER_COLS.LEAVE_DATE).setValue('');
+          // ステータス更新
+          rosterSheet.getRange(rosterRow, ROSTER_COLS.STATUS).setValue(data.status);
+
+          // 退所日も更新（必要な場合）
+          if (leaveDate !== null) {
+            rosterSheet.getRange(rosterRow, ROSTER_COLS.LEAVE_DATE).setValue(leaveDate);
+          }
+
+          break;
         }
-
-        break;
       }
     }
 
@@ -1561,22 +1711,13 @@ function handleDeleteUser(data) {
     }
 
     const sheet = getSheet(SHEET_NAMES.MASTER);
+    const cols = MASTER_CONFIG.USER_COLS;
 
     // 削除前に利用者名を取得（名簿シート削除のため）
-    const userName = sheet.getRange(data.rowNumber, MASTER_CONFIG.USER_COLS.NAME).getValue();
+    const userName = sheet.getRange(data.rowNumber, cols.NAME).getValue();
 
-    // マスタ設定シートのA-J列のデータをクリア
-    const cols = MASTER_CONFIG.USER_COLS;
-    sheet.getRange(data.rowNumber, cols.NAME).clearContent();
-    sheet.getRange(data.rowNumber, cols.FURIGANA).clearContent();
-    sheet.getRange(data.rowNumber, cols.STATUS).clearContent();
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_MON).clearContent();
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_TUE).clearContent();
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_WED).clearContent();
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_THU).clearContent();
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_FRI).clearContent();
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_SAT).clearContent();
-    sheet.getRange(data.rowNumber, cols.SCHEDULED_SUN).clearContent();
+    // マスタ設定シートのA-J列のデータを一括クリア（10列）
+    sheet.getRange(data.rowNumber, cols.NAME, 1, 10).clearContent();
 
     // 名簿_2025シートからも削除
     const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
@@ -2199,11 +2340,8 @@ function handleGetHealthBatch(userNames) {
     // キャッシュからデータを取得
     const cachedData = getCacheData(cacheKey);
     if (cachedData) {
-      console.log('キャッシュヒット: ' + cacheKey);
       return createSuccessResponse({ healthData: cachedData, cached: true });
     }
-
-    console.log('キャッシュミス: ' + cacheKey);
 
     const sheet = getSheet(SHEET_NAMES.SUPPORT);
     const actualLastRow = findActualLastRow(sheet, SUPPORT_COLS.USER_NAME);

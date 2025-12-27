@@ -3,7 +3,9 @@ import 'api_service.dart';
 
 /// 勤怠データ（出勤・退勤）を扱う機能
 class AttendanceService {
-  final ApiService _apiService = ApiService();
+  final ApiService _apiService;
+
+  AttendanceService({String? gasUrl}) : _apiService = ApiService(facilityGasUrl: gasUrl);
 
   /// 出勤登録
   Future<Map<String, dynamic>> checkin(Attendance attendance) async {

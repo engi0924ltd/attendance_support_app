@@ -13,11 +13,13 @@ import '../../widgets/health_line_chart.dart';
 class UserDetailScreen extends StatefulWidget {
   final String date;
   final String userName;
+  final String? gasUrl; // 施設管理者用（施設固有のGAS URL）
 
   const UserDetailScreen({
     super.key,
     required this.date,
     required this.userName,
+    this.gasUrl,
   });
 
   @override
@@ -25,9 +27,9 @@ class UserDetailScreen extends StatefulWidget {
 }
 
 class _UserDetailScreenState extends State<UserDetailScreen> {
-  final AttendanceService _attendanceService = AttendanceService();
-  final SupportService _supportService = SupportService();
-  final MasterService _masterService = MasterService();
+  late final AttendanceService _attendanceService;
+  late final SupportService _supportService;
+  late final MasterService _masterService;
   final _supportFormKey = GlobalKey<FormState>();
 
   bool _isLoading = true;
@@ -70,6 +72,10 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // サービス初期化（施設管理者の場合はgasUrlを使用）
+    _attendanceService = AttendanceService(gasUrl: widget.gasUrl);
+    _supportService = SupportService(gasUrl: widget.gasUrl);
+    _masterService = MasterService(gasUrl: widget.gasUrl);
     _loadData();
   }
 

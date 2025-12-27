@@ -3,7 +3,9 @@ import 'api_service.dart';
 
 /// 支援記録データを扱う機能
 class SupportService {
-  final ApiService _apiService = ApiService();
+  final ApiService _apiService;
+
+  SupportService({String? gasUrl}) : _apiService = ApiService(facilityGasUrl: gasUrl);
 
   /// 指定日・利用者の支援記録を取得
   Future<SupportRecord?> getSupportRecord(String date, String userName) async {

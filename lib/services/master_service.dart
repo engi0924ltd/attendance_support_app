@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/dropdown_options.dart';
@@ -6,7 +7,9 @@ import 'api_service.dart';
 
 /// マスタデータ（利用者リストやプルダウン選択肢）を取得する機能
 class MasterService {
-  final ApiService _apiService = ApiService();
+  final ApiService _apiService;
+
+  MasterService({String? gasUrl}) : _apiService = ApiService(facilityGasUrl: gasUrl);
 
   // キャッシュのキー
   static const String _cacheKeyDropdowns = 'cached_dropdown_options';
@@ -14,9 +17,11 @@ class MasterService {
   static const String _cacheKeyUsers = 'cached_users';
   static const String _cacheKeyUsersTimestamp = 'cached_users_timestamp';
 
-  // キャッシュの有効期限
-  static const Duration _cacheExpiry = Duration(hours: 24);
-  static const Duration _usersCacheExpiry = Duration(hours: 1); // 利用者は1時間キャッシュ
+  // キャッシュの有効期限（デバッグ時は5分、本番は24時間/1時間）
+  static Duration get _cacheExpiry =>
+      kDebugMode ? const Duration(minutes: 5) : const Duration(hours: 24);
+  static Duration get _usersCacheExpiry =>
+      kDebugMode ? const Duration(minutes: 5) : const Duration(hours: 1);
 
   /// 在籍中の利用者一覧を取得（キャッシュ機能付き）
   Future<List<User>> getActiveUsers({bool forceRefresh = false}) async {

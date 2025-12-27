@@ -900,7 +900,6 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
           ListTile(
             leading: const Icon(Icons.analytics, color: Colors.indigo),
             title: const Text('分析'),
-            subtitle: const Text('施設全体・個人の統計', style: TextStyle(fontSize: 12)),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -941,7 +940,6 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
           ListTile(
             leading: const Icon(Icons.campaign, color: Colors.red),
             title: const Text('一斉送信'),
-            subtitle: const Text('全員にメッセージを送信', style: TextStyle(fontSize: 12)),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -957,7 +955,6 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
           ListTile(
             leading: const Icon(Icons.person_search, color: Colors.red),
             title: const Text('選択送信'),
-            subtitle: const Text('選択した人にメッセージを送信', style: TextStyle(fontSize: 12)),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(

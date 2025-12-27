@@ -252,6 +252,8 @@ function doGet(e) {
 
     if (action === 'master/users') {
       return handleGetUsers();
+    } else if (action === 'master/all-users') {
+      return handleGetAllUsers();
     } else if (action === 'master/dropdowns') {
       return handleGetDropdowns();
     } else if (action === 'master/evaluation-alerts') {
@@ -300,8 +302,14 @@ function doGet(e) {
       const userNames = decodeURIComponent(action.split('/')[2]).split(',');
       return handleGetHealthBatch(userNames);
     } else if (action === 'chatwork/users') {
-      // Chatworkルームを持つ利用者一覧を取得
       return handleGetChatworkUsers();
+    } else if (action === 'analytics/facility-stats') {
+      return handleGetFacilityStats();
+    } else if (action === 'analytics/weekly-schedule') {
+      return handleGetWeeklySchedule();
+    } else if (action.startsWith('analytics/user-stats/')) {
+      const userName = decodeURIComponent(action.split('/')[2]);
+      return handleGetUserStats(userName);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -345,10 +353,8 @@ function doPost(e) {
     } else if (action === 'support/upsert') {
       return handleUpsertSupportRecord(data);
     } else if (action === 'chatwork/broadcast') {
-      // Chatwork一斉送信
       return handleChatworkBroadcast(data);
     } else if (action === 'chatwork/set-api-key') {
-      // Chatwork APIキーを設定
       return handleSetChatworkApiKey(data);
     }
 
@@ -394,6 +400,41 @@ function handleGetUsers() {
         status: status
       });
     }
+  }
+
+  return createSuccessResponse({ users });
+}
+
+/**
+ * 全利用者一覧を取得（退所済み含む）
+ * 過去の実績記録画面用
+ */
+function handleGetAllUsers() {
+  const sheet = getSheet(SHEET_NAMES.MASTER);
+  const users = [];
+
+  // 【最適化】利用者データを一括取得（8行目から最大500行まで）
+  const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+  const maxRows = 500;
+  const numCols = 3; // NAME, FURIGANA, STATUS
+
+  const allData = sheet.getRange(startRow, MASTER_CONFIG.USER_COLS.NAME, maxRows, numCols).getValues();
+
+  for (let i = 0; i < allData.length; i++) {
+    const name = allData[i][0];
+    const furigana = allData[i][1];
+    const status = allData[i][2];
+
+    if (!name || name === '') {
+      break;
+    }
+
+    // 全利用者を返す（ステータス問わず）
+    users.push({
+      name: name,
+      furigana: furigana || '',
+      status: status || ''
+    });
   }
 
   return createSuccessResponse({ users });
@@ -458,8 +499,18 @@ function handleGetDropdowns() {
  * 評価アラート情報を取得
  * 支援記録で「在宅支援評価対象」をONにした日から1週間経過でアラート
  * 支援記録で「施設外評価対象」をONにした日から2週間経過でアラート
+ * ※キャッシュ機能により、5分間は同じデータを再利用
  */
 function handleGetEvaluationAlerts() {
+  // キャッシュをチェック
+  const cacheKey = 'evaluation_alerts';
+  const cachedData = getCacheData(cacheKey);
+  if (cachedData) {
+    console.log('キャッシュヒット: ' + cacheKey);
+    return createSuccessResponse({ alerts: cachedData, cached: true });
+  }
+  console.log('キャッシュミス: ' + cacheKey);
+
   const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
   const masterSheet = getSheet(SHEET_NAMES.MASTER);
 
@@ -638,7 +689,10 @@ function handleGetEvaluationAlerts() {
     }
   }
 
-  return createSuccessResponse({ alerts: alerts });
+  // キャッシュに保存（5分間有効）
+  setCacheData(cacheKey, alerts, 300);
+
+  return createSuccessResponse({ alerts: alerts, cached: false });
 }
 
 /**
@@ -1965,7 +2019,8 @@ function handleUpdateAttendance(data) {
     const rowIndex = findSupportRow(sheet, date, userName);
 
     if (!rowIndex) {
-      return createErrorResponse('勤怠データが見つかりません');
+      // レコードがない場合は新規作成（欠席登録などに対応）
+      return createAttendanceRecord(sheet, date, userName, data);
     }
 
     // 【高速化】既存の行データを一括取得（38列まで取得）
@@ -2013,6 +2068,70 @@ function handleUpdateAttendance(data) {
     });
   } catch (error) {
     return createErrorResponse('勤怠データ更新エラー: ' + error.message);
+  }
+}
+
+/**
+ * 勤怠レコードを新規作成（支援者による欠席登録など）
+ */
+function createAttendanceRecord(sheet, date, userName, data) {
+  try {
+    // A列が空欄の最上行を探す
+    const lastRow = sheet.getLastRow();
+    const maxRow = Math.max(lastRow, 200);
+    const dateColumn = sheet.getRange(2, SUPPORT_COLS.DATE, maxRow - 1, 1).getValues();
+
+    let newRow = 2;
+    for (let i = 0; i < dateColumn.length; i++) {
+      if (dateColumn[i][0] === '' || dateColumn[i][0] === null) {
+        newRow = i + 2;
+        break;
+      }
+    }
+
+    if (newRow === 2 && dateColumn[0][0] !== '' && dateColumn[0][0] !== null) {
+      newRow = maxRow + 1;
+    }
+
+    // マスタ設定シートから曜日別出欠予定を自動取得
+    const scheduledAttendance = getUserScheduledAttendance(userName, date);
+    const scheduledValue = scheduledAttendance || '';
+
+    // 新規レコードを作成
+    const rowData = [
+      date,                              // A列: 日時
+      userName,                          // B列: 利用者名
+      scheduledValue,                    // C列: 出欠（予定）
+      data.attendanceStatus || '',       // D列: 出欠（実績）
+      '',                                // E列: 担当業務AM
+      '',                                // F列: 担当業務PM
+      '',                                // G列: 業務連絡
+      '',                                // H列: 本日の体調
+      '',                                // I列: 睡眠状況
+      '',                                // J列: 出勤時コメント
+      '',                                // K列: 疲労感
+      '',                                // L列: 心理的負荷
+      '',                                // M列: 退勤時コメント
+      '',                                // N列: （予備）
+      '',                                // O列: （予備）
+      data.checkinTime || '',            // P列: 勤務開始時刻
+      data.checkoutTime || '',           // Q列: 勤務終了時刻
+      data.lunchBreak || '',             // R列: 昼休憩
+      data.shortBreak || '',             // S列: 15分休憩
+      data.otherBreak || '',             // T列: 他休憩時間
+      0                                  // U列: 実労時間
+    ];
+
+    // A列〜U列を一括入力（21列）
+    sheet.getRange(newRow, SUPPORT_COLS.DATE, 1, 21).setValues([rowData]);
+
+    return createSuccessResponse({
+      message: '勤怠データを登録しました',
+      rowId: newRow,
+      created: true
+    });
+  } catch (error) {
+    return createErrorResponse('勤怠データ登録エラー: ' + error.message);
   }
 }
 
@@ -2961,159 +3080,394 @@ function findActualLastRow(sheet, userNameColumn) {
   return Math.max(1, actualLast);
 }
 
-// === Chatwork連携機能 ===
+// ========================================
+// Chatwork関連機能
+// ========================================
 
 /**
- * Chatworkルームを持つ利用者一覧を取得
+ * ChatWorkルームIDを持つ利用者一覧を取得
+ * 【最適化】一括取得で高速化
  */
 function handleGetChatworkUsers() {
   try {
     const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
     const lastRow = rosterSheet.getLastRow();
-
-    if (lastRow < 2) {
+    if (lastRow < 3) {
       return createSuccessResponse({ users: [] });
     }
 
+    // 一括取得: B列(氏名)とG列(ChatWorkルームID)
+    const dataRange = rosterSheet.getRange(3, 1, lastRow - 2, 7);
+    const allData = dataRange.getValues();
+
     const users = [];
+    for (let i = 0; i < allData.length; i++) {
+      const name = allData[i][1];  // B列: 氏名
+      const roomId = allData[i][6]; // G列: ChatWorkルームID
 
-    // B列（氏名）、E列（ステータス）、G列（ChatWorkルームID）を一括取得
-    const data = rosterSheet.getRange(2, 1, lastRow - 1, 8).getValues();
-
-    for (let i = 0; i < data.length; i++) {
-      const userName = data[i][ROSTER_COLS.NAME - 1];  // B列（2）
-      const status = data[i][ROSTER_COLS.STATUS - 1];  // E列（5）
-      const chatworkRoomId = data[i][ROSTER_COLS.CHATWORK_ID - 1];  // G列（7）
-
-      // 有効な利用者のみ
-      if (userName && status !== '退所' && status !== '就労') {
+      if (name && name !== '') {
         users.push({
-          userName: userName,
-          status: status || '',
-          chatworkRoomId: chatworkRoomId ? String(chatworkRoomId) : null
+          userName: name,
+          chatworkRoomId: roomId || ''
         });
       }
     }
 
     return createSuccessResponse({ users: users });
-
   } catch (error) {
-    return createErrorResponse('Chatworkユーザー取得エラー: ' + error.message);
+    return createErrorResponse('Chatwork利用者取得エラー: ' + error.message);
   }
 }
 
 /**
- * Chatwork一斉メッセージ送信
+ * Chatworkメッセージ送信（選択送信対応）
+ * 【最適化】APIキーはPropertiesServiceから取得、一括データ取得
  */
 function handleChatworkBroadcast(data) {
   try {
     const message = data.message;
-
     if (!message) {
       return createErrorResponse('メッセージが指定されていません');
     }
 
-    // Chatwork APIキーを取得（スクリプトプロパティから）
-    const apiKey = PropertiesService.getScriptProperties().getProperty('CHATWORK_API_KEY');
+    // 選択された利用者リスト（指定されていない場合は全員）
+    const selectedUsers = data.selectedUsers || null;
+    const selectedSet = selectedUsers ? new Set(selectedUsers) : null;
 
+    // APIキーをPropertiesServiceから取得
+    const apiKey = PropertiesService.getScriptProperties().getProperty('CHATWORK_API_KEY');
     if (!apiKey) {
-      return createErrorResponse('Chatwork APIキーが設定されていません。管理者に連絡してください。');
+      return createErrorResponse('ChatWork APIキーが設定されていません');
     }
 
-    // Chatworkルームを持つ利用者を取得
+    // ルームIDを持つ利用者を一括取得
     const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
     const lastRow = rosterSheet.getLastRow();
-
-    if (lastRow < 2) {
-      return createErrorResponse('送信先の利用者がいません');
+    if (lastRow < 3) {
+      return createSuccessResponse({ sentCount: 0, failedCount: 0 });
     }
 
-    // B列（氏名）、E列（ステータス）、G列（ChatWorkルームID）を取得
-    const userData = rosterSheet.getRange(2, 1, lastRow - 1, 8).getValues();
+    const dataRange = rosterSheet.getRange(3, 1, lastRow - 2, 7);
+    const allData = dataRange.getValues();
 
     let sentCount = 0;
     let failedCount = 0;
     const errors = [];
 
-    for (let i = 0; i < userData.length; i++) {
-      const userName = userData[i][ROSTER_COLS.NAME - 1];
-      const status = userData[i][ROSTER_COLS.STATUS - 1];
-      const roomId = userData[i][ROSTER_COLS.CHATWORK_ID - 1];
+    for (let i = 0; i < allData.length; i++) {
+      const name = allData[i][1];  // B列: 氏名
+      const roomId = allData[i][6]; // G列: ChatWorkルームID
 
-      // 有効な利用者でルームIDがある場合のみ送信
-      if (userName && status !== '退所' && status !== '就労' && roomId) {
+      // 選択送信の場合、選択された利用者のみ対象
+      if (selectedSet && !selectedSet.has(name)) {
+        continue;
+      }
+
+      if (name && roomId && roomId !== '') {
         try {
-          sendChatworkMessage(apiKey, String(roomId), message);
-          sentCount++;
-          // API制限対策：少し待機
-          Utilities.sleep(200);
+          const url = 'https://api.chatwork.com/v2/rooms/' + roomId + '/messages';
+          const options = {
+            method: 'post',
+            headers: { 'X-ChatWorkToken': apiKey },
+            payload: { body: message },
+            muteHttpExceptions: true
+          };
+
+          const response = UrlFetchApp.fetch(url, options);
+          const responseCode = response.getResponseCode();
+          if (responseCode === 200) {
+            sentCount++;
+          } else {
+            failedCount++;
+            const errorDetail = name + ': ' + responseCode + ' - ' + response.getContentText();
+            errors.push(errorDetail);
+            Logger.log('Chatwork送信失敗: ' + errorDetail);
+          }
         } catch (e) {
           failedCount++;
-          errors.push(userName + ': ' + e.message);
+          errors.push(name + ': ' + e.message);
+          Logger.log('Chatwork送信エラー (' + name + '): ' + e.message);
         }
       }
     }
 
     return createSuccessResponse({
-      message: '送信完了',
       sentCount: sentCount,
       failedCount: failedCount,
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors
     });
-
   } catch (error) {
     return createErrorResponse('Chatwork送信エラー: ' + error.message);
   }
 }
 
 /**
- * Chatwork APIでメッセージを送信
- */
-function sendChatworkMessage(apiKey, roomId, message) {
-  const url = 'https://api.chatwork.com/v2/rooms/' + roomId + '/messages';
-
-  const options = {
-    method: 'post',
-    headers: {
-      'X-ChatWorkToken': apiKey
-    },
-    payload: {
-      body: message
-    },
-    muteHttpExceptions: true
-  };
-
-  const response = UrlFetchApp.fetch(url, options);
-  const responseCode = response.getResponseCode();
-
-  if (responseCode !== 200) {
-    const responseBody = response.getContentText();
-    throw new Error('APIエラー(' + responseCode + '): ' + responseBody);
-  }
-
-  return JSON.parse(response.getContentText());
-}
-
-/**
- * Chatwork APIキーをスクリプトプロパティに設定
+ * ChatWork APIキーを設定
  */
 function handleSetChatworkApiKey(data) {
   try {
     const apiKey = data.apiKey;
-
     if (!apiKey) {
       return createErrorResponse('APIキーが指定されていません');
     }
 
-    // スクリプトプロパティに保存
     PropertiesService.getScriptProperties().setProperty('CHATWORK_API_KEY', apiKey);
 
-    return createSuccessResponse({
-      message: 'Chatwork APIキーを設定しました'
-    });
-
+    return createSuccessResponse({ message: 'APIキーを設定しました' });
   } catch (error) {
     return createErrorResponse('APIキー設定エラー: ' + error.message);
   }
 }
 
+// =============================================
+// 分析機能（Analytics）
+// =============================================
+
+/**
+ * 施設全体の統計を取得
+ */
+function handleGetFacilityStats() {
+  try {
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+
+    // 当月の範囲を計算
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+
+    // 契約中の利用者数を取得
+    let totalUsers = 0;
+    const masterLastRow = masterSheet.getLastRow();
+    if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
+      const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+      const numRows = masterLastRow - startRow + 1;
+      const masterData = masterSheet.getRange(startRow, MASTER_CONFIG.USER_COLS.NAME, numRows, 3).getValues();
+
+      for (let i = 0; i < masterData.length; i++) {
+        const name = masterData[i][0];
+        if (!name || name === '') break;
+        const status = masterData[i][2];
+        if (status === '契約中') {
+          totalUsers++;
+        }
+      }
+    }
+
+    // 当月の出勤データを集計
+    const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
+    let monthlyAttendance = 0;
+    let totalScheduled = 0;
+    const workDays = new Set();
+
+    if (actualLastRow >= 2) {
+      const MAX_SEARCH_ROWS = 1000;
+      const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+      const startRow = Math.max(2, actualLastRow - searchRows + 1);
+
+      // 日付、利用者名、出欠予定、出欠を一括取得
+      const data = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, searchRows, 4).getValues();
+
+      for (let i = 0; i < data.length; i++) {
+        const dateVal = data[i][0];
+        if (!dateVal) continue;
+
+        const rowDate = new Date(dateVal);
+        // 当月のデータのみ集計
+        if (rowDate >= firstDay && rowDate <= lastDay) {
+          const userName = data[i][1];
+          if (!userName || userName === '') continue;
+
+          const scheduled = data[i][2];
+          const attendance = data[i][3];
+
+          // 出欠予定がある場合カウント
+          if (scheduled && scheduled !== '') {
+            totalScheduled++;
+          }
+
+          // 出勤の場合カウント
+          if (attendance === '出勤' || attendance === '遅刻') {
+            monthlyAttendance++;
+            // 稼働日として記録
+            const dateStr = formatDate(dateVal);
+            workDays.add(dateStr);
+          }
+        }
+      }
+    }
+
+    // 出勤率を計算
+    const attendanceRate = totalScheduled > 0 ? monthlyAttendance / totalScheduled : 0;
+
+    return createSuccessResponse({
+      totalUsers: totalUsers,
+      attendanceRate: attendanceRate,
+      monthlyWorkDays: workDays.size,
+      monthlyAttendance: monthlyAttendance
+    });
+  } catch (error) {
+    return createErrorResponse('施設統計取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 曜日別出勤予定を取得
+ */
+function handleGetWeeklySchedule() {
+  try {
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+
+    const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+
+    // 曜日別のカウント初期化
+    const schedule = {};
+    const details = {};  // 詳細データ（元の値ごとのカウント）
+    weekdays.forEach(day => {
+      schedule[day] = { '本施設': 0, '施設外': 0, '在宅': 0 };
+      details[day] = { '本施設': {}, '施設外': {}, '在宅': {} };
+    });
+
+    const weekdayMap = {
+      4: '月', // D列
+      5: '火', // E列
+      6: '水', // F列
+      7: '木', // G列
+      8: '金', // H列
+      9: '土', // I列
+      10: '日' // J列
+    };
+
+    const masterLastRow = masterSheet.getLastRow();
+    if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
+      const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+      const numRows = masterLastRow - startRow + 1;
+
+      // 名前(A列)、ステータス(C列)、曜日別予定(D-J列)を一括取得
+      const data = masterSheet.getRange(startRow, 1, numRows, 10).getValues();
+
+      for (let i = 0; i < data.length; i++) {
+        const name = data[i][0];
+        if (!name || name === '') break;
+
+        const status = data[i][2]; // C列: ステータス
+        if (status !== '契約中') continue;
+
+        // D列〜J列（曜日別予定）をチェック
+        for (let col = 3; col <= 9; col++) { // 配列インデックス3-9 = D-J列
+          const value = data[i][col];
+          if (!value || value === '') continue;
+
+          const weekday = weekdayMap[col + 1]; // 配列インデックス+1 = 列番号
+          const valueStr = String(value).trim();
+
+          // 値に基づいて分類
+          let category = '';
+          if (valueStr.includes('施設外') || valueStr.includes('外')) {
+            category = '施設外';
+          } else if (valueStr.includes('在宅') || valueStr.includes('自宅')) {
+            category = '在宅';
+          } else if (valueStr !== '') {
+            category = '本施設';
+          }
+
+          if (category) {
+            schedule[weekday][category]++;
+            // 詳細データに元の値をカウント
+            if (!details[weekday][category][valueStr]) {
+              details[weekday][category][valueStr] = 0;
+            }
+            details[weekday][category][valueStr]++;
+          }
+        }
+      }
+    }
+
+    return createSuccessResponse({ schedule: schedule, details: details });
+  } catch (error) {
+    return createErrorResponse('曜日別予定取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 利用者個人の統計を取得
+ */
+function handleGetUserStats(userName) {
+  try {
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+
+    // 当月の範囲を計算
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+
+    const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
+
+    let attendanceDays = 0;
+    let absentDays = 0;
+    let totalScheduled = 0;
+    let totalWorkMinutes = 0;
+
+    if (actualLastRow >= 2) {
+      const MAX_SEARCH_ROWS = 1000;
+      const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+      const startRow = Math.max(2, actualLastRow - searchRows + 1);
+
+      // 日付、利用者名、出欠予定、出欠、実労時間を一括取得
+      const dateData = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, searchRows, 1).getValues();
+      const nameData = supportSheet.getRange(startRow, SUPPORT_COLS.USER_NAME, searchRows, 1).getValues();
+      const scheduledData = supportSheet.getRange(startRow, SUPPORT_COLS.SCHEDULED, searchRows, 1).getValues();
+      const attendanceData = supportSheet.getRange(startRow, SUPPORT_COLS.ATTENDANCE, searchRows, 1).getValues();
+      const workMinutesData = supportSheet.getRange(startRow, SUPPORT_COLS.WORK_MINUTES, searchRows, 1).getValues();
+
+      for (let i = 0; i < searchRows; i++) {
+        const dateVal = dateData[i][0];
+        const rowUserName = nameData[i][0];
+
+        if (!dateVal || !rowUserName) continue;
+        if (rowUserName !== userName) continue;
+
+        const rowDate = new Date(dateVal);
+        // 当月のデータのみ集計
+        if (rowDate >= firstDay && rowDate <= lastDay) {
+          const scheduled = scheduledData[i][0];
+          const attendance = attendanceData[i][0];
+          const workMinutes = workMinutesData[i][0];
+
+          // 出欠予定がある場合カウント
+          if (scheduled && scheduled !== '') {
+            totalScheduled++;
+          }
+
+          // 出欠状況で分類
+          if (attendance === '出勤' || attendance === '遅刻') {
+            attendanceDays++;
+            if (workMinutes && typeof workMinutes === 'number') {
+              totalWorkMinutes += workMinutes;
+            }
+          } else if (attendance === '欠勤') {
+            absentDays++;
+          }
+        }
+      }
+    }
+
+    // 統計を計算
+    const attendanceRate = totalScheduled > 0 ? attendanceDays / totalScheduled : 0;
+    const avgWorkMinutes = attendanceDays > 0 ? Math.round(totalWorkMinutes / attendanceDays) : 0;
+
+    return createSuccessResponse({
+      attendanceRate: attendanceRate,
+      totalWorkMinutes: totalWorkMinutes,
+      avgWorkMinutes: avgWorkMinutes,
+      attendanceDays: attendanceDays,
+      absentDays: absentDays
+    });
+  } catch (error) {
+    return createErrorResponse('利用者統計取得エラー: ' + error.message);
+  }
+}

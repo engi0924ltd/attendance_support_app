@@ -138,6 +138,13 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
   OverlayEntry _createOverlayEntry() {
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
+    final position = renderBox.localToGlobal(Offset.zero);
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // 下部に十分なスペースがあるか確認（250px + 余裕50px）
+    const dropdownHeight = 250.0;
+    final spaceBelow = screenHeight - position.dy - size.height - 50;
+    final showAbove = spaceBelow < dropdownHeight;
 
     return OverlayEntry(
       builder: (context) => Positioned(
@@ -145,7 +152,9 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
         child: CompositedTransformFollower(
           link: _layerLink,
           showWhenUnlinked: false,
-          offset: Offset(0, size.height + 4),
+          offset: showAbove
+              ? Offset(0, -dropdownHeight - 4) // 上方向に展開
+              : Offset(0, size.height + 4),    // 下方向に展開
           child: Material(
             elevation: 4,
             borderRadius: BorderRadius.circular(8),
