@@ -15,7 +15,9 @@
 ---
 
 ## 詳細ドキュメント
-シート構成・プルダウン設定・進捗状況は `claudedocs/PROJECT_SUMMARY.md` を参照
+
+- **実装状況一覧**: `claudedocs/IMPLEMENTATION_STATUS.md`
+- **シート構成・プルダウン設定**: `claudedocs/PROJECT_SUMMARY.md`
 
 ---
 
@@ -34,13 +36,3 @@ A:日時, B:利用者名, C:予定, D:出欠, E:AM業務, F:PM業務, G:業務�
 
 ### 名簿_2025シート
 A:人数, B:氏名, C:カナ, D:年齢, E:ステータス, F:携帯, **G:ChatWorkルームID**, H:mail, I〜BH:詳細情報
-
----
-
-## 現在の進行中タスク
-
-### Chatwork一斉送信機能
-- [x] Flutter画面作成済み
-- [x] メニュー追加済み
-- [x] サービスメソッド追加済み
-- [ ] `assets/gas/gas_code_v4.js` にエンドポイント追加が必要

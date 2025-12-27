@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/dropdown_options.dart';
@@ -16,12 +15,13 @@ class MasterService {
   static const String _cacheKeyTimestamp = 'cached_dropdown_timestamp';
   static const String _cacheKeyUsers = 'cached_users';
   static const String _cacheKeyUsersTimestamp = 'cached_users_timestamp';
+  static const String _cacheKeyAlerts = 'cached_evaluation_alerts';
+  static const String _cacheKeyAlertsTimestamp = 'cached_alerts_timestamp';
 
-  // キャッシュの有効期限（デバッグ時は5分、本番は24時間/1時間）
-  static Duration get _cacheExpiry =>
-      kDebugMode ? const Duration(minutes: 5) : const Duration(hours: 24);
-  static Duration get _usersCacheExpiry =>
-      kDebugMode ? const Duration(minutes: 5) : const Duration(hours: 1);
+  // キャッシュの有効期限
+  static const Duration _dropdownsCacheExpiry = Duration(hours: 24);  // 24時間
+  static const Duration _usersCacheExpiry = Duration(hours: 1);       // 1時間
+  static const Duration _alertsCacheExpiry = Duration(minutes: 15);   // 15分
 
   /// 在籍中の利用者一覧を取得（キャッシュ機能付き）
   Future<List<User>> getActiveUsers({bool forceRefresh = false}) async {
@@ -97,17 +97,19 @@ class MasterService {
     await prefs.remove(_cacheKeyUsersTimestamp);
   }
 
-  /// プルダウンの選択肢を取得（キャッシュ機能付き）
+  /// プルダウンの選択肢を取得（キャッシュ機能付き・24時間）
   Future<DropdownOptions> getDropdownOptions({bool forceRefresh = false}) async {
     if (!forceRefresh) {
       // キャッシュから取得を試みる
       final cachedOptions = await _getCachedDropdownOptions();
       if (cachedOptions != null) {
+        print('📦 [CACHE] master/dropdowns: キャッシュから取得');
         return cachedOptions;
       }
     }
 
     // APIから取得
+    print('🌐 [API] master/dropdowns: APIから取得');
     final response = await _apiService.get('master/dropdowns');
     final options = DropdownOptions.fromJson(response);
 
@@ -128,7 +130,7 @@ class MasterService {
         final timestamp = DateTime.parse(timestampStr);
         final now = DateTime.now();
 
-        if (now.difference(timestamp) < _cacheExpiry) {
+        if (now.difference(timestamp) < _dropdownsCacheExpiry) {
           // キャッシュが有効期限内
           final cachedJson = prefs.getString(_cacheKeyDropdowns);
           if (cachedJson != null) {
@@ -197,17 +199,83 @@ class MasterService {
     await prefs.remove(_cacheKeyTimestamp);
   }
 
-  /// 評価アラート情報を取得
+  /// 評価アラート情報を取得（キャッシュ機能付き・15分）
   /// 在宅支援（1週間以内）または施設外支援（2週間以内）の評価が必要な利用者を返す
-  Future<List<EvaluationAlert>> getEvaluationAlerts() async {
+  Future<List<EvaluationAlert>> getEvaluationAlerts({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      // キャッシュから取得を試みる
+      final cachedAlerts = await _getCachedAlerts();
+      if (cachedAlerts != null) {
+        print('📦 [CACHE] evaluation-alerts: キャッシュから取得');
+        return cachedAlerts;
+      }
+    }
+
     try {
+      print('🌐 [API] evaluation-alerts: APIから取得');
       final response = await _apiService.get('master/evaluation-alerts');
       final List<dynamic> alertList = response['alerts'] ?? [];
-      return alertList.map((json) => EvaluationAlert.fromJson(json)).toList();
+      final alerts = alertList.map((json) => EvaluationAlert.fromJson(json)).toList();
+
+      // キャッシュに保存
+      await _cacheAlerts(alerts);
+
+      return alerts;
     } catch (e) {
       // エラー時は空のリストを返す（UIに影響しないように）
       return [];
     }
+  }
+
+  /// キャッシュされた評価アラートを取得
+  Future<List<EvaluationAlert>?> _getCachedAlerts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // キャッシュの有効期限をチェック
+      final timestampStr = prefs.getString(_cacheKeyAlertsTimestamp);
+      if (timestampStr != null) {
+        final timestamp = DateTime.parse(timestampStr);
+        final now = DateTime.now();
+
+        if (now.difference(timestamp) < _alertsCacheExpiry) {
+          // キャッシュが有効期限内
+          final cachedJson = prefs.getString(_cacheKeyAlerts);
+          if (cachedJson != null) {
+            final List<dynamic> jsonList = jsonDecode(cachedJson);
+            return jsonList.map((json) => EvaluationAlert.fromJson(json)).toList();
+          }
+        }
+      }
+    } catch (e) {
+      // キャッシュの読み込みに失敗した場合は無視
+    }
+    return null;
+  }
+
+  /// 評価アラートをキャッシュに保存
+  Future<void> _cacheAlerts(List<EvaluationAlert> alerts) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = alerts.map((a) => {
+        'userName': a.userName,
+        'alertType': a.alertType,
+        'daysSinceLastEval': a.daysSinceLastEval,
+        'lastEvalDate': a.lastEvalDate,
+        'message': a.message,
+      }).toList();
+      await prefs.setString(_cacheKeyAlerts, jsonEncode(jsonList));
+      await prefs.setString(_cacheKeyAlertsTimestamp, DateTime.now().toIso8601String());
+    } catch (e) {
+      // キャッシュの保存に失敗しても続行
+    }
+  }
+
+  /// 評価アラートのキャッシュをクリア
+  Future<void> clearAlertsCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_cacheKeyAlerts);
+    await prefs.remove(_cacheKeyAlertsTimestamp);
   }
 }
 

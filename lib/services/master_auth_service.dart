@@ -90,11 +90,17 @@ class MasterAuthService {
     await prefs.remove('super_admin_remember');
   }
 
-  /// ログアウト
+  /// ログアウト（認証情報もクリア）
   Future<void> logout() async {
-    // 現在はローカルのログイン情報をクリアするのみ
     await clearLoginCredentials();
     await clearFacilityGasUrl();
+    await clearFacilityTimeRounding();
+  }
+
+  /// セッションのみログアウト（認証情報は維持）
+  Future<void> logoutSession() async {
+    await clearFacilityGasUrl();
+    await clearFacilityTimeRounding();
   }
 
   /// 施設のGAS URLを保存

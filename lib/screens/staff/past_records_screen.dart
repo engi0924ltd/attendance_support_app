@@ -574,6 +574,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
               builder: (context) => UserDetailScreen(
                 date: record.date,
                 userName: record.userName,
+                staffName: widget.staffName,
               ),
             ),
           );

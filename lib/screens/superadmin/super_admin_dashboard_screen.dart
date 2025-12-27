@@ -196,8 +196,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
 
     if (confirm == true && mounted) {
       final authService = MasterAuthService();
-      await authService.clearLoginCredentials();
-      await authService.logout();
+      // セッション情報のみクリア（保存した認証情報は維持）
+      await authService.logoutSession();
 
       Navigator.pushAndRemoveUntil(
         context,

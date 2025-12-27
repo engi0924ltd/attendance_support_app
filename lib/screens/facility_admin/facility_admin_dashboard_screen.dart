@@ -5,6 +5,7 @@ import '../../services/master_auth_service.dart';
 import 'staff_list_screen.dart';
 import 'user_list_screen.dart';
 import 'daily_attendance_screen.dart';
+import 'analytics_screen.dart';
 
 /// 施設管理者ダッシュボード画面
 class FacilityAdminDashboardScreen extends StatelessWidget {
@@ -99,12 +100,12 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 統計データ閲覧（準備中）
+            // 統計・分析
             _DashboardMenuItem(
-              title: '統計データ閲覧',
+              title: '統計・分析',
               icon: Icons.analytics,
-              color: Colors.teal,
-              onTap: () => _showComingSoonDialog(context, '統計データ閲覧'),
+              color: Colors.indigo,
+              onTap: () => _navigateToAnalytics(context),
             ),
             const SizedBox(height: 12),
 
@@ -136,6 +137,7 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
         builder: (context) => FacilityAdminDailyAttendanceScreen(
           gasUrl: admin.gasUrl!,
           facilityName: admin.facilityName,
+          adminName: admin.adminName,
         ),
       ),
     );
@@ -155,6 +157,21 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (context) => UserListScreen(gasUrl: admin.gasUrl),
+      ),
+    );
+  }
+
+  void _navigateToAnalytics(BuildContext context) {
+    if (admin.gasUrl == null || admin.gasUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('GAS URLが設定されていません')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FacilityAdminAnalyticsScreen(gasUrl: admin.gasUrl),
       ),
     );
   }
@@ -196,8 +213,8 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
 
     if (confirm == true && context.mounted) {
       final authService = MasterAuthService();
-      await authService.clearLoginCredentials();
-      await authService.logout();
+      // セッション情報のみクリア（保存した認証情報は維持）
+      await authService.logoutSession();
 
       Navigator.pushAndRemoveUntil(
         context,

@@ -147,20 +147,17 @@
 
 ---
 
-## 進行中タスク
+## 実装状況
 
-### Chatwork一斉送信機能
+詳細は `claudedocs/IMPLEMENTATION_STATUS.md` を参照
 
-**完了**
-- [x] `chatwork_broadcast_screen.dart` 作成
-- [x] ドロワーメニューに「チャットワーク連絡」追加
-- [x] `attendance_service.dart` にChatworkメソッド追加
-
-**未完了**
-- [ ] `assets/gas/gas_code_v4.js` にエンドポイント追加
-  - `chatwork/users` - 利用者一覧取得
-  - `chatwork/broadcast` - 一斉送信
-  - `chatwork/set-api-key` - APIキー設定
+### 完了済み機能
+- [x] 利用者機能（出勤/退勤登録）
+- [x] 支援者機能（勤怠管理、支援記録、分析、Chatwork連絡）
+- [x] 施設管理者機能（職員管理、利用者管理）
+- [x] 全権管理者機能（施設管理）
+- [x] Chatwork一斉送信（GASエンドポイント含む）
+- [x] GASパフォーマンス最適化
 
 ---
 

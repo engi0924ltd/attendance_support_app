@@ -7,17 +7,22 @@ import '../../services/master_service.dart';
 import '../../widgets/searchable_dropdown.dart';
 import '../../widgets/health_line_chart.dart';
 
-/// 分析画面（支援者用）
-class AnalyticsScreen extends StatefulWidget {
-  const AnalyticsScreen({super.key});
+/// 分析画面（施設管理者用）
+class FacilityAdminAnalyticsScreen extends StatefulWidget {
+  final String? gasUrl;
+
+  const FacilityAdminAnalyticsScreen({
+    super.key,
+    this.gasUrl,
+  });
 
   @override
-  State<AnalyticsScreen> createState() => _AnalyticsScreenState();
+  State<FacilityAdminAnalyticsScreen> createState() => _FacilityAdminAnalyticsScreenState();
 }
 
-class _AnalyticsScreenState extends State<AnalyticsScreen> {
-  final AttendanceService _attendanceService = AttendanceService();
-  final MasterService _masterService = MasterService();
+class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScreen> {
+  late final AttendanceService _attendanceService;
+  late final MasterService _masterService;
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -43,6 +48,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
   void initState() {
     super.initState();
+    _attendanceService = AttendanceService(gasUrl: widget.gasUrl);
+    _masterService = MasterService(gasUrl: widget.gasUrl);
     _loadData();
   }
 
@@ -97,11 +104,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     final users = await _masterService.getActiveUsers();
     // 当月退所者をフィルタリング
     final allUsers = await _masterService.getAllUsers();
-    final now = DateTime.now();
     final departedThisMonth = allUsers.where((u) {
       if (u.status != '退所済み') return false;
-      // 退所日が当月かどうかをチェック（退所日フィールドがある場合）
-      return true; // 簡易実装：退所済みユーザーをすべて表示
+      return true;
     }).toList();
 
     if (!mounted) return;
@@ -330,7 +335,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   /// 曜日別出勤予定セクション
   Widget _buildWeeklyScheduleSection() {
     const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
-    const types = ['本施設', '在宅'];  // 施設外は小計行で表示
+    const types = ['本施設', '在宅'];
     const typeColors = [Colors.blue, Colors.green];
 
     return Card(
@@ -386,7 +391,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ...List.generate(types.length, (typeIndex) {
               final type = types[typeIndex];
               final color = typeColors[typeIndex];
-              // 本施設と施設外のみクリック可能
               final isClickable = type == '本施設' || type == '施設外';
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -405,7 +409,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     ...weekdays.map((day) {
                       final count = _weeklySchedule[day]?[type] ?? 0;
-                      final hasDetails = _weeklyDetails[day]?[type]?.isNotEmpty ?? false;
 
                       return Expanded(
                         child: Center(
@@ -452,7 +455,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             const SizedBox(height: 4),
             const Divider(height: 1),
             const SizedBox(height: 4),
-            // 施設外 行（クリック可能）
+            // 施設外 行
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
@@ -567,7 +570,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     final details = _weeklyDetails[weekday]?[type] ?? {};
     if (details.isEmpty) return;
 
-    // 詳細を件数の多い順にソート
     final sortedEntries = details.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
@@ -738,7 +740,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
             const Divider(),
             const SizedBox(height: 8),
-            // 利用者選択
             SearchableDropdown<User>(
               value: _selectedUser,
               items: _users,
@@ -755,7 +756,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               hint: '利用者を選択...',
             ),
             const SizedBox(height: 16),
-            // 個人統計表示
             if (_selectedUser != null) _buildUserStatsContent(),
           ],
         ),
@@ -898,7 +898,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          // 健康グラフ 2x2
           _buildHealthChartsGrid(),
         ],
       ],
@@ -907,7 +906,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   /// 健康グラフの2x2グリッド
   Widget _buildHealthChartsGrid() {
-    // グラフ表示用に古い順に並べ替え
     final sortedHistory = _userHealthHistory.reversed.toList();
 
     return Column(
@@ -967,14 +965,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   /// 全画面健康グラフ表示
   void _showFullScreenHealthChart(HealthMetricType type) {
-    // 古い順に並べ替え
     final sortedHistory = _userHealthHistory.reversed.toList();
     final dataPoints = extractHealthData(sortedHistory, type);
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => FullScreenHealthChart(
+        builder: (context) => _FullScreenHealthChart(
           dataPoints: dataPoints,
           type: type,
           userName: _selectedUser?.name ?? '',
@@ -985,13 +982,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 }
 
 /// 全画面健康グラフ
-class FullScreenHealthChart extends StatelessWidget {
+class _FullScreenHealthChart extends StatelessWidget {
   final List<HealthDataPoint> dataPoints;
   final HealthMetricType type;
   final String userName;
 
-  const FullScreenHealthChart({
-    super.key,
+  const _FullScreenHealthChart({
     required this.dataPoints,
     required this.type,
     required this.userName,
@@ -1018,7 +1014,6 @@ class FullScreenHealthChart extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // 統計情報
           if (average != null)
             Container(
               padding: const EdgeInsets.all(16),
@@ -1033,7 +1028,6 @@ class FullScreenHealthChart extends StatelessWidget {
                 ],
               ),
             ),
-          // グラフ
           Expanded(
             flex: 3,
             child: Padding(
@@ -1043,7 +1037,6 @@ class FullScreenHealthChart extends StatelessWidget {
                   : _buildChart(validPoints),
             ),
           ),
-          // 履歴一覧
           const Divider(height: 1),
           Expanded(
             flex: 2,
@@ -1051,7 +1044,7 @@ class FullScreenHealthChart extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: dataPoints.length,
               itemBuilder: (context, index) {
-                final point = dataPoints[dataPoints.length - 1 - index]; // 新しい順
+                final point = dataPoints[dataPoints.length - 1 - index];
                 return _buildHistoryItem(point, index == 0);
               },
             ),
@@ -1067,7 +1060,6 @@ class FullScreenHealthChart extends StatelessWidget {
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(
-            // データ数に応じて幅を調整（最小でも画面幅）
             width: validPoints.length > 15
                 ? validPoints.length * 25.0
                 : constraints.maxWidth,
@@ -1243,7 +1235,6 @@ class FullScreenHealthChart extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // 日付
           SizedBox(
             width: 100,
             child: Text(
@@ -1255,7 +1246,6 @@ class FullScreenHealthChart extends StatelessWidget {
               ),
             ),
           ),
-          // 値
           Expanded(
             child: Text(
               point.label ?? '--',
@@ -1265,7 +1255,6 @@ class FullScreenHealthChart extends StatelessWidget {
               ),
             ),
           ),
-          // インジケーター
           if (hasValue)
             Container(
               width: 32,

@@ -114,4 +114,63 @@ class Attendance {
 
   /// 支援記録が登録されているかどうか（Z列に入力があるか）
   bool get hasSupportRecord => userStatus != null && userStatus!.isNotEmpty;
+
+  /// 一部のフィールドを変更した新しいインスタンスを作成
+  Attendance copyWith({
+    int? rowId,
+    String? date,
+    String? userName,
+    String? scheduledUse,
+    String? attendanceStatus,
+    String? morningTask,
+    String? afternoonTask,
+    String? healthCondition,
+    String? sleepStatus,
+    String? checkinComment,
+    String? fatigue,
+    String? stress,
+    String? checkoutComment,
+    String? checkinTime,
+    String? checkoutTime,
+    String? lunchBreak,
+    String? shortBreak,
+    String? otherBreak,
+    int? actualWorkMinutes,
+    bool? mealService,
+    bool? absenceSupport,
+    bool? visitSupport,
+    bool? transportService,
+    String? userStatus,
+    bool? hasSupportRecord, // 支援記録状態を直接設定するための特別パラメータ
+  }) {
+    return Attendance(
+      rowId: rowId ?? this.rowId,
+      date: date ?? this.date,
+      userName: userName ?? this.userName,
+      scheduledUse: scheduledUse ?? this.scheduledUse,
+      attendanceStatus: attendanceStatus ?? this.attendanceStatus,
+      morningTask: morningTask ?? this.morningTask,
+      afternoonTask: afternoonTask ?? this.afternoonTask,
+      healthCondition: healthCondition ?? this.healthCondition,
+      sleepStatus: sleepStatus ?? this.sleepStatus,
+      checkinComment: checkinComment ?? this.checkinComment,
+      fatigue: fatigue ?? this.fatigue,
+      stress: stress ?? this.stress,
+      checkoutComment: checkoutComment ?? this.checkoutComment,
+      checkinTime: checkinTime ?? this.checkinTime,
+      checkoutTime: checkoutTime ?? this.checkoutTime,
+      lunchBreak: lunchBreak ?? this.lunchBreak,
+      shortBreak: shortBreak ?? this.shortBreak,
+      otherBreak: otherBreak ?? this.otherBreak,
+      actualWorkMinutes: actualWorkMinutes ?? this.actualWorkMinutes,
+      mealService: mealService ?? this.mealService,
+      absenceSupport: absenceSupport ?? this.absenceSupport,
+      visitSupport: visitSupport ?? this.visitSupport,
+      transportService: transportService ?? this.transportService,
+      // hasSupportRecordがtrueならダミーの値を設定、falseならnull
+      userStatus: hasSupportRecord != null
+          ? (hasSupportRecord ? (this.userStatus ?? '登録済み') : null)
+          : (userStatus ?? this.userStatus),
+    );
+  }
 }

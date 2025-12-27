@@ -111,6 +111,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   Future<void> _loadEvaluationAlerts() async {
     try {
       final alerts = await _masterService.getEvaluationAlerts();
+      if (!mounted) return;
       // 同一ユーザーの複数アラートをグループ化
       final Map<String, List<EvaluationAlert>> groupedAlerts = {};
       for (var alert in alerts) {
@@ -127,6 +128,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   /// 勤怠一覧を読み込む
   Future<void> _loadAttendances() async {
     try {
+      if (!mounted) return;
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -149,11 +151,13 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
         return a.userName.compareTo(b.userName);
       });
 
+      if (!mounted) return;
       setState(() {
         _attendances = attendances;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'データの読み込みに失敗しました\n$e';
         _isLoading = false;
@@ -164,6 +168,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   /// 出勤予定者を読み込む
   Future<void> _loadScheduledUsers() async {
     try {
+      if (!mounted) return;
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -199,16 +204,52 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
         return aName.compareTo(bName);
       });
 
+      if (!mounted) return;
       setState(() {
         _scheduledUsers = scheduledUsers;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'データの読み込みに失敗しました\n$e';
         _isLoading = false;
       });
     }
+  }
+
+  /// 保存結果を受け取ってローカル状態を更新
+  void _updateLocalState(Map<String, dynamic> result) {
+    final userName = result['userName'] as String?;
+    final hasSupportRecord = result['hasSupportRecord'] as bool? ?? false;
+
+    if (userName == null) return;
+
+    setState(() {
+      // 出勤一覧を更新
+      for (int i = 0; i < _attendances.length; i++) {
+        if (_attendances[i].userName == userName) {
+          _attendances[i] = _attendances[i].copyWith(hasSupportRecord: hasSupportRecord);
+          break;
+        }
+      }
+
+      // 出勤予定者一覧を更新
+      for (int i = 0; i < _scheduledUsers.length; i++) {
+        if (_scheduledUsers[i]['userName'] == userName) {
+          final attendance = _scheduledUsers[i]['attendance'] as Attendance?;
+          if (attendance != null) {
+            _scheduledUsers[i]['attendance'] = attendance.copyWith(hasSupportRecord: hasSupportRecord);
+          }
+          break;
+        }
+      }
+    });
+
+    // バックグラウンドでデータを再取得（UIをブロックしない）
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _loadData();
+    });
   }
 
   /// 日付を変更
@@ -249,8 +290,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     );
 
     if (confirm == true) {
-      // 認証情報をクリア
-      await _authService.clearLoginCredentials();
+      // セッション情報のみクリア（保存した認証情報は維持）
       await _authService.logout();
 
       if (mounted) {
@@ -516,11 +556,13 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
               builder: (context) => UserDetailScreen(
                 date: dateStr,
                 userName: userName,
+                staffName: widget.staffName,
               ),
             ),
           );
-          if (result == true) {
-            _loadData();
+          // 保存結果を受け取ってローカル状態を即時更新
+          if (result is Map<String, dynamic> && result['saved'] == true) {
+            _updateLocalState(result);
           }
         },
         child: Padding(
@@ -653,11 +695,13 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
               builder: (context) => UserDetailScreen(
                 date: dateStr,
                 userName: attendance.userName,
+                staffName: widget.staffName,
               ),
             ),
           );
-          if (result == true) {
-            _loadData();
+          // 保存結果を受け取ってローカル状態を即時更新
+          if (result is Map<String, dynamic> && result['saved'] == true) {
+            _updateLocalState(result);
           }
         },
         child: Padding(

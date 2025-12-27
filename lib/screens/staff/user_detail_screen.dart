@@ -14,12 +14,14 @@ class UserDetailScreen extends StatefulWidget {
   final String date;
   final String userName;
   final String? gasUrl; // 施設管理者用（施設固有のGAS URL）
+  final String? staffName; // ログイン中の支援者名（記録者として使用）
 
   const UserDetailScreen({
     super.key,
     required this.date,
     required this.userName,
     this.gasUrl,
+    this.staffName,
   });
 
   @override
@@ -50,6 +52,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
 
   // 支援記録入力用コントローラー
   final TextEditingController _userStatusController = TextEditingController();
+  final TextEditingController _recorderController = TextEditingController(); // 記録者用
   String? _editedWorkLocation;  // Dropdown用に変更
 
   /// 出欠状況が欠勤系（勤務地不要）かどうかを判定
@@ -58,7 +61,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       _editedAttendanceStatus == '事前連絡あり欠勤' ||
       _editedAttendanceStatus == '非利用日' ||
       _editedAttendanceStatus == '休養中';
-  String? _editedRecorder;      // Dropdown用に変更
   bool _isHomeSupportEval = false;   // 在宅支援評価対象（チェックボックス）
   bool _isExternalEval = false;      // 施設外評価対象（チェックボックス）
   final TextEditingController _workGoalController = TextEditingController();
@@ -76,12 +78,15 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     _attendanceService = AttendanceService(gasUrl: widget.gasUrl);
     _supportService = SupportService(gasUrl: widget.gasUrl);
     _masterService = MasterService(gasUrl: widget.gasUrl);
+    // 記録者をログイン中の支援者名で自動設定
+    _recorderController.text = widget.staffName ?? '';
     _loadData();
   }
 
   @override
   void dispose() {
     _userStatusController.dispose();
+    _recorderController.dispose();
     _workGoalController.dispose();
     _userFeedbackController.dispose();
     super.dispose();
@@ -138,7 +143,10 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         if (_supportRecord != null) {
           _userStatusController.text = _supportRecord!.userStatus ?? '';
           _editedWorkLocation = _supportRecord!.workLocation;
-          _editedRecorder = _supportRecord!.recorder;
+          // 記録者：既存データがあれば使用、なければログイン中の支援者名を維持
+          if (_supportRecord!.recorder != null && _supportRecord!.recorder!.isNotEmpty) {
+            _recorderController.text = _supportRecord!.recorder!;
+          }
           // ○が入っていればtrue、それ以外はfalse
           _isHomeSupportEval = _supportRecord!.homeSupportEval == '○';
           _isExternalEval = _supportRecord!.externalEval == '○';
@@ -196,10 +204,10 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       return;
     }
 
-    if (_editedRecorder == null || _editedRecorder!.trim().isEmpty) {
+    if (_recorderController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('記録者を選択してください。'),
+          content: Text('記録者を入力してください。'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -212,7 +220,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         _errorMessage = null;
       });
 
-      // 勤怠データを保存
+      // 勤怠データを保存（支援記録より先に保存する必要あり）
       await _attendanceService.updateAttendance(
         widget.userName,
         widget.date,
@@ -224,13 +232,13 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         otherBreak: _editedOtherBreak,
       );
 
-      // 支援記録を保存
+      // 支援記録を保存（勤怠データに依存）
       final newRecord = SupportRecord(
         date: widget.date,
         userName: widget.userName,
         userStatus: userStatus,
         workLocation: _editedWorkLocation,
-        recorder: _editedRecorder,
+        recorder: _recorderController.text.trim(),
         homeSupportEval: _isHomeSupportEval ? '○' : '',
         externalEval: _isExternalEval ? '○' : '',
         workGoal: _workGoalController.text.trim(),
@@ -248,7 +256,12 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('勤怠データと支援記録を保存しました')),
         );
-        Navigator.pop(context, true); // 保存後に一覧に戻る
+        // 保存した情報を返す（一覧画面でローカル更新するため）
+        Navigator.pop(context, {
+          'saved': true,
+          'userName': widget.userName,
+          'hasSupportRecord': true,
+        });
       }
     } catch (e) {
       setState(() {
@@ -729,33 +742,15 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   ? null  // 欠席時は変更不可
                   : (value) => setState(() => _editedWorkLocation = value),
             ),
-            DropdownButtonFormField<String>(
-              value: _editedRecorder != null &&
-                     _editedRecorder!.trim().isNotEmpty &&
-                     (_dropdownOptions?.recorders ?? [])
-                         .map((e) => e.trim())
-                         .toSet()
-                         .contains(_editedRecorder!.trim())
-                  ? _editedRecorder!.trim()
-                  : null,
+            TextFormField(
+              controller: _recorderController,
+              readOnly: true,
               decoration: InputDecoration(
-                labelText: '記録者 *',
-                labelStyle: TextStyle(color: Colors.red.shade700),
+                labelText: '記録者',
                 border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.grey.shade100,
               ),
-              items: [
-                ...(_dropdownOptions?.recorders ?? [])
-                    .map((e) => e.trim())
-                    .where((e) => e.isNotEmpty)
-                    .toSet()
-                    .map((option) {
-                  return DropdownMenuItem<String>(
-                    value: option,
-                    child: Text(option),
-                  );
-                }),
-              ],
-              onChanged: (value) => setState(() => _editedRecorder = value),
             ),
           ),
           const SizedBox(height: 16),

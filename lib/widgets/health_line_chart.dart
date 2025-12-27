@@ -363,7 +363,7 @@ class HealthLineChartCard extends StatelessWidget {
                                 showTitles: true,
                                 reservedSize: 20,
                                 getTitlesWidget: (value, meta) {
-                                  if (value == 1 || value == 3 || value == 5) {
+                                  if (value == 1 || value == 5 || value == 10) {
                                     return Text(
                                       value.toInt().toString(),
                                       style: TextStyle(
@@ -384,8 +384,8 @@ class HealthLineChartCard extends StatelessWidget {
                             ),
                           ),
                           borderData: FlBorderData(show: false),
-                          minY: 0,
-                          maxY: 6,
+                          minY: 1,
+                          maxY: 10,
                           lineTouchData: const LineTouchData(enabled: false),
                           lineBarsData: [
                             LineChartBarData(
@@ -395,7 +395,7 @@ class HealthLineChartCard extends StatelessWidget {
                                   entry.value.value!.toDouble(),
                                 );
                               }).toList(),
-                              isCurved: true,
+                              isCurved: false,
                               color: type.color,
                               barWidth: 2.5,
                               dotData: FlDotData(
@@ -592,9 +592,10 @@ class HealthChartDetailDialog extends StatelessWidget {
                             leftTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
-                                reservedSize: 28,
+                                reservedSize: 32,
+                                interval: 1,
                                 getTitlesWidget: (value, meta) {
-                                  if (value >= 1 && value <= 5) {
+                                  if (value >= 1 && value <= 10 && value == value.roundToDouble()) {
                                     return Text(
                                       value.toInt().toString(),
                                       style: TextStyle(
@@ -618,8 +619,9 @@ class HealthChartDetailDialog extends StatelessWidget {
                             show: true,
                             border: Border.all(color: Colors.grey.shade300),
                           ),
-                          minY: 0,
-                          maxY: 6,
+                          clipData: const FlClipData.all(),
+                          minY: 1,
+                          maxY: 10,
                           lineTouchData: LineTouchData(
                             enabled: true,
                             touchTooltipData: LineTouchTooltipData(
@@ -649,7 +651,7 @@ class HealthChartDetailDialog extends StatelessWidget {
                                   entry.value.value!.toDouble(),
                                 );
                               }).toList(),
-                              isCurved: true,
+                              isCurved: false,
                               color: type.color,
                               barWidth: 3,
                               dotData: FlDotData(
