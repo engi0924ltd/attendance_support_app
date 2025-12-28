@@ -1,10 +1,11 @@
 /// 職員の情報
-/// マスタ設定シートのP-T列に保存される
+/// マスタ設定シートのV-AA列に保存される
 class Staff {
-  final String name;        // P列: 職員名
-  final String email;       // R列: メールアドレス（一意キー、ログイン用）
-  final String role;        // Q列: 権限（「管理者」「従業員」）
-  final String? jobType;    // T列: 職種（自由入力）
+  final String name;        // V列: 職員名
+  final String email;       // X列: メールアドレス（一意キー、ログイン用）
+  final String role;        // W列: 権限（「管理者」「従業員」）
+  final String? jobType;    // Z列: 職種（自由入力）
+  final String? qualification; // AA列: 保有福祉資格
   final String? token;      // ログイン後に受け取る認証トークン
   final String? facilityId; // 所属施設ID
   final String? facilityName; // 所属施設名
@@ -16,6 +17,7 @@ class Staff {
     required this.email,
     required this.role,
     this.jobType,
+    this.qualification,
     this.token,
     this.facilityId,
     this.facilityName,
@@ -30,6 +32,7 @@ class Staff {
       email: (json['email'] ?? '').toString(),
       role: (json['role'] ?? '従業員').toString(),
       jobType: json['jobType']?.toString(),
+      qualification: json['qualification']?.toString(),
       token: json['token']?.toString(),
       facilityId: json['facilityId']?.toString(),
       facilityName: json['facilityName']?.toString(),
@@ -47,6 +50,7 @@ class Staff {
       'email': email,
       'role': role,
       'jobType': jobType,
+      'qualification': qualification,
       'token': token,
       'facilityId': facilityId,
       'facilityName': facilityName,
@@ -70,6 +74,7 @@ class Staff {
     String? email,
     String? role,
     String? jobType,
+    String? qualification,
     String? token,
     String? facilityId,
     String? facilityName,
@@ -81,6 +86,7 @@ class Staff {
       email: email ?? this.email,
       role: role ?? this.role,
       jobType: jobType ?? this.jobType,
+      qualification: qualification ?? this.qualification,
       token: token ?? this.token,
       facilityId: facilityId ?? this.facilityId,
       facilityName: facilityName ?? this.facilityName,

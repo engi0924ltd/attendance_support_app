@@ -81,15 +81,20 @@ const MASTER_CONFIG = {
     ROLE: 23,       // W列: 権限（元Q列から+6列）
     EMAIL: 24,      // X列: メールアドレス（元R列から+6列）
     PASSWORD: 25,   // Y列: パスワード（元S列から+6列）
-    JOB_TYPE: 26    // Z列: 職種（元T列から+6列）
+    JOB_TYPE: 26,   // Z列: 職種（元T列から+6列）
+    QUALIFICATION: 27  // AA列: 保有福祉資格
   },
 
   // 支援記録用プルダウン選択肢（AB列、V列、AD〜AH列、8〜25行目）
   SUPPORT_DROPDOWN_START_ROW: 8,
   SUPPORT_DROPDOWN_END_ROW: 25,
-  WORK_LOCATION_DROPDOWN_END_ROW: 20,  // 勤務地は8〜20行目
+  WORK_LOCATION_DROPDOWN_START_ROW: 8,   // 勤務地は8〜15行目
+  WORK_LOCATION_DROPDOWN_END_ROW: 15,
+  QUALIFICATION_DROPDOWN_START_ROW: 20,  // 資格選択肢は20〜30行目
+  QUALIFICATION_DROPDOWN_END_ROW: 30,
   SUPPORT_DROPDOWN_COLS: {
     WORK_LOCATION: 28,    // AB列: 勤務地
+    QUALIFICATION: 28,    // AB列: 資格選択肢（20〜30行目）
     RECORDER: 22,         // V列: 記録者（職員名と同じ列）
     WORK_EVAL: 30,        // AD列: 勤怠評価
     EMPLOYMENT_EVAL: 31,  // AE列: 就労評価（品質・生産性）
@@ -487,7 +492,8 @@ function handleGetDropdowns() {
     otherBreak: getTimeListOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.OTHER_BREAK, 8, 25),  // T列: その他休憩（8〜25行目）
     specialNotes: [],                                                                                                                                             // 特記事項（使用しない）
     breaks: [],                                                                                                                                                   // 休憩時間（使用しない）
-    workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_END_ROW),  // AB列: 勤務地（8〜20行目）
+    workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_END_ROW),  // AB列: 勤務地（8〜15行目）
+    qualifications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.QUALIFICATION, MASTER_CONFIG.QUALIFICATION_DROPDOWN_START_ROW, MASTER_CONFIG.QUALIFICATION_DROPDOWN_END_ROW),  // AB列: 資格選択肢（20〜30行目）
 
     // 曜日別出欠予定用プルダウン（K列、44〜50行目）
     scheduledWeekly: getColumnOptions(sheet, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_COL, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_START_ROW, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_END_ROW), // K列: 曜日別出欠予定
@@ -850,14 +856,15 @@ function handleGetStaffList() {
     const endRow = MASTER_CONFIG.STAFF_DATA_END_ROW;
     const numRows = endRow - startRow + 1;
 
-    // 必要な列を一括取得（V:名前, W:権限, X:メール, Z:職種）
+    // 必要な列を一括取得（V:名前, W:権限, X:メール, Z:職種, AA:資格）
     const nameCol = MASTER_CONFIG.STAFF_COLS.NAME;      // V列 = 22
     const roleCol = MASTER_CONFIG.STAFF_COLS.ROLE;      // W列 = 23
     const emailCol = MASTER_CONFIG.STAFF_COLS.EMAIL;    // X列 = 24
     const jobTypeCol = MASTER_CONFIG.STAFF_COLS.JOB_TYPE; // Z列 = 26
+    const qualificationCol = MASTER_CONFIG.STAFF_COLS.QUALIFICATION; // AA列 = 27
 
-    // V列からZ列まで一括取得（22列目から26列目 = 5列分）
-    const allData = sheet.getRange(startRow, nameCol, numRows, jobTypeCol - nameCol + 1).getValues();
+    // V列からAA列まで一括取得（22列目から27列目 = 6列分）
+    const allData = sheet.getRange(startRow, nameCol, numRows, qualificationCol - nameCol + 1).getValues();
 
     const staffList = [];
     for (let i = 0; i < allData.length; i++) {
@@ -866,6 +873,7 @@ function handleGetStaffList() {
       const role = row[roleCol - nameCol];        // W列
       const email = row[emailCol - nameCol];      // X列
       const jobType = row[jobTypeCol - nameCol];  // Z列
+      const qualification = row[qualificationCol - nameCol];  // AA列
 
       // 名前とメールアドレスが両方入力されている行のみ取得
       if (name && email) {
@@ -874,6 +882,7 @@ function handleGetStaffList() {
           email: email,
           role: role || '従業員',
           jobType: jobType || null,
+          qualification: qualification || null,
           rowNumber: startRow + i
         });
       }
@@ -946,9 +955,9 @@ function handleCreateStaff(data) {
       newRow = startRow + allData.length;
     }
 
-    // データを一括書き込み
-    const writeData = [[data.name, data.role, data.email, data.password, data.jobType || '']];
-    sheet.getRange(newRow, cols.NAME, 1, 5).setValues(writeData);
+    // データを一括書き込み（V:名前, W:権限, X:メール, Y:パスワード, Z:職種, AA:資格）
+    const writeData = [[data.name, data.role, data.email, data.password, data.jobType || '', data.qualification || '']];
+    sheet.getRange(newRow, cols.NAME, 1, 6).setValues(writeData);
 
     return createSuccessResponse({
       message: '職員を登録しました',
@@ -957,6 +966,7 @@ function handleCreateStaff(data) {
         email: data.email,
         role: data.role,
         jobType: data.jobType || null,
+        qualification: data.qualification || null,
         rowNumber: newRow
       }
     });
@@ -1018,9 +1028,9 @@ function handleUpdateStaff(data) {
       password = sheet.getRange(data.rowNumber, cols.PASSWORD).getValue();
     }
 
-    // データを一括書き込み
-    const writeData = [[data.name, data.role, data.email, password, data.jobType || '']];
-    sheet.getRange(data.rowNumber, cols.NAME, 1, 5).setValues(writeData);
+    // データを一括書き込み（V:名前, W:権限, X:メール, Y:パスワード, Z:職種, AA:資格）
+    const writeData = [[data.name, data.role, data.email, password, data.jobType || '', data.qualification || '']];
+    sheet.getRange(data.rowNumber, cols.NAME, 1, 6).setValues(writeData);
 
     return createSuccessResponse({
       message: '職員情報を更新しました',
@@ -1029,6 +1039,7 @@ function handleUpdateStaff(data) {
         email: data.email,
         role: data.role,
         jobType: data.jobType || null,
+        qualification: data.qualification || null,
         rowNumber: data.rowNumber
       }
     });
@@ -1050,13 +1061,14 @@ function handleDeleteStaff(data) {
 
     const sheet = getSheet(SHEET_NAMES.MASTER);
 
-    // P-T列のデータをクリア
+    // V-AA列のデータをクリア
     const cols = MASTER_CONFIG.STAFF_COLS;
     sheet.getRange(data.rowNumber, cols.NAME).clearContent();
     sheet.getRange(data.rowNumber, cols.ROLE).clearContent();
     sheet.getRange(data.rowNumber, cols.EMAIL).clearContent();
     sheet.getRange(data.rowNumber, cols.PASSWORD).clearContent();
     sheet.getRange(data.rowNumber, cols.JOB_TYPE).clearContent();
+    sheet.getRange(data.rowNumber, cols.QUALIFICATION).clearContent();
 
     return createSuccessResponse({
       message: '職員を削除しました'

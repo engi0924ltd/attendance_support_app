@@ -166,6 +166,7 @@ class MasterService {
         'specialNotes': options.specialNotes,
         'breaks': options.breaks,
         'workLocations': options.workLocations,
+        'qualifications': options.qualifications,
         'scheduledWeekly': options.scheduledWeekly,
         'recorders': options.recorders,
         'workEvaluations': options.workEvaluations,

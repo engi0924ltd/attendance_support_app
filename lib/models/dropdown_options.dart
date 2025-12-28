@@ -13,6 +13,7 @@ class DropdownOptions {
   final List<String> specialNotes;        // 特記事項
   final List<String> breaks;              // 休憩時間
   final List<String> workLocations;       // 勤務地
+  final List<String> qualifications;      // 保有福祉資格
   final List<String> scheduledWeekly;     // 曜日別出欠予定
   final List<String> recorders;           // 記録者
   // 評価項目プルダウン
@@ -48,6 +49,7 @@ class DropdownOptions {
     required this.specialNotes,
     required this.breaks,
     required this.workLocations,
+    required this.qualifications,
     required this.scheduledWeekly,
     required this.recorders,
     required this.workEvaluations,
@@ -83,6 +85,7 @@ class DropdownOptions {
       specialNotes: List<String>.from(json['specialNotes'] ?? []),
       breaks: List<String>.from(json['breaks'] ?? []),
       workLocations: List<String>.from(json['workLocations'] ?? []),
+      qualifications: List<String>.from(json['qualifications'] ?? []),
       scheduledWeekly: List<String>.from(json['scheduledWeekly'] ?? []),
       recorders: List<String>.from(json['recorders'] ?? []),
       workEvaluations: List<String>.from(json['workEvaluations'] ?? []),

@@ -55,6 +55,7 @@ class StaffService {
     required String password,
     required String role, // 「管理者」「従業員」
     String? jobType,
+    String? qualification,
   }) async {
     try {
       final url = Uri.parse(await _gasUrl);
@@ -65,6 +66,7 @@ class StaffService {
         'password': password,
         'role': role,
         'jobType': jobType,
+        'qualification': qualification,
       });
 
       final response = await _client
@@ -89,6 +91,7 @@ class StaffService {
     required String role,
     String? password, // パスワードは任意（変更時のみ）
     String? jobType,
+    String? qualification,
   }) async {
     try {
       final url = Uri.parse(await _gasUrl);
@@ -100,6 +103,7 @@ class StaffService {
         'role': role,
         if (password != null && password.isNotEmpty) 'password': password,
         'jobType': jobType,
+        'qualification': qualification,
       });
 
       final response = await _client

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/staff.dart';
 import '../../services/staff_service.dart';
+import '../../services/master_service.dart';
 
 /// 職員登録・編集画面
 class StaffFormScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class StaffFormScreen extends StatefulWidget {
 
 class _StaffFormScreenState extends State<StaffFormScreen> {
   late final StaffService _staffService;
+  late final MasterService _masterService;
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _nameController;
@@ -23,7 +25,10 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   late TextEditingController _jobTypeController;
 
   String _selectedRole = '従業員'; // デフォルトは従業員
+  String? _selectedQualification; // 選択された資格
+  List<String> _qualificationOptions = []; // 資格選択肢
   bool _isLoading = false;
+  bool _isLoadingOptions = true;
   bool _obscurePassword = true;
   bool get _isEditMode => widget.staff != null;
 
@@ -31,8 +36,9 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   void initState() {
     super.initState();
 
-    // StaffServiceを初期化
+    // サービスを初期化
     _staffService = StaffService(facilityGasUrl: widget.gasUrl);
+    _masterService = MasterService(gasUrl: widget.gasUrl);
 
     // 編集モードの場合は既存データをセット
     _nameController = TextEditingController(text: widget.staff?.name ?? '');
@@ -43,6 +49,29 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
 
     if (widget.staff != null) {
       _selectedRole = widget.staff!.role;
+      _selectedQualification = widget.staff!.qualification;
+    }
+
+    // プルダウン選択肢を読み込む
+    _loadDropdownOptions();
+  }
+
+  Future<void> _loadDropdownOptions() async {
+    try {
+      // 資格選択肢は新機能のため、キャッシュをバイパスして最新データを取得
+      final options = await _masterService.getDropdownOptions(forceRefresh: true);
+      if (mounted) {
+        setState(() {
+          _qualificationOptions = options.qualifications;
+          _isLoadingOptions = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingOptions = false;
+        });
+      }
     }
   }
 
@@ -78,6 +107,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           jobType: _jobTypeController.text.trim().isNotEmpty
               ? _jobTypeController.text.trim()
               : null,
+          qualification: _selectedQualification,
         );
 
         if (mounted) {
@@ -96,6 +126,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           jobType: _jobTypeController.text.trim().isNotEmpty
               ? _jobTypeController.text.trim()
               : null,
+          qualification: _selectedQualification,
         );
 
         if (mounted) {
@@ -307,6 +338,38 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
                   return null;
                 },
               ),
+              const SizedBox(height: 16),
+
+              // 保有福祉資格（任意）
+              _isLoadingOptions
+                  ? const Center(child: CircularProgressIndicator())
+                  : DropdownButtonFormField<String>(
+                      value: _selectedQualification,
+                      decoration: const InputDecoration(
+                        labelText: '保有福祉資格',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.card_membership),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('選択なし'),
+                        ),
+                        ..._qualificationOptions.map((option) {
+                          return DropdownMenuItem<String>(
+                            value: option,
+                            child: Text(option),
+                          );
+                        }),
+                      ],
+                      onChanged: _isLoading
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _selectedQualification = value;
+                              });
+                            },
+                    ),
               const SizedBox(height: 32),
 
               // 保存ボタン
