@@ -411,6 +411,8 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
     final attendanceRate = _facilityStats['attendanceRate'] ?? 0.0;
     final monthlyWorkDays = _facilityStats['monthlyWorkDays'] ?? 0;
     final monthlyAttendance = _facilityStats['monthlyAttendance'] ?? 0;
+    final avgUsersPerDay = (_facilityStats['avgUsersPerDay'] as num?)?.toDouble() ?? 0.0;
+    final avgUsersChange = (_facilityStats['avgUsersChange'] as num?)?.toDouble() ?? 0.0;
 
     final monthLabel = _isCurrentMonth ? '当月' : '${_selectedMonth.month}月';
 
@@ -480,8 +482,69 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    icon: Icons.groups,
+                    label: '1日平均利用人数',
+                    value: '${avgUsersPerDay.toStringAsFixed(1)}人',
+                    color: Colors.teal,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildChangeStatCard(
+                    avgUsersChange: avgUsersChange,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 前月比カード
+  Widget _buildChangeStatCard({required double avgUsersChange}) {
+    final isPositive = avgUsersChange > 0;
+    final isNegative = avgUsersChange < 0;
+    final changeColor = isPositive ? Colors.green : (isNegative ? Colors.red : Colors.grey);
+    final changeIcon = isPositive ? Icons.trending_up : (isNegative ? Icons.trending_down : Icons.trending_flat);
+    final changeText = isPositive
+        ? '+${avgUsersChange.toStringAsFixed(1)}人'
+        : '${avgUsersChange.toStringAsFixed(1)}人';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: changeColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: changeColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(changeIcon, color: changeColor, size: 28),
+          const SizedBox(height: 8),
+          Text(
+            '前月比',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            changeText,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: changeColor,
+            ),
+          ),
+        ],
       ),
     );
   }

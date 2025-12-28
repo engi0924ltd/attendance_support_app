@@ -3990,14 +3990,22 @@ function handleGetAnalyticsBatch(monthStr) {
     // 利用者数 = 契約中 + 当月退所者 + 対象月より後に退所した人
     const totalUsers = contractedUsers + departedUsers.length + futureDepatedCount;
 
-    // 出勤データを集計
+    // 出勤データを集計（当月＋前月）
     const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
     let monthlyAttendance = 0;
     let totalScheduled = 0;
     const workDays = new Set();
 
+    // 前月の範囲
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevFirstDay = new Date(prevYear, prevMonth - 1, 1);
+    const prevLastDay = new Date(prevYear, prevMonth, 0);
+    let prevMonthlyAttendance = 0;
+    const prevWorkDays = new Set();
+
     if (actualLastRow >= 2) {
-      const MAX_SEARCH_ROWS = isCurrentMonth ? 1000 : 3000;
+      const MAX_SEARCH_ROWS = isCurrentMonth ? 1500 : 3500;  // 前月も含めるため増加
       const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
       const startRow = Math.max(2, actualLastRow - searchRows + 1);
 
@@ -4008,26 +4016,39 @@ function handleGetAnalyticsBatch(monthStr) {
         if (!dateVal) continue;
 
         const rowDate = new Date(dateVal);
+        const userName = data[i][1];
+        if (!userName || userName === '') continue;
+
+        const scheduled = data[i][2];
+        const attendance = data[i][3];
+
+        // 当月のデータ
         if (rowDate >= firstDay && rowDate <= lastDay) {
-          const userName = data[i][1];
-          if (!userName || userName === '') continue;
-
-          const scheduled = data[i][2];
-          const attendance = data[i][3];
-
           if (scheduled && scheduled !== '') {
             totalScheduled++;
           }
-
           if (attendance === '出勤' || attendance === '遅刻') {
             monthlyAttendance++;
             workDays.add(formatDate(dateVal));
+          }
+        }
+
+        // 前月のデータ
+        if (rowDate >= prevFirstDay && rowDate <= prevLastDay) {
+          if (attendance === '出勤' || attendance === '遅刻') {
+            prevMonthlyAttendance++;
+            prevWorkDays.add(formatDate(dateVal));
           }
         }
       }
     }
 
     const attendanceRate = totalScheduled > 0 ? monthlyAttendance / totalScheduled : 0;
+
+    // 1日あたりの平均利用人数
+    const avgUsersPerDay = workDays.size > 0 ? monthlyAttendance / workDays.size : 0;
+    const prevAvgUsersPerDay = prevWorkDays.size > 0 ? prevMonthlyAttendance / prevWorkDays.size : 0;
+    const avgUsersChange = avgUsersPerDay - prevAvgUsersPerDay;
 
     // === 2. 曜日別予定（weeklySchedule） ===
     const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
@@ -4101,7 +4122,10 @@ function handleGetAnalyticsBatch(monthStr) {
         totalUsers: totalUsers,
         attendanceRate: attendanceRate,
         monthlyWorkDays: workDays.size,
-        monthlyAttendance: monthlyAttendance
+        monthlyAttendance: monthlyAttendance,
+        avgUsersPerDay: Math.round(avgUsersPerDay * 10) / 10,  // 小数点1桁
+        prevAvgUsersPerDay: Math.round(prevAvgUsersPerDay * 10) / 10,
+        avgUsersChange: Math.round(avgUsersChange * 10) / 10
       },
       // 退所者一覧
       departedUsers: departedUsers,
