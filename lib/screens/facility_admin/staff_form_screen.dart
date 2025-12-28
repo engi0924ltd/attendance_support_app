@@ -26,7 +26,9 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
 
   String _selectedRole = '従業員'; // デフォルトは従業員
   String? _selectedQualification; // 選択された資格
+  String? _selectedPlacement; // 選択された配置
   List<String> _qualificationOptions = []; // 資格選択肢
+  List<String> _placementOptions = []; // 配置選択肢
   bool _isLoading = false;
   bool _isLoadingOptions = true;
   bool _obscurePassword = true;
@@ -50,6 +52,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     if (widget.staff != null) {
       _selectedRole = widget.staff!.role;
       _selectedQualification = widget.staff!.qualification;
+      _selectedPlacement = widget.staff!.placement;
     }
 
     // プルダウン選択肢を読み込む
@@ -58,11 +61,11 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
 
   Future<void> _loadDropdownOptions() async {
     try {
-      // 資格選択肢は新機能のため、キャッシュをバイパスして最新データを取得
       final options = await _masterService.getDropdownOptions(forceRefresh: true);
       if (mounted) {
         setState(() {
           _qualificationOptions = options.qualifications;
+          _placementOptions = options.placements;
           _isLoadingOptions = false;
         });
       }
@@ -108,6 +111,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
               ? _jobTypeController.text.trim()
               : null,
           qualification: _selectedQualification,
+          placement: _selectedPlacement,
         );
 
         if (mounted) {
@@ -127,6 +131,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
               ? _jobTypeController.text.trim()
               : null,
           qualification: _selectedQualification,
+          placement: _selectedPlacement,
         );
 
         if (mounted) {
@@ -367,6 +372,38 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
                           : (value) {
                               setState(() {
                                 _selectedQualification = value;
+                              });
+                            },
+                    ),
+              const SizedBox(height: 16),
+
+              // 職員配置（必須）
+              _isLoadingOptions
+                  ? const SizedBox.shrink()
+                  : DropdownButtonFormField<String>(
+                      value: _selectedPlacement,
+                      decoration: const InputDecoration(
+                        labelText: '職員配置 *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.location_on),
+                      ),
+                      items: _placementOptions.map((option) {
+                        return DropdownMenuItem<String>(
+                          value: option,
+                          child: Text(option),
+                        );
+                      }).toList(),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return '職員配置を選択してください';
+                        }
+                        return null;
+                      },
+                      onChanged: _isLoading
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _selectedPlacement = value;
                               });
                             },
                     ),

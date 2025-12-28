@@ -167,6 +167,7 @@ class MasterService {
         'breaks': options.breaks,
         'workLocations': options.workLocations,
         'qualifications': options.qualifications,
+        'placements': options.placements,
         'scheduledWeekly': options.scheduledWeekly,
         'recorders': options.recorders,
         'workEvaluations': options.workEvaluations,
