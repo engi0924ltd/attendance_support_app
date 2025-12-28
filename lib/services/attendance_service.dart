@@ -167,8 +167,33 @@ class AttendanceService {
   }
 
   /// 施設全体の統計を取得
-  Future<Map<String, dynamic>> getFacilityStats() async {
-    final response = await _apiService.get('analytics/facility-stats');
+  /// [month] - 対象月（YYYY-MM形式）。省略時は当月
+  Future<Map<String, dynamic>> getFacilityStats({String? month}) async {
+    final endpoint = month != null
+        ? 'analytics/facility-stats/$month'
+        : 'analytics/facility-stats';
+    final response = await _apiService.get(endpoint);
+    return response;
+  }
+
+  /// 月別退所者一覧を取得
+  /// [month] - 対象月（YYYY-MM形式）。省略時は当月
+  Future<List<Map<String, dynamic>>> getDepartedUsers({String? month}) async {
+    final endpoint = month != null
+        ? 'analytics/departed-users/$month'
+        : 'analytics/departed-users';
+    final response = await _apiService.get(endpoint);
+    final List<dynamic> users = response['users'] ?? [];
+    return users.cast<Map<String, dynamic>>();
+  }
+
+  /// 年度統計を取得
+  /// [fiscalYear] - 年度（4月始まり）。省略時は当年度
+  Future<Map<String, dynamic>> getYearlyStats({int? fiscalYear}) async {
+    final endpoint = fiscalYear != null
+        ? 'analytics/yearly-stats/$fiscalYear'
+        : 'analytics/yearly-stats';
+    final response = await _apiService.get(endpoint);
     return response;
   }
 
@@ -214,5 +239,60 @@ class AttendanceService {
     final encodedName = Uri.encodeComponent(userName);
     final response = await _apiService.get('analytics/user-stats/$encodedName');
     return response;
+  }
+
+  /// 分析データをバッチ取得（施設統計・退所者・曜日別予定を一括）
+  /// [month] - 対象月（YYYY-MM形式）。省略時は当月
+  Future<Map<String, dynamic>> getAnalyticsBatch({String? month}) async {
+    final endpoint = month != null
+        ? 'analytics/batch/$month'
+        : 'analytics/batch';
+    final response = await _apiService.get(endpoint);
+
+    // facilityStats
+    final facilityStats = response['facilityStats'] as Map<String, dynamic>? ?? {};
+
+    // departedUsers
+    final departedUsersList = response['departedUsers'] as List<dynamic>? ?? [];
+    final departedUsers = departedUsersList
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    // weeklySchedule - 型変換
+    final weeklyData = response['weeklySchedule'] as Map<String, dynamic>? ?? {};
+    final scheduleData = weeklyData['schedule'] as Map<String, dynamic>? ?? {};
+    final detailsData = weeklyData['details'] as Map<String, dynamic>? ?? {};
+
+    final schedule = <String, Map<String, int>>{};
+    scheduleData.forEach((weekday, types) {
+      if (types is Map) {
+        schedule[weekday] = {};
+        types.forEach((type, count) {
+          schedule[weekday]![type.toString()] = (count as num).toInt();
+        });
+      }
+    });
+
+    final details = <String, Map<String, Map<String, int>>>{};
+    detailsData.forEach((weekday, categories) {
+      if (categories is Map) {
+        details[weekday] = {};
+        categories.forEach((category, values) {
+          if (values is Map) {
+            details[weekday]![category.toString()] = {};
+            values.forEach((value, count) {
+              details[weekday]![category.toString()]![value.toString()] =
+                  (count as num).toInt();
+            });
+          }
+        });
+      }
+    });
+
+    return {
+      'facilityStats': facilityStats,
+      'departedUsers': departedUsers,
+      'weeklySchedule': {'schedule': schedule, 'details': details},
+    };
   }
 }

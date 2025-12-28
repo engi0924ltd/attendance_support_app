@@ -27,23 +27,37 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
   bool _isLoading = true;
   String? _errorMessage;
 
+  // 選択中の月（nullは当月）
+  DateTime _selectedMonth = DateTime.now();
+
   // 施設全体の統計
   Map<String, dynamic> _facilityStats = {};
 
-  // 曜日別出勤予定
+  // 曜日別出勤予定（当月のみ表示）
   Map<String, Map<String, int>> _weeklySchedule = {};
   // 曜日別出勤予定の詳細（元の値ごとのカウント）
   Map<String, Map<String, Map<String, int>>> _weeklyDetails = {};
 
-  // 利用者一覧（個人分析用）
+  // 利用者一覧（個人分析用・当月のみ）
   List<User> _users = [];
   User? _selectedUser;
   Map<String, dynamic>? _userStats;
   List<Attendance> _userHealthHistory = [];  // 過去60回分の健康履歴
   bool _isLoadingUserStats = false;
 
-  // 当月退所者
-  List<User> _departedUsers = [];
+  // 退所者一覧
+  List<Map<String, dynamic>> _departedUsers = [];
+
+  /// 当月かどうか
+  bool get _isCurrentMonth {
+    final now = DateTime.now();
+    return _selectedMonth.year == now.year && _selectedMonth.month == now.month;
+  }
+
+  /// 選択月のフォーマット（YYYY-MM）
+  String get _monthString {
+    return '${_selectedMonth.year}-${_selectedMonth.month.toString().padLeft(2, '0')}';
+  }
 
   @override
   void initState() {
@@ -55,17 +69,23 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
 
   Future<void> _loadData() async {
     try {
+      if (!mounted) return;
       setState(() {
         _isLoading = true;
         _errorMessage = null;
       });
 
-      // 並列でデータを読み込む
-      await Future.wait([
-        _loadFacilityStats(),
-        _loadWeeklySchedule(),
-        _loadUsers(),
-      ]);
+      // バッチAPIで一括取得 + 当月のみ利用者一覧も並列取得
+      final futures = <Future>[
+        _loadAnalyticsBatch(),
+      ];
+
+      // 当月の場合のみ利用者一覧を読み込む
+      if (_isCurrentMonth) {
+        futures.add(_loadUsers());
+      }
+
+      await Future.wait(futures);
 
       if (!mounted) return;
       setState(() {
@@ -80,40 +100,50 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
     }
   }
 
-  /// 施設全体の統計を読み込む
-  Future<void> _loadFacilityStats() async {
-    final stats = await _attendanceService.getFacilityStats();
+  /// 分析データをバッチ取得（施設統計・退所者・曜日別予定を一括）
+  Future<void> _loadAnalyticsBatch() async {
+    final month = _isCurrentMonth ? null : _monthString;
+    final result = await _attendanceService.getAnalyticsBatch(month: month);
     if (!mounted) return;
+
     setState(() {
-      _facilityStats = stats;
+      // 施設統計
+      _facilityStats = result['facilityStats'] as Map<String, dynamic>? ?? {};
+
+      // 退所者一覧
+      _departedUsers = (result['departedUsers'] as List<dynamic>?)
+          ?.map((e) => Map<String, dynamic>.from(e as Map))
+          .toList() ?? [];
+
+      // 曜日別予定（当月のみ使用するが、データは常に取得される）
+      final weeklyData = result['weeklySchedule'] as Map<String, dynamic>? ?? {};
+      _weeklySchedule = (weeklyData['schedule'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, Map<String, int>.from(v as Map))) ?? {};
+      _weeklyDetails = (weeklyData['details'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, (v as Map).map((k2, v2) =>
+              MapEntry(k2.toString(), Map<String, int>.from(v2 as Map))))) ?? {};
     });
   }
 
-  /// 曜日別出勤予定を読み込む
-  Future<void> _loadWeeklySchedule() async {
-    final result = await _attendanceService.getWeeklyScheduleWithDetails();
-    if (!mounted) return;
-    setState(() {
-      _weeklySchedule = result['schedule'] as Map<String, Map<String, int>>;
-      _weeklyDetails = result['details'] as Map<String, Map<String, Map<String, int>>>;
-    });
-  }
-
-  /// 利用者一覧を読み込む
+  /// 利用者一覧を読み込む（当月のみ）
   Future<void> _loadUsers() async {
     final users = await _masterService.getActiveUsers();
-    // 当月退所者をフィルタリング
-    final allUsers = await _masterService.getAllUsers();
-    final departedThisMonth = allUsers.where((u) {
-      if (u.status != '退所済み') return false;
-      return true;
-    }).toList();
-
     if (!mounted) return;
     setState(() {
       _users = users;
-      _departedUsers = departedThisMonth;
     });
+  }
+
+  /// 月を変更
+  void _changeMonth(int delta) {
+    setState(() {
+      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + delta, 1);
+      // 個人分析をクリア
+      _selectedUser = null;
+      _userStats = null;
+      _userHealthHistory = [];
+    });
+    _loadData();
   }
 
   /// 個人の統計を読み込む
@@ -154,7 +184,7 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('分析'),
+        title: const Text('統計・分析'),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -170,23 +200,183 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // 月セレクター + 年度統計ボタン
+                        _buildMonthSelector(),
+                        const SizedBox(height: 8),
+                        // 年度統計ボタン
+                        _buildYearlyStatsButton(),
+                        const SizedBox(height: 16),
                         // 施設全体の統計
                         _buildFacilityStatsSection(),
                         const SizedBox(height: 24),
-                        // 曜日別出勤予定
-                        _buildWeeklyScheduleSection(),
-                        const SizedBox(height: 24),
-                        // 当月退所者
+                        // 当月のみ: 曜日別出勤予定
+                        if (_isCurrentMonth) ...[
+                          _buildWeeklyScheduleSection(),
+                          const SizedBox(height: 24),
+                        ],
+                        // 退所者一覧
                         _buildDepartedUsersSection(),
                         const SizedBox(height: 24),
-                        // 利用者個人分析
-                        _buildUserAnalysisSection(),
-                        const SizedBox(height: 24),
+                        // 当月のみ: 利用者個人分析
+                        if (_isCurrentMonth) ...[
+                          _buildUserAnalysisSection(),
+                          const SizedBox(height: 24),
+                        ],
                       ],
                     ),
                   ),
                 ),
     );
+  }
+
+  /// 月セレクター
+  Widget _buildMonthSelector() {
+    final now = DateTime.now();
+    final isCurrentMonth = _isCurrentMonth;
+
+    return Card(
+      elevation: 2,
+      color: Colors.indigo.shade50,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              onPressed: () => _changeMonth(-1),
+              icon: const Icon(Icons.chevron_left),
+              color: Colors.indigo,
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedMonth,
+                  firstDate: DateTime(2024, 1),
+                  lastDate: now,
+                  initialDatePickerMode: DatePickerMode.year,
+                  locale: const Locale('ja'),
+                );
+                if (picked != null) {
+                  setState(() {
+                    _selectedMonth = DateTime(picked.year, picked.month, 1);
+                    _selectedUser = null;
+                    _userStats = null;
+                    _userHealthHistory = [];
+                  });
+                  _loadData();
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.indigo.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_month, color: Colors.indigo.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_selectedMonth.year}年${_selectedMonth.month}月',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo.shade700,
+                      ),
+                    ),
+                    if (isCurrentMonth) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          '当月',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: isCurrentMonth ? null : () => _changeMonth(1),
+              icon: const Icon(Icons.chevron_right),
+              color: isCurrentMonth ? Colors.grey : Colors.indigo,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 年度統計ボタン
+  Widget _buildYearlyStatsButton() {
+    // 現在の年度を計算
+    final now = DateTime.now();
+    final currentFiscalYear = now.month >= 4 ? now.year : now.year - 1;
+
+    return Center(
+      child: ElevatedButton.icon(
+        onPressed: () => _showYearlyStatsDialog(currentFiscalYear),
+        icon: const Icon(Icons.calendar_view_month),
+        label: Text('$currentFiscalYear年度 統計を見る'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  /// 年度統計ダイアログを表示
+  Future<void> _showYearlyStatsDialog(int fiscalYear) async {
+    // ローディングダイアログを表示
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final stats = await _attendanceService.getYearlyStats(fiscalYear: fiscalYear);
+      if (!mounted) return;
+      Navigator.pop(context); // ローディングを閉じる
+
+      // 統計ダイアログを表示
+      showDialog(
+        context: context,
+        builder: (context) => _YearlyStatsDialog(
+          stats: stats,
+          onYearChange: (newYear) {
+            Navigator.pop(context);
+            _showYearlyStatsDialog(newYear);
+          },
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // ローディングを閉じる
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('年度統計の取得に失敗しました: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildErrorView() {
@@ -222,6 +412,8 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
     final monthlyWorkDays = _facilityStats['monthlyWorkDays'] ?? 0;
     final monthlyAttendance = _facilityStats['monthlyAttendance'] ?? 0;
 
+    final monthLabel = _isCurrentMonth ? '当月' : '${_selectedMonth.month}月';
+
     return Card(
       elevation: 2,
       child: Padding(
@@ -250,7 +442,7 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                 Expanded(
                   child: _buildStatCard(
                     icon: Icons.people,
-                    label: '当月利用者数',
+                    label: '$monthLabel利用者数',
                     value: '$totalUsers名',
                     color: Colors.blue,
                   ),
@@ -272,7 +464,7 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                 Expanded(
                   child: _buildStatCard(
                     icon: Icons.calendar_today,
-                    label: '当月稼働日数',
+                    label: '$monthLabel稼働日数',
                     value: '$monthlyWorkDays日',
                     color: Colors.orange,
                   ),
@@ -281,7 +473,7 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                 Expanded(
                   child: _buildStatCard(
                     icon: Icons.check_circle,
-                    label: '当月出勤延べ数',
+                    label: '$monthLabel出勤延べ数',
                     value: '$monthlyAttendance回',
                     color: Colors.purple,
                   ),
@@ -634,8 +826,10 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
     );
   }
 
-  /// 当月退所者セクション
+  /// 退所者セクション
   Widget _buildDepartedUsersSection() {
+    final monthLabel = _isCurrentMonth ? '当月' : '${_selectedMonth.month}月';
+
     return Card(
       elevation: 2,
       child: Padding(
@@ -648,7 +842,7 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                 Icon(Icons.person_off, color: Colors.red.shade700),
                 const SizedBox(width: 8),
                 Text(
-                  '退所者一覧',
+                  '$monthLabel退所者一覧',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -677,34 +871,55 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
             ),
             const Divider(),
             if (_departedUsers.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16),
+              Padding(
+                padding: const EdgeInsets.all(16),
                 child: Center(
                   child: Text(
-                    '退所者はいません',
-                    style: TextStyle(color: Colors.grey),
+                    '$monthLabelの退所者はいません',
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ),
               )
             else
-              ...(_departedUsers.take(5).map((user) => ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.red.shade100,
-                  child: Text(
-                    user.name.isNotEmpty ? user.name.substring(0, 1) : '?',
-                    style: TextStyle(color: Colors.red.shade700),
+              ...(_departedUsers.take(10).map((user) {
+                final name = user['userName'] as String? ?? '';
+                final furigana = '';
+                final leaveDate = user['leaveDate'] as String? ?? '';
+                final leaveReason = user['leaveReason'] as String? ?? '';
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.red.shade100,
+                    child: Text(
+                      name.isNotEmpty ? name.substring(0, 1) : '?',
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
                   ),
-                ),
-                title: Text(user.name),
-                subtitle: Text(user.furigana),
-                dense: true,
-              ))),
-            if (_departedUsers.length > 5)
+                  title: Text(name),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(furigana),
+                      if (leaveDate.isNotEmpty)
+                        Text(
+                          '退所日: $leaveDate${leaveReason.isNotEmpty ? " ($leaveReason)" : ""}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
+                  ),
+                  dense: true,
+                  isThreeLine: leaveDate.isNotEmpty,
+                );
+              })),
+            if (_departedUsers.length > 10)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Center(
                   child: Text(
-                    '他 ${_departedUsers.length - 5}名',
+                    '他 ${_departedUsers.length - 10}名',
                     style: const TextStyle(color: Colors.grey),
                   ),
                 ),
@@ -1305,5 +1520,271 @@ class _FullScreenHealthChart extends StatelessWidget {
       if (value <= 3) return Colors.orange;
       return Colors.red;
     }
+  }
+}
+
+/// 年度統計ダイアログ
+class _YearlyStatsDialog extends StatelessWidget {
+  final Map<String, dynamic> stats;
+  final Function(int) onYearChange;
+
+  const _YearlyStatsDialog({
+    required this.stats,
+    required this.onYearChange,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fiscalYear = (stats['fiscalYear'] as num?)?.toInt() ?? DateTime.now().year;
+    final fiscalYearLabel = stats['fiscalYearLabel'] as String? ?? '$fiscalYear年度';
+    final yearlyAttendance = (stats['yearlyAttendance'] as num?)?.toInt() ?? 0;
+    final yearlyWorkDays = (stats['yearlyWorkDays'] as num?)?.toInt() ?? 0;
+    final attendanceRate = (stats['attendanceRate'] as num?)?.toDouble() ?? 0.0;
+    final yearlyDeparted = (stats['yearlyDeparted'] as num?)?.toInt() ?? 0;
+    final monthlySummary = (stats['monthlySummary'] as List<dynamic>?)
+        ?.map((e) => e as Map<String, dynamic>)
+        .toList() ?? [];
+
+    return Dialog(
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ヘッダー
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => onYearChange(fiscalYear - 1),
+                    icon: const Icon(Icons.chevron_left, color: Colors.white),
+                  ),
+                  Expanded(
+                    child: Text(
+                      fiscalYearLabel,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      final now = DateTime.now();
+                      final currentFY = now.month >= 4 ? now.year : now.year - 1;
+                      if (fiscalYear < currentFY) {
+                        onYearChange(fiscalYear + 1);
+                      }
+                    },
+                    icon: Icon(
+                      Icons.chevron_right,
+                      color: fiscalYear < (DateTime.now().month >= 4 ? DateTime.now().year : DateTime.now().year - 1)
+                          ? Colors.white
+                          : Colors.white38,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            // 統計サマリー
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.check_circle,
+                          label: '年度出勤延べ数',
+                          value: '$yearlyAttendance回',
+                          color: Colors.green,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.pie_chart,
+                          label: '年度出勤率',
+                          value: '${(attendanceRate * 100).toStringAsFixed(1)}%',
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.calendar_today,
+                          label: '年度稼働日数',
+                          value: '$yearlyWorkDays日',
+                          color: Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.person_off,
+                          label: '年度退所者数',
+                          value: '$yearlyDeparted名',
+                          color: Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // 月別内訳
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.list_alt, color: Colors.grey.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    '月別内訳',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // 月別リスト
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: monthlySummary.length,
+                itemBuilder: (context, index) {
+                  final item = monthlySummary[index];
+                  final month = item['month'] as String? ?? '';
+                  final attendance = (item['attendance'] as num?)?.toInt() ?? 0;
+                  final workDays = (item['workDays'] as num?)?.toInt() ?? 0;
+
+                  // 月名を日本語に変換
+                  final parts = month.split('-');
+                  final monthLabel = parts.length == 2
+                      ? '${parts[0]}年${int.parse(parts[1])}月'
+                      : month;
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Colors.grey.shade200),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 100,
+                          child: Text(
+                            monthLabel,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildMiniStat('出勤', '$attendance回', Colors.green),
+                              _buildMiniStat('稼働', '$workDays日', Colors.orange),
+                              _buildMiniStat('平均', workDays > 0 ? '${(attendance / workDays).toStringAsFixed(1)}人' : '-', Colors.blue),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStat(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
   }
 }

@@ -306,11 +306,35 @@ function doGet(e) {
       return handleGetChatworkUsers();
     } else if (action === 'analytics/facility-stats') {
       return handleGetFacilityStats();
+    } else if (action.startsWith('analytics/facility-stats/')) {
+      // 月別統計: analytics/facility-stats/2025-01
+      const month = action.split('/')[2];
+      return handleGetFacilityStats(month);
     } else if (action === 'analytics/weekly-schedule') {
       return handleGetWeeklySchedule();
     } else if (action.startsWith('analytics/user-stats/')) {
       const userName = decodeURIComponent(action.split('/')[2]);
       return handleGetUserStats(userName);
+    } else if (action === 'analytics/departed-users') {
+      return handleGetDepartedUsers();
+    } else if (action.startsWith('analytics/departed-users/')) {
+      // 月別退所者: analytics/departed-users/2025-01
+      const month = action.split('/')[2];
+      return handleGetDepartedUsers(month);
+    } else if (action === 'analytics/yearly-stats') {
+      // 当年度統計
+      return handleGetYearlyStats();
+    } else if (action.startsWith('analytics/yearly-stats/')) {
+      // 指定年度統計: analytics/yearly-stats/2024 (2024年度 = 2024/4 - 2025/3)
+      const fiscalYear = parseInt(action.split('/')[2], 10);
+      return handleGetYearlyStats(fiscalYear);
+    } else if (action === 'analytics/batch') {
+      // バッチ取得（施設統計・退所者・曜日別予定を一括取得）
+      return handleGetAnalyticsBatch();
+    } else if (action.startsWith('analytics/batch/')) {
+      // 月別バッチ取得: analytics/batch/2025-01
+      const month = action.split('/')[2];
+      return handleGetAnalyticsBatch(month);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -3363,45 +3387,92 @@ function handleSetChatworkApiKey(data) {
 
 /**
  * 施設全体の統計を取得
+ * @param {string} [monthStr] - 対象月（YYYY-MM形式）。省略時は当月
  */
-function handleGetFacilityStats() {
+function handleGetFacilityStats(monthStr) {
   try {
     const masterSheet = getSheet(SHEET_NAMES.MASTER);
     const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
 
-    // 当月の範囲を計算
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
+    // 対象月の範囲を計算
+    let year, month;
+    if (monthStr && monthStr.match(/^\d{4}-\d{2}$/)) {
+      const parts = monthStr.split('-');
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
     const firstDay = new Date(year, month - 1, 1);
     const lastDay = new Date(year, month, 0);
 
-    // 契約中の利用者数を取得
+    // 当月かどうか
+    const now = new Date();
+    const isCurrentMonth = (year === now.getFullYear() && month === now.getMonth() + 1);
+
+    // 利用者数を取得（当月は契約中、過去月は退所日を考慮）
     let totalUsers = 0;
     const masterLastRow = masterSheet.getLastRow();
-    if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
-      const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
-      const numRows = masterLastRow - startRow + 1;
-      const masterData = masterSheet.getRange(startRow, MASTER_CONFIG.USER_COLS.NAME, numRows, 3).getValues();
 
-      for (let i = 0; i < masterData.length; i++) {
-        const name = masterData[i][0];
-        if (!name || name === '') break;
-        const status = masterData[i][2];
-        if (status === '契約中') {
-          totalUsers++;
+    if (isCurrentMonth) {
+      // 当月: 契約中の利用者数をカウント
+      if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
+        const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+        const numRows = masterLastRow - startRow + 1;
+        const masterData = masterSheet.getRange(startRow, MASTER_CONFIG.USER_COLS.NAME, numRows, 3).getValues();
+
+        for (let i = 0; i < masterData.length; i++) {
+          const name = masterData[i][0];
+          if (!name || name === '') break;
+          const status = masterData[i][2];
+          if (status === '契約中') {
+            totalUsers++;
+          }
+        }
+      }
+    } else {
+      // 過去月: 名簿から退所日を確認して、その月に在籍していた人数をカウント
+      const rosterLastRow = rosterSheet.getLastRow();
+      if (rosterLastRow >= 3) {
+        const numRows = rosterLastRow - 2;
+        // 名前(B列)、ステータス(E列)、退所日(BA列)を取得
+        const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+        const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+        const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+
+        for (let i = 0; i < numRows; i++) {
+          const name = nameData[i][0];
+          if (!name || name === '') continue;
+
+          const status = statusData[i][0];
+          const leaveDate = leaveDateData[i][0];
+
+          // 契約中 or 対象月以降に退所した人をカウント
+          if (status === '契約中') {
+            totalUsers++;
+          } else if (status === '退所済み' && leaveDate) {
+            const leaveDateObj = new Date(leaveDate);
+            // 退所日が対象月の初日以降であれば、その月は在籍していた
+            if (leaveDateObj >= firstDay) {
+              totalUsers++;
+            }
+          }
         }
       }
     }
 
-    // 当月の出勤データを集計
+    // 対象月の出勤データを集計
     const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
     let monthlyAttendance = 0;
     let totalScheduled = 0;
     const workDays = new Set();
 
     if (actualLastRow >= 2) {
-      const MAX_SEARCH_ROWS = 1000;
+      // 過去月の場合は全データを検索する必要がある可能性
+      const MAX_SEARCH_ROWS = isCurrentMonth ? 1000 : 3000;
       const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
       const startRow = Math.max(2, actualLastRow - searchRows + 1);
 
@@ -3413,7 +3484,7 @@ function handleGetFacilityStats() {
         if (!dateVal) continue;
 
         const rowDate = new Date(dateVal);
-        // 当月のデータのみ集計
+        // 対象月のデータのみ集計
         if (rowDate >= firstDay && rowDate <= lastDay) {
           const userName = data[i][1];
           if (!userName || userName === '') continue;
@@ -3441,6 +3512,8 @@ function handleGetFacilityStats() {
     const attendanceRate = totalScheduled > 0 ? monthlyAttendance / totalScheduled : 0;
 
     return createSuccessResponse({
+      year: year,
+      month: month,
       totalUsers: totalUsers,
       attendanceRate: attendanceRate,
       monthlyWorkDays: workDays.size,
@@ -3607,5 +3680,438 @@ function handleGetUserStats(userName) {
     });
   } catch (error) {
     return createErrorResponse('利用者統計取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 月別退所者一覧を取得
+ * @param {string} [monthStr] - 対象月（YYYY-MM形式）。省略時は当月
+ */
+function handleGetDepartedUsers(monthStr) {
+  try {
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+
+    // 対象月の範囲を計算
+    let year, month;
+    if (monthStr && monthStr.match(/^\d{4}-\d{2}$/)) {
+      const parts = monthStr.split('-');
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+
+    const rosterLastRow = rosterSheet.getLastRow();
+    if (rosterLastRow < 3) {
+      return createSuccessResponse({ users: [], year: year, month: month });
+    }
+
+    const numRows = rosterLastRow - 2;
+
+    // 名前(B列)、カナ(C列)、ステータス(E列)、退所日(BA列)、退所理由(BB列)を一括取得
+    const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+    const kanaData = rosterSheet.getRange(3, ROSTER_COLS.NAME_KANA, numRows, 1).getValues();
+    const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+    const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+    const leaveReasonData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_REASON, numRows, 1).getValues();
+
+    const departedUsers = [];
+
+    for (let i = 0; i < numRows; i++) {
+      const name = nameData[i][0];
+      if (!name || name === '') continue;
+
+      const status = statusData[i][0];
+      const leaveDate = leaveDateData[i][0];
+
+      // 退所済みで、退所日が対象月内の人をフィルタリング
+      if (status === '退所済み' && leaveDate) {
+        const leaveDateObj = new Date(leaveDate);
+        if (leaveDateObj >= firstDay && leaveDateObj <= lastDay) {
+          departedUsers.push({
+            name: name,
+            furigana: kanaData[i][0] || '',
+            leaveDate: formatDate(leaveDate),
+            leaveReason: leaveReasonData[i][0] || ''
+          });
+        }
+      }
+    }
+
+    // 退所日順にソート（新しい順）
+    departedUsers.sort((a, b) => {
+      return new Date(b.leaveDate) - new Date(a.leaveDate);
+    });
+
+    return createSuccessResponse({
+      users: departedUsers,
+      year: year,
+      month: month
+    });
+  } catch (error) {
+    return createErrorResponse('退所者一覧取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 年度統計を取得
+ * @param {number} [fiscalYear] - 年度（4月始まり）。省略時は当年度
+ */
+function handleGetYearlyStats(fiscalYear) {
+  try {
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+
+    // 年度の範囲を計算（4月〜翌3月）
+    const now = new Date();
+    if (!fiscalYear) {
+      // 当年度を計算（1-3月は前年度）
+      fiscalYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    }
+    const fiscalStart = new Date(fiscalYear, 3, 1);  // 4月1日
+    const fiscalEnd = new Date(fiscalYear + 1, 2, 31, 23, 59, 59);  // 翌年3月31日
+
+    // 月別統計を格納
+    const monthlyData = {};
+    for (let m = 4; m <= 12; m++) {
+      monthlyData[`${fiscalYear}-${String(m).padStart(2, '0')}`] = {
+        attendance: 0, scheduled: 0, workDays: new Set()
+      };
+    }
+    for (let m = 1; m <= 3; m++) {
+      monthlyData[`${fiscalYear + 1}-${String(m).padStart(2, '0')}`] = {
+        attendance: 0, scheduled: 0, workDays: new Set()
+      };
+    }
+
+    // 年度内の出勤データを集計
+    const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
+    let yearlyAttendance = 0;
+    let yearlyScheduled = 0;
+    const yearlyWorkDays = new Set();
+
+    if (actualLastRow >= 2) {
+      // 年度分のデータを検索（最大5000行）
+      const MAX_SEARCH_ROWS = 5000;
+      const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+      const startRow = Math.max(2, actualLastRow - searchRows + 1);
+
+      // 日付、利用者名、出欠予定、出欠を一括取得
+      const data = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, searchRows, 4).getValues();
+
+      for (let i = 0; i < data.length; i++) {
+        const dateVal = data[i][0];
+        if (!dateVal) continue;
+
+        const rowDate = new Date(dateVal);
+        // 年度内のデータのみ集計
+        if (rowDate >= fiscalStart && rowDate <= fiscalEnd) {
+          const userName = data[i][1];
+          if (!userName || userName === '') continue;
+
+          const scheduled = data[i][2];
+          const attendance = data[i][3];
+
+          // 月キーを作成
+          const monthKey = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}`;
+
+          // 出欠予定がある場合カウント
+          if (scheduled && scheduled !== '') {
+            yearlyScheduled++;
+            if (monthlyData[monthKey]) {
+              monthlyData[monthKey].scheduled++;
+            }
+          }
+
+          // 出勤の場合カウント
+          if (attendance === '出勤' || attendance === '遅刻') {
+            yearlyAttendance++;
+            const dateStr = formatDate(dateVal);
+            yearlyWorkDays.add(dateStr);
+
+            if (monthlyData[monthKey]) {
+              monthlyData[monthKey].attendance++;
+              monthlyData[monthKey].workDays.add(dateStr);
+            }
+          }
+        }
+      }
+    }
+
+    // 年度内の退所者数を集計
+    let yearlyDeparted = 0;
+    const rosterLastRow = rosterSheet.getLastRow();
+    if (rosterLastRow >= 3) {
+      const numRows = rosterLastRow - 2;
+      const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+      const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+
+      for (let i = 0; i < numRows; i++) {
+        const status = statusData[i][0];
+        const leaveDate = leaveDateData[i][0];
+
+        if (status === '退所済み' && leaveDate) {
+          const leaveDateObj = new Date(leaveDate);
+          if (leaveDateObj >= fiscalStart && leaveDateObj <= fiscalEnd) {
+            yearlyDeparted++;
+          }
+        }
+      }
+    }
+
+    // 出勤率を計算
+    const attendanceRate = yearlyScheduled > 0 ? yearlyAttendance / yearlyScheduled : 0;
+
+    // 月別サマリーを作成
+    const monthlySummary = [];
+    Object.keys(monthlyData).sort().forEach(key => {
+      const data = monthlyData[key];
+      const rate = data.scheduled > 0 ? data.attendance / data.scheduled : 0;
+      monthlySummary.push({
+        month: key,
+        attendance: data.attendance,
+        scheduled: data.scheduled,
+        workDays: data.workDays.size,
+        attendanceRate: rate
+      });
+    });
+
+    return createSuccessResponse({
+      fiscalYear: fiscalYear,
+      fiscalYearLabel: `${fiscalYear}年度`,
+      yearlyAttendance: yearlyAttendance,
+      yearlyScheduled: yearlyScheduled,
+      yearlyWorkDays: yearlyWorkDays.size,
+      attendanceRate: attendanceRate,
+      yearlyDeparted: yearlyDeparted,
+      monthlySummary: monthlySummary
+    });
+  } catch (error) {
+    return createErrorResponse('年度統計取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 分析データをバッチ取得（施設統計・退所者・曜日別予定を一括）
+ * @param {string} monthStr - 月（YYYY-MM形式）
+ */
+function handleGetAnalyticsBatch(monthStr) {
+  try {
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+
+    // === 対象月の設定 ===
+    let year, month;
+    if (monthStr && monthStr.match(/^\d{4}-\d{2}$/)) {
+      const parts = monthStr.split('-');
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const now = new Date();
+    const isCurrentMonth = (year === now.getFullYear() && month === now.getMonth() + 1);
+
+    // === 名簿データを一括取得 ===
+    const rosterLastRow = rosterSheet.getLastRow();
+    let rosterData = [];
+    if (rosterLastRow >= 3) {
+      const numRows = rosterLastRow - 2;
+      // 名前(B列)、ステータス(E列)、退所日(BA列)、退所理由(BB列)を取得
+      const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+      const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+      const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+      const leaveReasonData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_REASON, numRows, 1).getValues();
+
+      for (let i = 0; i < numRows; i++) {
+        if (nameData[i][0] && nameData[i][0] !== '') {
+          rosterData.push({
+            name: nameData[i][0],
+            status: statusData[i][0],
+            leaveDate: leaveDateData[i][0],
+            leaveReason: leaveReasonData[i][0]
+          });
+        }
+      }
+    }
+
+    // === 1. 施設統計（facilityStats） ===
+    let contractedUsers = 0;  // 契約中の人数
+    const departedUsers = [];  // 当月退所者リスト
+    let futureDepatedCount = 0;  // 対象月より後に退所した人数
+
+    for (const user of rosterData) {
+      const status = (user.status || '').toString().trim();
+
+      if (status === '契約中') {
+        // 契約中をカウント
+        contractedUsers++;
+      } else if (status === '退所済み' && user.leaveDate) {
+        // 退所日をパース（YYYYMMDD形式の数値/文字列または日付型に対応）
+        let leaveDateObj;
+        const rawDate = user.leaveDate;
+        const rawStr = String(rawDate);  // 数値でも文字列に変換
+
+        if (rawStr.match(/^\d{8}$/)) {
+          // YYYYMMDD形式（数値または文字列）
+          const y = parseInt(rawStr.substring(0, 4), 10);
+          const m = parseInt(rawStr.substring(4, 6), 10) - 1;
+          const d = parseInt(rawStr.substring(6, 8), 10);
+          leaveDateObj = new Date(y, m, d);
+        } else {
+          leaveDateObj = new Date(rawDate);
+        }
+
+        if (isNaN(leaveDateObj.getTime()) || leaveDateObj.getFullYear() < 2000) continue;
+
+        if (leaveDateObj >= firstDay && leaveDateObj <= lastDay) {
+          // 対象月に退所した人 → リストに追加
+          departedUsers.push({
+            userName: user.name,
+            leaveDate: formatDate(leaveDateObj),
+            leaveReason: user.leaveReason || ''
+          });
+        } else if (leaveDateObj > lastDay) {
+          // 対象月より後に退所した人（その月は全日在籍）
+          futureDepatedCount++;
+        }
+      }
+    }
+
+    // 利用者数 = 契約中 + 当月退所者 + 対象月より後に退所した人
+    const totalUsers = contractedUsers + departedUsers.length + futureDepatedCount;
+
+    // 出勤データを集計
+    const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
+    let monthlyAttendance = 0;
+    let totalScheduled = 0;
+    const workDays = new Set();
+
+    if (actualLastRow >= 2) {
+      const MAX_SEARCH_ROWS = isCurrentMonth ? 1000 : 3000;
+      const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+      const startRow = Math.max(2, actualLastRow - searchRows + 1);
+
+      const data = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, searchRows, 4).getValues();
+
+      for (let i = 0; i < data.length; i++) {
+        const dateVal = data[i][0];
+        if (!dateVal) continue;
+
+        const rowDate = new Date(dateVal);
+        if (rowDate >= firstDay && rowDate <= lastDay) {
+          const userName = data[i][1];
+          if (!userName || userName === '') continue;
+
+          const scheduled = data[i][2];
+          const attendance = data[i][3];
+
+          if (scheduled && scheduled !== '') {
+            totalScheduled++;
+          }
+
+          if (attendance === '出勤' || attendance === '遅刻') {
+            monthlyAttendance++;
+            workDays.add(formatDate(dateVal));
+          }
+        }
+      }
+    }
+
+    const attendanceRate = totalScheduled > 0 ? monthlyAttendance / totalScheduled : 0;
+
+    // === 2. 曜日別予定（weeklySchedule） ===
+    const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+    const schedule = {};
+    const details = {};
+    weekdays.forEach(day => {
+      schedule[day] = { '本施設': 0, '施設外': 0, '在宅': 0 };
+      details[day] = { '本施設': {}, '施設外': {}, '在宅': {} };
+    });
+
+    const weekdayMap = {
+      4: '月', // D列
+      5: '火', // E列
+      6: '水', // F列
+      7: '木', // G列
+      8: '金', // H列
+      9: '土', // I列
+      10: '日' // J列
+    };
+
+    const masterLastRow = masterSheet.getLastRow();
+    if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
+      const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+      const numRows = masterLastRow - startRow + 1;
+
+      // 名前(A列)、ステータス(C列)、曜日別予定(D-J列)を一括取得
+      const masterData = masterSheet.getRange(startRow, 1, numRows, 10).getValues();
+
+      for (let i = 0; i < masterData.length; i++) {
+        const name = masterData[i][0];
+        if (!name || name === '') break;
+
+        const status = masterData[i][2]; // C列: ステータス
+        if (status !== '契約中') continue;
+
+        // D列〜J列（曜日別予定）をチェック
+        for (let col = 3; col <= 9; col++) { // 配列インデックス3-9 = D-J列
+          const value = masterData[i][col];
+          if (!value || value === '') continue;
+
+          const weekday = weekdayMap[col + 1]; // 配列インデックス+1 = 列番号
+          const valueStr = String(value).trim();
+
+          // 値に基づいて分類
+          let category = '';
+          if (valueStr.includes('施設外') || valueStr.includes('外')) {
+            category = '施設外';
+          } else if (valueStr.includes('在宅') || valueStr.includes('自宅')) {
+            category = '在宅';
+          } else if (valueStr !== '') {
+            category = '本施設';
+          }
+
+          if (category) {
+            schedule[weekday][category]++;
+            // 詳細データに元の値をカウント
+            if (!details[weekday][category][valueStr]) {
+              details[weekday][category][valueStr] = 0;
+            }
+            details[weekday][category][valueStr]++;
+          }
+        }
+      }
+    }
+
+    return createSuccessResponse({
+      // 施設統計
+      facilityStats: {
+        year: year,
+        month: month,
+        totalUsers: totalUsers,
+        attendanceRate: attendanceRate,
+        monthlyWorkDays: workDays.size,
+        monthlyAttendance: monthlyAttendance
+      },
+      // 退所者一覧
+      departedUsers: departedUsers,
+      // 曜日別予定
+      weeklySchedule: {
+        schedule: schedule,
+        details: details
+      }
+    });
+  } catch (error) {
+    return createErrorResponse('バッチ分析取得エラー: ' + error.message);
   }
 }
