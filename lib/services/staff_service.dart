@@ -57,6 +57,8 @@ class StaffService {
     String? jobType,
     String? qualification,
     String? placement,
+    String? employmentType,
+    String? retirementDate,
   }) async {
     try {
       final url = Uri.parse(await _gasUrl);
@@ -69,6 +71,8 @@ class StaffService {
         'jobType': jobType,
         'qualification': qualification,
         'placement': placement,
+        'employmentType': employmentType,
+        'retirementDate': retirementDate,
       });
 
       final response = await _client
@@ -95,6 +99,8 @@ class StaffService {
     String? jobType,
     String? qualification,
     String? placement,
+    String? employmentType,
+    String? retirementDate,
   }) async {
     try {
       final url = Uri.parse(await _gasUrl);
@@ -108,6 +114,8 @@ class StaffService {
         'jobType': jobType,
         'qualification': qualification,
         'placement': placement,
+        'employmentType': employmentType,
+        'retirementDate': retirementDate,
       });
 
       final response = await _client

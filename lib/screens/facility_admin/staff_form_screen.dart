@@ -22,13 +22,16 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   late TextEditingController _nameController;
   late TextEditingController _emailController;
   late TextEditingController _passwordController;
+  late TextEditingController _retirementDateController; // 退職日
   String _selectedRole = '従業員'; // デフォルトは従業員
   String? _selectedQualification; // 選択された資格
   String? _selectedPlacement; // 選択された配置
   String? _selectedJobType; // 選択された職種
+  String? _selectedEmploymentType; // 選択された雇用形態
   List<String> _qualificationOptions = []; // 資格選択肢
   List<String> _placementOptions = []; // 配置選択肢
   List<String> _jobTypeOptions = []; // 職種選択肢
+  List<String> _employmentTypeOptions = []; // 雇用形態選択肢
   bool _isLoading = false;
   bool _isLoadingOptions = true;
   bool _obscurePassword = true;
@@ -46,12 +49,14 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     _nameController = TextEditingController(text: widget.staff?.name ?? '');
     _emailController = TextEditingController(text: widget.staff?.email ?? '');
     _passwordController = TextEditingController();
+    _retirementDateController = TextEditingController(text: widget.staff?.retirementDate ?? '');
 
     if (widget.staff != null) {
       _selectedRole = widget.staff!.role;
       _selectedQualification = widget.staff!.qualification;
       _selectedPlacement = widget.staff!.placement;
       _selectedJobType = widget.staff!.jobType;
+      _selectedEmploymentType = widget.staff!.employmentType;
     }
 
     // プルダウン選択肢を読み込む
@@ -66,6 +71,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           _qualificationOptions = options.qualifications;
           _placementOptions = options.placements;
           _jobTypeOptions = options.jobTypes;
+          _employmentTypeOptions = options.employmentTypes;
           _isLoadingOptions = false;
         });
       }
@@ -83,6 +89,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _retirementDateController.dispose();
     super.dispose();
   }
 
@@ -109,6 +116,10 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           jobType: _selectedJobType,
           qualification: _selectedQualification,
           placement: _selectedPlacement,
+          employmentType: _selectedEmploymentType,
+          retirementDate: _retirementDateController.text.trim().isNotEmpty
+              ? _retirementDateController.text.trim()
+              : null,
         );
 
         if (mounted) {
@@ -127,6 +138,10 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           jobType: _selectedJobType,
           qualification: _selectedQualification,
           placement: _selectedPlacement,
+          employmentType: _selectedEmploymentType,
+          retirementDate: _retirementDateController.text.trim().isNotEmpty
+              ? _retirementDateController.text.trim()
+              : null,
         );
 
         if (mounted) {
@@ -415,6 +430,63 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
                               });
                             },
                     ),
+              const SizedBox(height: 16),
+
+              // 雇用形態（任意）
+              _isLoadingOptions
+                  ? const SizedBox.shrink()
+                  : DropdownButtonFormField<String>(
+                      value: _selectedEmploymentType,
+                      decoration: const InputDecoration(
+                        labelText: '雇用形態',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.badge),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('選択なし'),
+                        ),
+                        ..._employmentTypeOptions.map((option) {
+                          return DropdownMenuItem<String>(
+                            value: option,
+                            child: Text(option),
+                          );
+                        }),
+                      ],
+                      onChanged: _isLoading
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _selectedEmploymentType = value;
+                              });
+                            },
+                    ),
+              const SizedBox(height: 16),
+
+              // 退職日（任意）
+              TextFormField(
+                controller: _retirementDateController,
+                decoration: const InputDecoration(
+                  labelText: '退職日',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.event_busy),
+                  hintText: '例: 20251231（8桁の数字）',
+                  helperText: '退職予定日または退職日（任意入力）',
+                  counterText: '',
+                ),
+                keyboardType: TextInputType.number,
+                maxLength: 8,
+                enabled: !_isLoading,
+                validator: (value) {
+                  if (value != null && value.isNotEmpty) {
+                    if (value.length != 8 || int.tryParse(value) == null) {
+                      return '8桁の数字で入力してください（例: 20251231）';
+                    }
+                  }
+                  return null;
+                },
+              ),
               const SizedBox(height: 32),
 
               // 保存ボタン

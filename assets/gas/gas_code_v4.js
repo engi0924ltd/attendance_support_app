@@ -74,7 +74,7 @@ const MASTER_CONFIG = {
   // 職員セクション
   STAFF_HEADER_ROW: 6,
   STAFF_DATA_START_ROW: 8,
-  STAFF_DATA_END_ROW: 200,  // 200行まで対応
+  STAFF_DATA_END_ROW: 40,   // 40行まで対応（V8:V40、最大33人）
 
   STAFF_COLS: {
     NAME: 22,       // V列: 職員名
@@ -83,32 +83,46 @@ const MASTER_CONFIG = {
     PASSWORD: 25,   // Y列: パスワード
     JOB_TYPE: 26,   // Z列: 職種
     QUALIFICATION: 27,  // AA列: 保有福祉資格
-    PLACEMENT: 28   // AB列: 職員配置（データ保存用）
+    PLACEMENT: 28,  // AB列: 職員配置
+    EMPLOYMENT_TYPE: 29, // AC列: 雇用形態
+    RETIREMENT_DATE: 30  // AD列: 退職日
   },
 
   // 支援記録用プルダウン選択肢（AC列、V列、AD〜AH列、8〜25行目）
   SUPPORT_DROPDOWN_START_ROW: 8,
   SUPPORT_DROPDOWN_END_ROW: 25,
-  // AC列のプルダウン選択肢（勤務地・資格・職員配置）
-  WORK_LOCATION_DROPDOWN_START_ROW: 8,   // 勤務地: AC8〜AC15
-  WORK_LOCATION_DROPDOWN_END_ROW: 15,
-  QUALIFICATION_DROPDOWN_START_ROW: 20,  // 資格選択肢: AC20〜AC30
-  QUALIFICATION_DROPDOWN_END_ROW: 30,
-  PLACEMENT_DROPDOWN_START_ROW: 32,      // 職員配置選択肢: AC32〜AC40
-  PLACEMENT_DROPDOWN_END_ROW: 40,
-  JOB_TYPE_DROPDOWN_START_ROW: 31,       // 職種選択肢: AD31〜AD40
-  JOB_TYPE_DROPDOWN_END_ROW: 40,
-  JOB_TYPE_DROPDOWN_COL: 30,             // AD列: 職種
+  // 職員関連プルダウン選択肢（T〜W列、44〜55行目）
+  WORK_LOCATION_DROPDOWN_START_ROW: 44,   // 勤務地: W44〜W55
+  WORK_LOCATION_DROPDOWN_END_ROW: 55,
+  WORK_LOCATION_DROPDOWN_COL: 23,         // W列: 勤務地
+  QUALIFICATION_DROPDOWN_START_ROW: 44,   // 資格選択肢: T44〜T55
+  QUALIFICATION_DROPDOWN_END_ROW: 55,
+  QUALIFICATION_DROPDOWN_COL: 20,         // T列: 資格選択肢
+  PLACEMENT_DROPDOWN_START_ROW: 44,       // 職員配置選択肢: U44〜U55
+  PLACEMENT_DROPDOWN_END_ROW: 55,
+  PLACEMENT_DROPDOWN_COL: 21,             // U列: 職員配置選択肢
+  JOB_TYPE_DROPDOWN_START_ROW: 44,        // 職種選択肢: V44〜V55
+  JOB_TYPE_DROPDOWN_END_ROW: 55,
+  JOB_TYPE_DROPDOWN_COL: 22,              // V列: 職種
+  // 雇用形態プルダウン（X列、44〜55行目）
+  EMPLOYMENT_TYPE_DROPDOWN_START_ROW: 44, // 雇用形態: X44〜X55
+  EMPLOYMENT_TYPE_DROPDOWN_END_ROW: 55,
+  EMPLOYMENT_TYPE_DROPDOWN_COL: 24,       // X列: 雇用形態
+  // 勤怠評価プルダウン（AE列、30〜40行目）
+  WORK_EVAL_DROPDOWN_START_ROW: 30,       // 勤怠評価: AE30〜AE40
+  WORK_EVAL_DROPDOWN_END_ROW: 40,
+  WORK_EVAL_DROPDOWN_COL: 31,             // AE列: 勤怠評価
   SUPPORT_DROPDOWN_COLS: {
-    WORK_LOCATION: 29,    // AC列: 勤務地（8〜15行目）
-    QUALIFICATION: 29,    // AC列: 資格選択肢（20〜30行目）
-    PLACEMENT: 29,        // AC列: 職員配置選択肢（32〜40行目）
-    RECORDER: 22,         // V列: 記録者（職員名と同じ列）
-    WORK_EVAL: 30,        // AD列: 勤怠評価
-    EMPLOYMENT_EVAL: 31,  // AE列: 就労評価（品質・生産性）
-    WORK_MOTIVATION: 32,  // AF列: 就労意欲
-    COMMUNICATION: 33,    // AG列: 通信連絡対応度
-    EVALUATION: 34        // AH列: 評価
+    WORK_LOCATION: 23,    // W列: 勤務地（44〜55行目）
+    QUALIFICATION: 20,    // T列: 資格選択肢（44〜55行目）
+    PLACEMENT: 21,        // U列: 職員配置選択肢（44〜55行目）
+    JOB_TYPE: 22,         // V列: 職種（44〜55行目）
+    RECORDER: 22,         // V列: 記録者（職員名と同じ列）※旧設定維持
+    WORK_EVAL: 31,        // AE列: 勤怠評価（30〜40行目）
+    EMPLOYMENT_EVAL: 32,  // AF列: 就労評価（品質・生産性）
+    WORK_MOTIVATION: 33,  // AG列: 就労意欲
+    COMMUNICATION: 34,    // AH列: 通信連絡対応度
+    EVALUATION: 35        // AI列: 評価
   },
 
   // 名簿用プルダウン選択肢（L〜S列、44〜50行目）
@@ -500,23 +514,25 @@ function handleGetDropdowns() {
     otherBreak: getTimeListOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.OTHER_BREAK, 8, 25),  // T列: その他休憩（8〜25行目）
     specialNotes: [],                                                                                                                                             // 特記事項（使用しない）
     breaks: [],                                                                                                                                                   // 休憩時間（使用しない）
-    workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_END_ROW),  // AC列: 勤務地（8〜15行目）
-    qualifications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.QUALIFICATION, MASTER_CONFIG.QUALIFICATION_DROPDOWN_START_ROW, MASTER_CONFIG.QUALIFICATION_DROPDOWN_END_ROW),  // AC列: 資格選択肢（20〜30行目）
-    placements: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.PLACEMENT, MASTER_CONFIG.PLACEMENT_DROPDOWN_START_ROW, MASTER_CONFIG.PLACEMENT_DROPDOWN_END_ROW),  // AC列: 職員配置選択肢（32〜40行目）
-    jobTypes: getColumnOptions(sheet, MASTER_CONFIG.JOB_TYPE_DROPDOWN_COL, MASTER_CONFIG.JOB_TYPE_DROPDOWN_START_ROW, MASTER_CONFIG.JOB_TYPE_DROPDOWN_END_ROW),  // AD列: 職種選択肢（31〜40行目）
+    // 職員関連プルダウン（T〜X列、44〜55行目）
+    workLocations: getColumnOptions(sheet, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_COL, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_END_ROW),  // W列: 勤務地（44〜55行目）
+    qualifications: getColumnOptions(sheet, MASTER_CONFIG.QUALIFICATION_DROPDOWN_COL, MASTER_CONFIG.QUALIFICATION_DROPDOWN_START_ROW, MASTER_CONFIG.QUALIFICATION_DROPDOWN_END_ROW),  // T列: 資格選択肢（44〜55行目）
+    placements: getColumnOptions(sheet, MASTER_CONFIG.PLACEMENT_DROPDOWN_COL, MASTER_CONFIG.PLACEMENT_DROPDOWN_START_ROW, MASTER_CONFIG.PLACEMENT_DROPDOWN_END_ROW),  // U列: 職員配置選択肢（44〜55行目）
+    jobTypes: getColumnOptions(sheet, MASTER_CONFIG.JOB_TYPE_DROPDOWN_COL, MASTER_CONFIG.JOB_TYPE_DROPDOWN_START_ROW, MASTER_CONFIG.JOB_TYPE_DROPDOWN_END_ROW),  // V列: 職種選択肢（44〜55行目）
+    employmentTypes: getColumnOptions(sheet, MASTER_CONFIG.EMPLOYMENT_TYPE_DROPDOWN_COL, MASTER_CONFIG.EMPLOYMENT_TYPE_DROPDOWN_START_ROW, MASTER_CONFIG.EMPLOYMENT_TYPE_DROPDOWN_END_ROW),  // X列: 雇用形態（44〜55行目）
 
-    // 曜日別出欠予定用プルダウン（K列、44〜50行目）
+    // 曜日別出欠予定用プルダウン（K列、44〜55行目）
     scheduledWeekly: getColumnOptions(sheet, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_COL, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_START_ROW, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_END_ROW), // K列: 曜日別出欠予定
 
     // 支援記録用プルダウン
     recorders: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.RECORDER, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),  // V列: 記録者（8〜25行目）
 
-    // 評価項目プルダウン（AD〜AH列、8〜25行目）
-    workEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),           // AD列: 勤怠評価（8〜25行目）
-    employmentEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EMPLOYMENT_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),   // AE列: 就労評価（8〜25行目）
-    workMotivations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_MOTIVATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),     // AF列: 就労意欲（8〜25行目）
-    communications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.COMMUNICATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),         // AG列: 通信連絡対応度（8〜25行目）
-    evaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EVALUATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),               // AH列: 評価（8〜25行目）
+    // 評価項目プルダウン（AE〜AI列）
+    workEvaluations: getColumnOptions(sheet, MASTER_CONFIG.WORK_EVAL_DROPDOWN_COL, MASTER_CONFIG.WORK_EVAL_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_EVAL_DROPDOWN_END_ROW),           // AE列: 勤怠評価（30〜40行目）
+    employmentEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EMPLOYMENT_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),   // AF列: 就労評価（8〜25行目）
+    workMotivations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_MOTIVATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),     // AG列: 就労意欲（8〜25行目）
+    communications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.COMMUNICATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),         // AH列: 通信連絡対応度（8〜25行目）
+    evaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EVALUATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),               // AI列: 評価（8〜25行目）
 
     // 名簿用プルダウン（L〜S列、44〜50行目）
     rosterStatus: getColumnOptions(sheet, MASTER_CONFIG.ROSTER_DROPDOWN_COLS.STATUS, MASTER_CONFIG.ROSTER_DROPDOWN_START_ROW, MASTER_CONFIG.ROSTER_DROPDOWN_END_ROW),                     // L列: ステータス
@@ -866,16 +882,18 @@ function handleGetStaffList() {
     const endRow = MASTER_CONFIG.STAFF_DATA_END_ROW;
     const numRows = endRow - startRow + 1;
 
-    // 必要な列を一括取得（V:名前, W:権限, X:メール, Z:職種, AA:資格, AB:配置）
+    // 必要な列を一括取得（V:名前, W:権限, X:メール, Z:職種, AA:資格, AB:配置, AC:雇用形態, AD:退職日）
     const nameCol = MASTER_CONFIG.STAFF_COLS.NAME;      // V列 = 22
     const roleCol = MASTER_CONFIG.STAFF_COLS.ROLE;      // W列 = 23
     const emailCol = MASTER_CONFIG.STAFF_COLS.EMAIL;    // X列 = 24
     const jobTypeCol = MASTER_CONFIG.STAFF_COLS.JOB_TYPE; // Z列 = 26
     const qualificationCol = MASTER_CONFIG.STAFF_COLS.QUALIFICATION; // AA列 = 27
     const placementCol = MASTER_CONFIG.STAFF_COLS.PLACEMENT; // AB列 = 28
+    const employmentTypeCol = MASTER_CONFIG.STAFF_COLS.EMPLOYMENT_TYPE; // AC列 = 29
+    const retirementDateCol = MASTER_CONFIG.STAFF_COLS.RETIREMENT_DATE; // AD列 = 30
 
-    // V列からAB列まで一括取得（22列目から28列目 = 7列分）
-    const allData = sheet.getRange(startRow, nameCol, numRows, placementCol - nameCol + 1).getValues();
+    // V列からAD列まで一括取得（22列目から30列目 = 9列分）
+    const allData = sheet.getRange(startRow, nameCol, numRows, retirementDateCol - nameCol + 1).getValues();
 
     const staffList = [];
     for (let i = 0; i < allData.length; i++) {
@@ -886,6 +904,8 @@ function handleGetStaffList() {
       const jobType = row[jobTypeCol - nameCol];  // Z列
       const qualification = row[qualificationCol - nameCol];  // AA列
       const placement = row[placementCol - nameCol];  // AB列
+      const employmentType = row[employmentTypeCol - nameCol];  // AC列
+      const retirementDate = row[retirementDateCol - nameCol];  // AD列
 
       // 名前とメールアドレスが両方入力されている行のみ取得
       if (name && email) {
@@ -896,6 +916,8 @@ function handleGetStaffList() {
           jobType: jobType || null,
           qualification: qualification || null,
           placement: placement || null,
+          employmentType: employmentType || null,
+          retirementDate: retirementDate ? formatDateForOutput(retirementDate) : null,
           rowNumber: startRow + i
         });
       }
@@ -968,9 +990,19 @@ function handleCreateStaff(data) {
       newRow = startRow + allData.length;
     }
 
-    // データを一括書き込み（V:名前, W:権限, X:メール, Y:パスワード, Z:職種, AA:資格, AB:配置）
-    const writeData = [[data.name, data.role, data.email, data.password, data.jobType || '', data.qualification || '', data.placement || '']];
-    sheet.getRange(newRow, cols.NAME, 1, 7).setValues(writeData);
+    // データを一括書き込み（V:名前, W:権限, X:メール, Y:パスワード, Z:職種, AA:資格, AB:配置, AC:雇用形態, AD:退職日）
+    const writeData = [[
+      data.name,
+      data.role,
+      data.email,
+      data.password,
+      data.jobType || '',
+      data.qualification || '',
+      data.placement || '',
+      data.employmentType || '',
+      data.retirementDate || ''
+    ]];
+    sheet.getRange(newRow, cols.NAME, 1, 9).setValues(writeData);
 
     return createSuccessResponse({
       message: '職員を登録しました',
@@ -981,6 +1013,8 @@ function handleCreateStaff(data) {
         jobType: data.jobType || null,
         qualification: data.qualification || null,
         placement: data.placement || null,
+        employmentType: data.employmentType || null,
+        retirementDate: data.retirementDate || null,
         rowNumber: newRow
       }
     });
@@ -1042,9 +1076,19 @@ function handleUpdateStaff(data) {
       password = sheet.getRange(data.rowNumber, cols.PASSWORD).getValue();
     }
 
-    // データを一括書き込み（V:名前, W:権限, X:メール, Y:パスワード, Z:職種, AA:資格, AB:配置）
-    const writeData = [[data.name, data.role, data.email, password, data.jobType || '', data.qualification || '', data.placement || '']];
-    sheet.getRange(data.rowNumber, cols.NAME, 1, 7).setValues(writeData);
+    // データを一括書き込み（V:名前, W:権限, X:メール, Y:パスワード, Z:職種, AA:資格, AB:配置, AC:雇用形態, AD:退職日）
+    const writeData = [[
+      data.name,
+      data.role,
+      data.email,
+      password,
+      data.jobType || '',
+      data.qualification || '',
+      data.placement || '',
+      data.employmentType || '',
+      data.retirementDate || ''
+    ]];
+    sheet.getRange(data.rowNumber, cols.NAME, 1, 9).setValues(writeData);
 
     return createSuccessResponse({
       message: '職員情報を更新しました',
@@ -1055,6 +1099,8 @@ function handleUpdateStaff(data) {
         jobType: data.jobType || null,
         qualification: data.qualification || null,
         placement: data.placement || null,
+        employmentType: data.employmentType || null,
+        retirementDate: data.retirementDate || null,
         rowNumber: data.rowNumber
       }
     });
@@ -1076,9 +1122,9 @@ function handleDeleteStaff(data) {
 
     const sheet = getSheet(SHEET_NAMES.MASTER);
 
-    // V-AB列のデータを一括クリア（V:名前〜AB:配置 = 7列分）
+    // V-AD列のデータを一括クリア（V:名前〜AD:退職日 = 9列分）
     const cols = MASTER_CONFIG.STAFF_COLS;
-    sheet.getRange(data.rowNumber, cols.NAME, 1, 7).clearContent();
+    sheet.getRange(data.rowNumber, cols.NAME, 1, 9).clearContent();
 
     return createSuccessResponse({
       message: '職員を削除しました'

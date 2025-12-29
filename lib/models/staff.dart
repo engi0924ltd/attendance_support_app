@@ -1,5 +1,5 @@
 /// 職員の情報
-/// マスタ設定シートのV-AB列に保存される
+/// マスタ設定シートのV-AD列に保存される
 class Staff {
   final String name;        // V列: 職員名
   final String email;       // X列: メールアドレス（一意キー、ログイン用）
@@ -7,6 +7,8 @@ class Staff {
   final String? jobType;    // Z列: 職種（自由入力）
   final String? qualification; // AA列: 保有福祉資格
   final String? placement;  // AB列: 職員配置
+  final String? employmentType; // AC列: 雇用形態
+  final String? retirementDate; // AD列: 退職日
   final String? token;      // ログイン後に受け取る認証トークン
   final String? facilityId; // 所属施設ID
   final String? facilityName; // 所属施設名
@@ -20,6 +22,8 @@ class Staff {
     this.jobType,
     this.qualification,
     this.placement,
+    this.employmentType,
+    this.retirementDate,
     this.token,
     this.facilityId,
     this.facilityName,
@@ -36,6 +40,8 @@ class Staff {
       jobType: json['jobType']?.toString(),
       qualification: json['qualification']?.toString(),
       placement: json['placement']?.toString(),
+      employmentType: json['employmentType']?.toString(),
+      retirementDate: json['retirementDate']?.toString(),
       token: json['token']?.toString(),
       facilityId: json['facilityId']?.toString(),
       facilityName: json['facilityName']?.toString(),
@@ -55,6 +61,8 @@ class Staff {
       'jobType': jobType,
       'qualification': qualification,
       'placement': placement,
+      'employmentType': employmentType,
+      'retirementDate': retirementDate,
       'token': token,
       'facilityId': facilityId,
       'facilityName': facilityName,
@@ -80,6 +88,8 @@ class Staff {
     String? jobType,
     String? qualification,
     String? placement,
+    String? employmentType,
+    String? retirementDate,
     String? token,
     String? facilityId,
     String? facilityName,
@@ -93,6 +103,8 @@ class Staff {
       jobType: jobType ?? this.jobType,
       qualification: qualification ?? this.qualification,
       placement: placement ?? this.placement,
+      employmentType: employmentType ?? this.employmentType,
+      retirementDate: retirementDate ?? this.retirementDate,
       token: token ?? this.token,
       facilityId: facilityId ?? this.facilityId,
       facilityName: facilityName ?? this.facilityName,
