@@ -96,6 +96,9 @@ const MASTER_CONFIG = {
   QUALIFICATION_DROPDOWN_END_ROW: 30,
   PLACEMENT_DROPDOWN_START_ROW: 32,      // 職員配置選択肢: AC32〜AC40
   PLACEMENT_DROPDOWN_END_ROW: 40,
+  JOB_TYPE_DROPDOWN_START_ROW: 31,       // 職種選択肢: AD31〜AD40
+  JOB_TYPE_DROPDOWN_END_ROW: 40,
+  JOB_TYPE_DROPDOWN_COL: 30,             // AD列: 職種
   SUPPORT_DROPDOWN_COLS: {
     WORK_LOCATION: 29,    // AC列: 勤務地（8〜15行目）
     QUALIFICATION: 29,    // AC列: 資格選択肢（20〜30行目）
@@ -500,6 +503,7 @@ function handleGetDropdowns() {
     workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_END_ROW),  // AC列: 勤務地（8〜15行目）
     qualifications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.QUALIFICATION, MASTER_CONFIG.QUALIFICATION_DROPDOWN_START_ROW, MASTER_CONFIG.QUALIFICATION_DROPDOWN_END_ROW),  // AC列: 資格選択肢（20〜30行目）
     placements: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.PLACEMENT, MASTER_CONFIG.PLACEMENT_DROPDOWN_START_ROW, MASTER_CONFIG.PLACEMENT_DROPDOWN_END_ROW),  // AC列: 職員配置選択肢（32〜40行目）
+    jobTypes: getColumnOptions(sheet, MASTER_CONFIG.JOB_TYPE_DROPDOWN_COL, MASTER_CONFIG.JOB_TYPE_DROPDOWN_START_ROW, MASTER_CONFIG.JOB_TYPE_DROPDOWN_END_ROW),  // AD列: 職種選択肢（31〜40行目）
 
     // 曜日別出欠予定用プルダウン（K列、44〜50行目）
     scheduledWeekly: getColumnOptions(sheet, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_COL, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_START_ROW, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_END_ROW), // K列: 曜日別出欠予定
@@ -3515,12 +3519,15 @@ function handleGetFacilityStats(monthStr) {
             totalScheduled++;
           }
 
-          // 出勤の場合カウント
-          if (attendance === '出勤' || attendance === '遅刻') {
-            monthlyAttendance++;
-            // 稼働日として記録
+          // 出欠に何か入力があれば稼働日としてカウント
+          if (attendance && attendance !== '') {
             const dateStr = formatDate(dateVal);
             workDays.add(dateStr);
+          }
+
+          // 出勤・在宅・施設外・遅刻・早退の場合、出勤延べ数としてカウント
+          if (attendance === '出勤' || attendance === '在宅' || attendance === '施設外' || attendance === '遅刻' || attendance === '早退') {
+            monthlyAttendance++;
           }
         }
       }
@@ -3783,6 +3790,7 @@ function handleGetYearlyStats(fiscalYear) {
   try {
     const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
     const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
 
     // 年度の範囲を計算（4月〜翌3月）
     const now = new Date();
@@ -3797,12 +3805,16 @@ function handleGetYearlyStats(fiscalYear) {
     const monthlyData = {};
     for (let m = 4; m <= 12; m++) {
       monthlyData[`${fiscalYear}-${String(m).padStart(2, '0')}`] = {
-        attendance: 0, scheduled: 0, workDays: new Set()
+        attendance: 0, scheduled: 0, workDays: new Set(),
+        facilityHome: 0,  // 本施設 + 在宅 の実利用数
+        external: 0       // 施設外 の実利用数
       };
     }
     for (let m = 1; m <= 3; m++) {
       monthlyData[`${fiscalYear + 1}-${String(m).padStart(2, '0')}`] = {
-        attendance: 0, scheduled: 0, workDays: new Set()
+        attendance: 0, scheduled: 0, workDays: new Set(),
+        facilityHome: 0,
+        external: 0
       };
     }
 
@@ -3845,15 +3857,30 @@ function handleGetYearlyStats(fiscalYear) {
             }
           }
 
-          // 出勤の場合カウント
-          if (attendance === '出勤' || attendance === '遅刻') {
-            yearlyAttendance++;
+          // 出欠に何か入力があれば稼働日としてカウント
+          if (attendance && attendance !== '') {
             const dateStr = formatDate(dateVal);
             yearlyWorkDays.add(dateStr);
 
             if (monthlyData[monthKey]) {
-              monthlyData[monthKey].attendance++;
               monthlyData[monthKey].workDays.add(dateStr);
+            }
+          }
+
+          // 出勤・在宅・施設外・遅刻・早退の場合、出勤延べ数としてカウント
+          if (attendance === '出勤' || attendance === '在宅' || attendance === '施設外' || attendance === '遅刻' || attendance === '早退') {
+            yearlyAttendance++;
+
+            if (monthlyData[monthKey]) {
+              monthlyData[monthKey].attendance++;
+
+              // 種別ごとに実利用数をカウント（出欠の値で判定）
+              if (attendance === '施設外') {
+                monthlyData[monthKey].external++;
+              } else {
+                // 出勤、在宅、遅刻、早退は全て facilityHome としてカウント
+                monthlyData[monthKey].facilityHome++;
+              }
             }
           }
         }
@@ -3894,9 +3921,42 @@ function handleGetYearlyStats(fiscalYear) {
         attendance: data.attendance,
         scheduled: data.scheduled,
         workDays: data.workDays.size,
-        attendanceRate: rate
+        attendanceRate: rate,
+        facilityHome: data.facilityHome,  // 本施設 + 在宅 の実利用数
+        external: data.external           // 施設外 の実利用数
       });
     });
+
+    // 直接支援員（生活支援員・職業指導員）の配置を集計
+    let directSupportFacilityHome = 0;  // 本施設配置の直接支援員数
+    let directSupportExternal = 0;       // 施設外配置の直接支援員数
+
+    const staffStartRow = MASTER_CONFIG.STAFF_DATA_START_ROW;
+    const staffLastRow = masterSheet.getLastRow();
+    if (staffLastRow >= staffStartRow) {
+      const numStaffRows = staffLastRow - staffStartRow + 1;
+      const cols = MASTER_CONFIG.STAFF_COLS;
+      // V列(22)からAB列(28)まで取得
+      const staffData = masterSheet.getRange(staffStartRow, cols.NAME, numStaffRows, cols.PLACEMENT - cols.NAME + 1).getValues();
+
+      for (let i = 0; i < staffData.length; i++) {
+        const name = staffData[i][0];  // V列: 職員名
+        if (!name || name === '') continue;
+
+        const jobType = staffData[i][cols.JOB_TYPE - cols.NAME];  // Z列: 職種
+        const placement = staffData[i][cols.PLACEMENT - cols.NAME];  // AB列: 職員配置
+
+        // 直接支援員（生活支援員・職業指導員）のみ集計
+        if (jobType === '生活支援員' || jobType === '職業指導員') {
+          // 配置場所で分類（「本施設」を含む場合は本施設・在宅、それ以外は施設外）
+          if (placement && placement.includes('本施設')) {
+            directSupportFacilityHome++;
+          } else {
+            directSupportExternal++;
+          }
+        }
+      }
+    }
 
     return createSuccessResponse({
       fiscalYear: fiscalYear,
@@ -3906,7 +3966,11 @@ function handleGetYearlyStats(fiscalYear) {
       yearlyWorkDays: yearlyWorkDays.size,
       attendanceRate: attendanceRate,
       yearlyDeparted: yearlyDeparted,
-      monthlySummary: monthlySummary
+      monthlySummary: monthlySummary,
+      directSupportStaff: {
+        facilityHome: directSupportFacilityHome,  // 本施設配置の直接支援員数
+        external: directSupportExternal           // 施設外配置の直接支援員数
+      }
     });
   } catch (error) {
     return createErrorResponse('年度統計取得エラー: ' + error.message);
@@ -4045,17 +4109,25 @@ function handleGetAnalyticsBatch(monthStr) {
           if (scheduled && scheduled !== '') {
             totalScheduled++;
           }
-          if (attendance === '出勤' || attendance === '遅刻') {
-            monthlyAttendance++;
+          // 出欠に何か入力があれば稼働日としてカウント
+          if (attendance && attendance !== '') {
             workDays.add(formatDate(dateVal));
+          }
+          // 出勤・在宅・施設外・遅刻・早退の場合、出勤延べ数としてカウント
+          if (attendance === '出勤' || attendance === '在宅' || attendance === '施設外' || attendance === '遅刻' || attendance === '早退') {
+            monthlyAttendance++;
           }
         }
 
         // 前月のデータ
         if (rowDate >= prevFirstDay && rowDate <= prevLastDay) {
-          if (attendance === '出勤' || attendance === '遅刻') {
-            prevMonthlyAttendance++;
+          // 出欠に何か入力があれば稼働日としてカウント
+          if (attendance && attendance !== '') {
             prevWorkDays.add(formatDate(dateVal));
+          }
+          // 出勤・在宅・施設外・遅刻・早退の場合、出勤延べ数としてカウント
+          if (attendance === '出勤' || attendance === '在宅' || attendance === '施設外' || attendance === '遅刻' || attendance === '早退') {
+            prevMonthlyAttendance++;
           }
         }
       }

@@ -48,6 +48,10 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
   // 退所者一覧
   List<Map<String, dynamic>> _departedUsers = [];
 
+  // 年度統計（施設情報用）
+  Map<String, dynamic> _yearlyStats = {};
+  List<Map<String, dynamic>> _monthlySummary = [];
+
   /// 当月かどうか
   bool get _isCurrentMonth {
     final now = DateTime.now();
@@ -78,6 +82,7 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
       // バッチAPIで一括取得 + 当月のみ利用者一覧も並列取得
       final futures = <Future>[
         _loadAnalyticsBatch(),
+        _loadYearlyStats(),  // 施設情報用の年度統計
       ];
 
       // 当月の場合のみ利用者一覧を読み込む
@@ -132,6 +137,33 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
     setState(() {
       _users = users;
     });
+  }
+
+  /// 年度統計を読み込む（施設情報用）
+  Future<void> _loadYearlyStats() async {
+    try {
+      // 現在の年度を計算
+      final now = DateTime.now();
+      final fiscalYear = now.month >= 4 ? now.year : now.year - 1;
+
+      final stats = await _attendanceService.getYearlyStats(fiscalYear: fiscalYear);
+      if (!mounted) return;
+
+      setState(() {
+        _yearlyStats = stats;
+        // monthlySummaryを抽出
+        _monthlySummary = (stats['monthlySummary'] as List<dynamic>?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ?? [];
+      });
+    } catch (e) {
+      // エラー時はデータをクリア
+      if (!mounted) return;
+      setState(() {
+        _yearlyStats = {};
+        _monthlySummary = [];
+      });
+    }
   }
 
   /// 月を変更
@@ -222,6 +254,9 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                           _buildUserAnalysisSection(),
                           const SizedBox(height: 24),
                         ],
+                        // 施設情報（年度月別実利用数）
+                        _buildFacilityInfoSection(),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
@@ -988,6 +1023,370 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 施設情報セクション（年間月別実利用数）
+  Widget _buildFacilityInfoSection() {
+    final fiscalYearLabel = _yearlyStats['fiscalYearLabel'] as String? ?? '年度';
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.domain, color: Colors.teal.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  '施設情報',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    fiscalYearLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            // テーブルタイトル
+            Row(
+              children: [
+                Icon(Icons.table_chart, color: Colors.teal.shade600, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  '施設ごとの延べ人数',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // 月別テーブル（横スクロール可能）
+            if (_monthlySummary.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('データがありません', style: TextStyle(color: Colors.grey)),
+                ),
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _buildMonthlyTable(),
+              ),
+            const SizedBox(height: 16),
+            // 平均テーブルタイトル
+            Row(
+              children: [
+                Icon(Icons.analytics, color: Colors.teal.shade600, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  '施設ごとの利用人数平均',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // 平均テーブル（横スクロール可能）
+            if (_monthlySummary.isNotEmpty)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _buildMonthlyAverageTable(),
+              ),
+            const SizedBox(height: 16),
+            // 直接支援員配置タイトル
+            Row(
+              children: [
+                Icon(Icons.people, color: Colors.teal.shade600, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  '施設ごとの直接処遇職員配置',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // 直接支援員配置テーブル
+            _buildDirectSupportStaffTable(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 月別実利用数テーブル
+  Widget _buildMonthlyTable() {
+    // 月名を取得（4月〜翌3月）
+    final months = ['4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月', '3月'];
+
+    // 合計を計算
+    int totalFacilityHome = 0;
+    int totalExternal = 0;
+    for (final data in _monthlySummary) {
+      totalFacilityHome += (data['facilityHome'] as num?)?.toInt() ?? 0;
+      totalExternal += (data['external'] as num?)?.toInt() ?? 0;
+    }
+
+    return Table(
+      defaultColumnWidth: const FixedColumnWidth(52),
+      border: TableBorder.all(color: Colors.grey.shade300),
+      children: [
+        // ヘッダー行（月）
+        TableRow(
+          decoration: BoxDecoration(color: Colors.teal.shade50),
+          children: [
+            _buildTableHeaderCell(''),
+            ...months.map((m) => _buildTableHeaderCell(m)),
+            _buildTableHeaderCell('合計'),
+          ],
+        ),
+        // 本施設・在宅 行
+        TableRow(
+          children: [
+            _buildTableLabelCell('本施設\n在宅', Colors.blue),
+            ..._monthlySummary.map((data) => _buildTableDataCell(
+              (data['facilityHome'] as num?)?.toInt() ?? 0,
+              Colors.blue,
+            )),
+            _buildTableTotalCell(totalFacilityHome, Colors.blue),
+          ],
+        ),
+        // 施設外 行
+        TableRow(
+          children: [
+            _buildTableLabelCell('施設外', Colors.orange),
+            ..._monthlySummary.map((data) => _buildTableDataCell(
+              (data['external'] as num?)?.toInt() ?? 0,
+              Colors.orange,
+            )),
+            _buildTableTotalCell(totalExternal, Colors.orange),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// 月別利用人数平均テーブル
+  Widget _buildMonthlyAverageTable() {
+    // 月名を取得（4月〜翌3月）
+    final months = ['4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月', '3月'];
+
+    // 年間平均を計算（総延べ人数 ÷ 総稼働日数）
+    double totalFacilityHome = 0;
+    double totalExternal = 0;
+    double totalWorkDays = 0;
+    for (final data in _monthlySummary) {
+      totalFacilityHome += (data['facilityHome'] as num?)?.toDouble() ?? 0.0;
+      totalExternal += (data['external'] as num?)?.toDouble() ?? 0.0;
+      totalWorkDays += (data['workDays'] as num?)?.toDouble() ?? 0.0;
+    }
+    final yearlyAvgFacilityHome = totalWorkDays > 0 ? totalFacilityHome / totalWorkDays : 0.0;
+    final yearlyAvgExternal = totalWorkDays > 0 ? totalExternal / totalWorkDays : 0.0;
+
+    return Table(
+      defaultColumnWidth: const FixedColumnWidth(52),
+      border: TableBorder.all(color: Colors.grey.shade300),
+      children: [
+        // ヘッダー行（月）
+        TableRow(
+          decoration: BoxDecoration(color: Colors.teal.shade50),
+          children: [
+            _buildTableHeaderCell(''),
+            ...months.map((m) => _buildTableHeaderCell(m)),
+            _buildTableHeaderCell('年間'),
+          ],
+        ),
+        // 本施設・在宅 平均行
+        TableRow(
+          children: [
+            _buildTableLabelCell('本施設\n在宅', Colors.blue),
+            ..._monthlySummary.map((data) {
+              final facilityHome = (data['facilityHome'] as num?)?.toDouble() ?? 0.0;
+              final workDays = (data['workDays'] as num?)?.toDouble() ?? 0.0;
+              final average = workDays > 0 ? facilityHome / workDays : 0.0;
+              return _buildTableAverageCell(average, Colors.blue);
+            }),
+            _buildTableAverageTotalCell(yearlyAvgFacilityHome, Colors.blue),
+          ],
+        ),
+        // 施設外 平均行
+        TableRow(
+          children: [
+            _buildTableLabelCell('施設外', Colors.orange),
+            ..._monthlySummary.map((data) {
+              final external = (data['external'] as num?)?.toDouble() ?? 0.0;
+              final workDays = (data['workDays'] as num?)?.toDouble() ?? 0.0;
+              final average = workDays > 0 ? external / workDays : 0.0;
+              return _buildTableAverageCell(average, Colors.orange);
+            }),
+            _buildTableAverageTotalCell(yearlyAvgExternal, Colors.orange),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// 直接支援員配置テーブル
+  Widget _buildDirectSupportStaffTable() {
+    final directSupportStaff = _yearlyStats['directSupportStaff'] as Map<String, dynamic>?;
+    final facilityHome = (directSupportStaff?['facilityHome'] as num?)?.toInt() ?? 0;
+    final external = (directSupportStaff?['external'] as num?)?.toInt() ?? 0;
+
+    return Table(
+      defaultColumnWidth: const FixedColumnWidth(100),
+      border: TableBorder.all(color: Colors.grey.shade300),
+      children: [
+        // ヘッダー行
+        TableRow(
+          decoration: BoxDecoration(color: Colors.teal.shade50),
+          children: [
+            _buildTableHeaderCell('配置場所'),
+            _buildTableHeaderCell('人数'),
+          ],
+        ),
+        // 本施設・在宅 行
+        TableRow(
+          children: [
+            _buildTableLabelCell('本施設・在宅', Colors.blue),
+            _buildTableDataCell(facilityHome, Colors.blue),
+          ],
+        ),
+        // 施設外 行
+        TableRow(
+          children: [
+            _buildTableLabelCell('施設外', Colors.orange),
+            _buildTableDataCell(external, Colors.orange),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableHeaderCell(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: Colors.teal.shade700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableLabelCell(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      alignment: Alignment.center,
+      color: color.withValues(alpha: 0.1),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableDataCell(int value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      alignment: Alignment.center,
+      child: Text(
+        value > 0 ? '$value' : '-',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: value > 0 ? FontWeight.bold : FontWeight.normal,
+          color: value > 0 ? color : Colors.grey.shade400,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableAverageCell(double value, Color color) {
+    final hasValue = value > 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      alignment: Alignment.center,
+      child: Text(
+        hasValue ? value.toStringAsFixed(1) : '-',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: hasValue ? FontWeight.bold : FontWeight.normal,
+          color: hasValue ? color : Colors.grey.shade400,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableTotalCell(int value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      alignment: Alignment.center,
+      color: color.withValues(alpha: 0.15),
+      child: Text(
+        value > 0 ? '$value' : '-',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableAverageTotalCell(double value, Color color) {
+    final hasValue = value > 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      alignment: Alignment.center,
+      color: color.withValues(alpha: 0.15),
+      child: Text(
+        hasValue ? value.toStringAsFixed(1) : '-',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: color,
         ),
       ),
     );

@@ -22,13 +22,13 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   late TextEditingController _nameController;
   late TextEditingController _emailController;
   late TextEditingController _passwordController;
-  late TextEditingController _jobTypeController;
-
   String _selectedRole = '従業員'; // デフォルトは従業員
   String? _selectedQualification; // 選択された資格
   String? _selectedPlacement; // 選択された配置
+  String? _selectedJobType; // 選択された職種
   List<String> _qualificationOptions = []; // 資格選択肢
   List<String> _placementOptions = []; // 配置選択肢
+  List<String> _jobTypeOptions = []; // 職種選択肢
   bool _isLoading = false;
   bool _isLoadingOptions = true;
   bool _obscurePassword = true;
@@ -46,13 +46,12 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     _nameController = TextEditingController(text: widget.staff?.name ?? '');
     _emailController = TextEditingController(text: widget.staff?.email ?? '');
     _passwordController = TextEditingController();
-    _jobTypeController =
-        TextEditingController(text: widget.staff?.jobType ?? '');
 
     if (widget.staff != null) {
       _selectedRole = widget.staff!.role;
       _selectedQualification = widget.staff!.qualification;
       _selectedPlacement = widget.staff!.placement;
+      _selectedJobType = widget.staff!.jobType;
     }
 
     // プルダウン選択肢を読み込む
@@ -66,6 +65,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
         setState(() {
           _qualificationOptions = options.qualifications;
           _placementOptions = options.placements;
+          _jobTypeOptions = options.jobTypes;
           _isLoadingOptions = false;
         });
       }
@@ -83,7 +83,6 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _jobTypeController.dispose();
     super.dispose();
   }
 
@@ -107,9 +106,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           password: _passwordController.text.isNotEmpty
               ? _passwordController.text
               : null,
-          jobType: _jobTypeController.text.trim().isNotEmpty
-              ? _jobTypeController.text.trim()
-              : null,
+          jobType: _selectedJobType,
           qualification: _selectedQualification,
           placement: _selectedPlacement,
         );
@@ -127,9 +124,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text,
           role: _selectedRole,
-          jobType: _jobTypeController.text.trim().isNotEmpty
-              ? _jobTypeController.text.trim()
-              : null,
+          jobType: _selectedJobType,
           qualification: _selectedQualification,
           placement: _selectedPlacement,
         );
@@ -327,22 +322,35 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
               const SizedBox(height: 16),
 
               // 職種（必須）
-              TextFormField(
-                controller: _jobTypeController,
-                decoration: const InputDecoration(
-                  labelText: '職種 *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.work),
-                  hintText: '例: 生活支援員、作業指導員',
-                ),
-                enabled: !_isLoading,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return '職種を入力してください';
-                  }
-                  return null;
-                },
-              ),
+              _isLoadingOptions
+                  ? const SizedBox.shrink()
+                  : DropdownButtonFormField<String>(
+                      value: _selectedJobType,
+                      decoration: const InputDecoration(
+                        labelText: '職種 *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.work),
+                      ),
+                      items: _jobTypeOptions.map((option) {
+                        return DropdownMenuItem<String>(
+                          value: option,
+                          child: Text(option),
+                        );
+                      }).toList(),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return '職種を選択してください';
+                        }
+                        return null;
+                      },
+                      onChanged: _isLoading
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _selectedJobType = value;
+                              });
+                            },
+                    ),
               const SizedBox(height: 16),
 
               // 保有福祉資格（任意）
