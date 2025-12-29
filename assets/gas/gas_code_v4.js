@@ -3973,36 +3973,84 @@ function handleGetYearlyStats(fiscalYear) {
       });
     });
 
-    // 直接支援員（生活支援員・職業指導員）の配置を集計
-    let directSupportFacilityHome = 0;  // 本施設配置の直接支援員数
-    let directSupportExternal = 0;       // 施設外配置の直接支援員数
+    // 直接支援員（生活支援員・職業指導員）の配置を雇用形態別に集計
+    // 雇用形態: 常勤職員、非常勤職員（2日以下）、非常勤職員（3日以上）
+    const directSupportByType = {
+      fullTime: { facilityHome: 0, external: 0 },           // 常勤職員
+      partTimeLess2: { facilityHome: 0, external: 0 },      // 非常勤職員（2日以下）
+      partTimeMore3: { facilityHome: 0, external: 0 }       // 非常勤職員（3日以上）
+    };
+
+    // 福祉専門員等配置加算要件: 常勤の直接処遇職員の福祉資格保有率
+    let fullTimeDirectSupportTotal = 0;      // 常勤の直接処遇職員数
+    let fullTimeWithQualification = 0;       // うち福祉資格保有者数
 
     const staffStartRow = MASTER_CONFIG.STAFF_DATA_START_ROW;
     const staffLastRow = masterSheet.getLastRow();
     if (staffLastRow >= staffStartRow) {
       const numStaffRows = staffLastRow - staffStartRow + 1;
       const cols = MASTER_CONFIG.STAFF_COLS;
-      // V列(22)からAB列(28)まで取得
-      const staffData = masterSheet.getRange(staffStartRow, cols.NAME, numStaffRows, cols.PLACEMENT - cols.NAME + 1).getValues();
+      // V列(22)からAC列(29)まで取得（雇用形態を含む）
+      const staffData = masterSheet.getRange(staffStartRow, cols.NAME, numStaffRows, cols.EMPLOYMENT_TYPE - cols.NAME + 1).getValues();
 
       for (let i = 0; i < staffData.length; i++) {
         const name = staffData[i][0];  // V列: 職員名
         if (!name || name === '') continue;
 
         const jobType = staffData[i][cols.JOB_TYPE - cols.NAME];  // Z列: 職種
+        const qualification = staffData[i][cols.QUALIFICATION - cols.NAME];  // AA列: 保有福祉資格
         const placement = staffData[i][cols.PLACEMENT - cols.NAME];  // AB列: 職員配置
+        const employmentType = staffData[i][cols.EMPLOYMENT_TYPE - cols.NAME];  // AC列: 雇用形態
 
         // 直接支援員（生活支援員・職業指導員）のみ集計
         if (jobType === '生活支援員' || jobType === '職業指導員') {
           // 配置場所で分類（「本施設」を含む場合は本施設・在宅、それ以外は施設外）
-          if (placement && placement.includes('本施設')) {
-            directSupportFacilityHome++;
-          } else {
-            directSupportExternal++;
+          const isFacilityHome = placement && placement.includes('本施設');
+
+          // 雇用形態で分類（「非常勤」も「常勤」を含むため、非常勤を先に判定）
+          if (employmentType && (employmentType.includes('週2以下') || employmentType.includes('2日以下'))) {
+            // 非常勤職員（週2以下）
+            if (isFacilityHome) {
+              directSupportByType.partTimeLess2.facilityHome++;
+            } else {
+              directSupportByType.partTimeLess2.external++;
+            }
+          } else if (employmentType && (employmentType.includes('週3以上') || employmentType.includes('3日以上'))) {
+            // 非常勤職員（週3以上）
+            if (isFacilityHome) {
+              directSupportByType.partTimeMore3.facilityHome++;
+            } else {
+              directSupportByType.partTimeMore3.external++;
+            }
+          } else if (employmentType && employmentType.includes('常勤') && !employmentType.includes('非常勤')) {
+            // 常勤職員（「非常勤」を含まないもののみ）
+            if (isFacilityHome) {
+              directSupportByType.fullTime.facilityHome++;
+            } else {
+              directSupportByType.fullTime.external++;
+            }
+            // 福祉専門員等配置加算要件: 常勤の直接処遇職員をカウント
+            fullTimeDirectSupportTotal++;
+            if (qualification && qualification !== '') {
+              fullTimeWithQualification++;
+            }
           }
         }
       }
     }
+
+    // 合計も計算
+    const totalFacilityHome = directSupportByType.fullTime.facilityHome +
+                              directSupportByType.partTimeLess2.facilityHome +
+                              directSupportByType.partTimeMore3.facilityHome;
+    const totalExternal = directSupportByType.fullTime.external +
+                          directSupportByType.partTimeLess2.external +
+                          directSupportByType.partTimeMore3.external;
+
+    // 福祉専門員等配置加算要件: 割合を計算
+    const qualificationRate = fullTimeDirectSupportTotal > 0
+      ? Math.round((fullTimeWithQualification / fullTimeDirectSupportTotal) * 100)
+      : 0;
 
     return createSuccessResponse({
       fiscalYear: fiscalYear,
@@ -4014,8 +4062,14 @@ function handleGetYearlyStats(fiscalYear) {
       yearlyDeparted: yearlyDeparted,
       monthlySummary: monthlySummary,
       directSupportStaff: {
-        facilityHome: directSupportFacilityHome,  // 本施設配置の直接支援員数
-        external: directSupportExternal           // 施設外配置の直接支援員数
+        facilityHome: totalFacilityHome,  // 本施設配置の直接支援員数（後方互換性）
+        external: totalExternal,           // 施設外配置の直接支援員数（後方互換性）
+        byEmploymentType: directSupportByType  // 雇用形態別の詳細
+      },
+      welfareQualification: {
+        total: fullTimeDirectSupportTotal,           // 常勤の直接処遇職員数
+        withQualification: fullTimeWithQualification, // うち福祉資格保有者数
+        rate: qualificationRate                       // 福祉資格保有率（%）
       }
     });
   } catch (error) {

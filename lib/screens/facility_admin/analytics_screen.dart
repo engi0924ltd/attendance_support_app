@@ -1124,24 +1124,61 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                 child: _buildMonthlyAverageTable(),
               ),
             const SizedBox(height: 16),
-            // 直接支援員配置タイトル
+            // 直接支援員配置と福祉専門員等配置加算要件を横に並べる
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.people, color: Colors.teal.shade600, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  '施設ごとの直接処遇職員配置',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal.shade600,
+                // 左側: 直接処遇職員配置
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.people, color: Colors.teal.shade600, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            '直接処遇職員配置',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildDirectSupportStaffTable(),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // 右側: 福祉専門員等配置加算要件
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.verified, color: Colors.indigo.shade600, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            '福祉専門員等配置加算要件',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildWelfareQualificationTable(),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            // 直接支援員配置テーブル
-            _buildDirectSupportStaffTable(),
           ],
         ),
       ),
@@ -1260,39 +1297,226 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
     );
   }
 
-  /// 直接支援員配置テーブル
+  /// 直接支援員配置テーブル（雇用形態別）
   Widget _buildDirectSupportStaffTable() {
     final directSupportStaff = _yearlyStats['directSupportStaff'] as Map<String, dynamic>?;
-    final facilityHome = (directSupportStaff?['facilityHome'] as num?)?.toInt() ?? 0;
-    final external = (directSupportStaff?['external'] as num?)?.toInt() ?? 0;
+    final byEmploymentType = directSupportStaff?['byEmploymentType'] as Map<String, dynamic>?;
+
+    // 雇用形態別データを取得
+    final fullTime = byEmploymentType?['fullTime'] as Map<String, dynamic>?;
+    final partTimeLess2 = byEmploymentType?['partTimeLess2'] as Map<String, dynamic>?;
+    final partTimeMore3 = byEmploymentType?['partTimeMore3'] as Map<String, dynamic>?;
+
+    // 各雇用形態の人数を取得
+    final fullTimeFacility = (fullTime?['facilityHome'] as num?)?.toInt() ?? 0;
+    final fullTimeExternal = (fullTime?['external'] as num?)?.toInt() ?? 0;
+    final partTimeLess2Facility = (partTimeLess2?['facilityHome'] as num?)?.toInt() ?? 0;
+    final partTimeLess2External = (partTimeLess2?['external'] as num?)?.toInt() ?? 0;
+    final partTimeMore3Facility = (partTimeMore3?['facilityHome'] as num?)?.toInt() ?? 0;
+    final partTimeMore3External = (partTimeMore3?['external'] as num?)?.toInt() ?? 0;
+
+    // 合計
+    final totalFacility = fullTimeFacility + partTimeLess2Facility + partTimeMore3Facility;
+    final totalExternal = fullTimeExternal + partTimeLess2External + partTimeMore3External;
 
     return Table(
-      defaultColumnWidth: const FixedColumnWidth(100),
+      defaultColumnWidth: const FixedColumnWidth(80),
       border: TableBorder.all(color: Colors.grey.shade300),
       children: [
         // ヘッダー行
         TableRow(
           decoration: BoxDecoration(color: Colors.teal.shade50),
           children: [
-            _buildTableHeaderCell('配置場所'),
-            _buildTableHeaderCell('人数'),
+            _buildTableHeaderCell('雇用形態'),
+            _buildTableHeaderCell('本施設\n在宅'),
+            _buildTableHeaderCell('施設外'),
           ],
         ),
-        // 本施設・在宅 行
+        // 常勤職員
         TableRow(
           children: [
-            _buildTableLabelCell('本施設・在宅', Colors.blue),
-            _buildTableDataCell(facilityHome, Colors.blue),
+            _buildTableLabelCell('常勤職員', Colors.blue),
+            _buildTableDataCell(fullTimeFacility, Colors.blue),
+            _buildTableDataCell(fullTimeExternal, Colors.orange),
           ],
         ),
-        // 施設外 行
+        // 非常勤職員（2日以下）
         TableRow(
           children: [
-            _buildTableLabelCell('施設外', Colors.orange),
-            _buildTableDataCell(external, Colors.orange),
+            _buildTableLabelCell('非常勤\n(2日以下)', Colors.green),
+            _buildTableDataCell(partTimeLess2Facility, Colors.blue),
+            _buildTableDataCell(partTimeLess2External, Colors.orange),
+          ],
+        ),
+        // 非常勤職員（3日以上）
+        TableRow(
+          children: [
+            _buildTableLabelCell('非常勤\n(3日以上)', Colors.purple),
+            _buildTableDataCell(partTimeMore3Facility, Colors.blue),
+            _buildTableDataCell(partTimeMore3External, Colors.orange),
+          ],
+        ),
+        // 合計行
+        TableRow(
+          decoration: BoxDecoration(color: Colors.grey.shade100),
+          children: [
+            _buildTableLabelCell('合計', Colors.grey.shade700),
+            _buildTableTotalCell(totalFacility, Colors.blue),
+            _buildTableTotalCell(totalExternal, Colors.orange),
           ],
         ),
       ],
+    );
+  }
+
+  /// 福祉専門員等配置加算要件テーブル
+  Widget _buildWelfareQualificationTable() {
+    final welfareQualification = _yearlyStats['welfareQualification'] as Map<String, dynamic>?;
+    final total = (welfareQualification?['total'] as num?)?.toInt() ?? 0;
+    final withQualification = (welfareQualification?['withQualification'] as num?)?.toInt() ?? 0;
+    final rate = (welfareQualification?['rate'] as num?)?.toInt() ?? 0;
+
+    // 加算判定
+    String? bonusLevel;
+    Color bonusColor;
+    if (rate >= 35) {
+      bonusLevel = '福祉専門職等配置加算（Ⅰ）';
+      bonusColor = Colors.green.shade700;
+    } else if (rate >= 25) {
+      bonusLevel = '福祉専門職等配置加算（Ⅱ）';
+      bonusColor = Colors.orange.shade700;
+    } else {
+      bonusLevel = null;
+      bonusColor = Colors.grey.shade700;
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // テーブル
+        Table(
+          defaultColumnWidth: const FixedColumnWidth(80),
+          border: TableBorder.all(color: Colors.grey.shade300),
+          children: [
+            // ヘッダー行
+            TableRow(
+              decoration: BoxDecoration(color: Colors.indigo.shade50),
+              children: [
+                _buildTableHeaderCellIndigo('項目'),
+                _buildTableHeaderCellIndigo('人数'),
+              ],
+            ),
+            // 常勤直接処遇職員数
+            TableRow(
+              children: [
+                _buildTableLabelCell('常勤直接\n処遇職員', Colors.indigo),
+                _buildTableDataCell(total, Colors.indigo),
+              ],
+            ),
+            // 福祉資格保有者数
+            TableRow(
+              children: [
+                _buildTableLabelCell('福祉資格\n保有者', Colors.green),
+                _buildTableDataCell(withQualification, Colors.green),
+              ],
+            ),
+            // 保有率
+            TableRow(
+              decoration: BoxDecoration(color: bonusLevel != null ? Colors.green.shade50 : Colors.grey.shade100),
+              children: [
+                _buildTableLabelCell('保有率', bonusLevel != null ? Colors.green.shade700 : Colors.grey.shade700),
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$rate%',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: bonusLevel != null ? Colors.green.shade700 : Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        // 加算判定表示
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 12, top: 8),
+            child: bonusLevel != null
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: bonusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: bonusColor, width: 1.5),
+                    ),
+                    child: Text(
+                      bonusLevel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: bonusColor,
+                      ),
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade400, width: 1.5),
+                        ),
+                        child: Text(
+                          '福祉専門職等配置加算に該当せず',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '※福祉専門職等配置加算（Ⅲ）に該当するかもしれません。以下を確認してください',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '・直接処遇職員の常勤従業員が75%以上または常勤従業員のうち3年以上従事している従業員の割合が30%以上',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableHeaderCellIndigo(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: Colors.indigo.shade700,
+        ),
+      ),
     );
   }
 
