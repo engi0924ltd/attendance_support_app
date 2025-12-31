@@ -2174,9 +2174,11 @@ function handleGetScheduledUsers(date) {
 
         const status = masterData[i][MASTER_CONFIG.USER_COLS.STATUS - 1];
         const scheduledValue = masterData[i][dayColumn - 1];
+        const scheduledValueStr = String(scheduledValue).trim();
 
-        // 契約中かつ出勤予定がある利用者のみ
-        if (status === '契約中' && scheduledValue && scheduledValue !== '') {
+        // 契約中かつ出勤予定がある利用者のみ（非利用日は除外）
+        if (status === '契約中' && scheduledValue && scheduledValue !== '' &&
+            !scheduledValueStr.includes('非利用') && scheduledValueStr !== '非利用日') {
           const userData = {
             userName: name,
             scheduledAttendance: scheduledValue,
@@ -3485,48 +3487,41 @@ function handleGetFacilityStats(monthStr) {
     let totalUsers = 0;
     const masterLastRow = masterSheet.getLastRow();
 
-    if (isCurrentMonth) {
-      // 当月: 契約中の利用者数をカウント
-      if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
-        const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
-        const numRows = masterLastRow - startRow + 1;
-        const masterData = masterSheet.getRange(startRow, MASTER_CONFIG.USER_COLS.NAME, numRows, 3).getValues();
+    // 名簿から利用者数をカウント（契約中 + 当月退所者のみ）
+    const rosterLastRow = rosterSheet.getLastRow();
+    if (rosterLastRow >= 3) {
+      const numRows = rosterLastRow - 2;
+      // 名前(B列)、ステータス(E列)、退所日(BA列)を取得
+      const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+      const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+      const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
 
-        for (let i = 0; i < masterData.length; i++) {
-          const name = masterData[i][0];
-          if (!name || name === '') break;
-          const status = masterData[i][2];
-          if (status === '契約中') {
-            totalUsers++;
+      for (let i = 0; i < numRows; i++) {
+        const name = nameData[i][0];
+        if (!name || name === '') continue;
+
+        const status = statusData[i][0];
+        const leaveDate = leaveDateData[i][0];
+
+        if (status === '契約中') {
+          // 契約中はカウント
+          totalUsers++;
+        } else if (status === '退所済み' && leaveDate) {
+          // 退所者は退所月のみカウント（翌月以降は除外）
+          let leaveDateObj;
+          const rawStr = String(leaveDate);
+          if (rawStr.match(/^\d{8}$/)) {
+            // YYYYMMDD形式
+            const y = parseInt(rawStr.substring(0, 4), 10);
+            const m = parseInt(rawStr.substring(4, 6), 10) - 1;
+            const d = parseInt(rawStr.substring(6, 8), 10);
+            leaveDateObj = new Date(y, m, d);
+          } else {
+            leaveDateObj = new Date(leaveDate);
           }
-        }
-      }
-    } else {
-      // 過去月: 名簿から退所日を確認して、その月に在籍していた人数をカウント
-      const rosterLastRow = rosterSheet.getLastRow();
-      if (rosterLastRow >= 3) {
-        const numRows = rosterLastRow - 2;
-        // 名前(B列)、ステータス(E列)、退所日(BA列)を取得
-        const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
-        const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
-        const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
-
-        for (let i = 0; i < numRows; i++) {
-          const name = nameData[i][0];
-          if (!name || name === '') continue;
-
-          const status = statusData[i][0];
-          const leaveDate = leaveDateData[i][0];
-
-          // 契約中 or 対象月以降に退所した人をカウント
-          if (status === '契約中') {
+          // 退所日が対象月内であればカウント
+          if (leaveDateObj >= firstDay && leaveDateObj <= lastDay) {
             totalUsers++;
-          } else if (status === '退所済み' && leaveDate) {
-            const leaveDateObj = new Date(leaveDate);
-            // 退所日が対象月の初日以降であれば、その月は在籍していた
-            if (leaveDateObj >= firstDay) {
-              totalUsers++;
-            }
           }
         }
       }
@@ -3644,6 +3639,9 @@ function handleGetWeeklySchedule() {
 
           const weekday = weekdayMap[col + 1]; // 配列インデックス+1 = 列番号
           const valueStr = String(value).trim();
+
+          // 「非利用日」は除外
+          if (valueStr.includes('非利用') || valueStr === '非利用日') continue;
 
           // 値に基づいて分類
           let category = '';
@@ -3990,8 +3988,8 @@ function handleGetYearlyStats(fiscalYear) {
     if (staffLastRow >= staffStartRow) {
       const numStaffRows = staffLastRow - staffStartRow + 1;
       const cols = MASTER_CONFIG.STAFF_COLS;
-      // V列(22)からAC列(29)まで取得（雇用形態を含む）
-      const staffData = masterSheet.getRange(staffStartRow, cols.NAME, numStaffRows, cols.EMPLOYMENT_TYPE - cols.NAME + 1).getValues();
+      // V列(22)からAD列(30)まで取得（退職日を含む）
+      const staffData = masterSheet.getRange(staffStartRow, cols.NAME, numStaffRows, cols.RETIREMENT_DATE - cols.NAME + 1).getValues();
 
       for (let i = 0; i < staffData.length; i++) {
         const name = staffData[i][0];  // V列: 職員名
@@ -4001,6 +3999,10 @@ function handleGetYearlyStats(fiscalYear) {
         const qualification = staffData[i][cols.QUALIFICATION - cols.NAME];  // AA列: 保有福祉資格
         const placement = staffData[i][cols.PLACEMENT - cols.NAME];  // AB列: 職員配置
         const employmentType = staffData[i][cols.EMPLOYMENT_TYPE - cols.NAME];  // AC列: 雇用形態
+        const retirementDate = staffData[i][cols.RETIREMENT_DATE - cols.NAME];  // AD列: 退職日
+
+        // 退職日が入力されている場合はスキップ（統計から除外）
+        if (retirementDate && retirementDate !== '') continue;
 
         // 直接支援員（生活支援員・職業指導員）のみ集計
         if (jobType === '生活支援員' || jobType === '職業指導員') {
@@ -4169,8 +4171,8 @@ function handleGetAnalyticsBatch(monthStr) {
       }
     }
 
-    // 利用者数 = 契約中 + 当月退所者 + 対象月より後に退所した人
-    const totalUsers = contractedUsers + departedUsers.length + futureDepatedCount;
+    // 利用者数 = 契約中 + 当月退所者のみ（退所月のみカウント、翌月以降は除外）
+    const totalUsers = contractedUsers + departedUsers.length;
 
     // 出勤データを集計（当月＋前月）
     const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
@@ -4281,6 +4283,9 @@ function handleGetAnalyticsBatch(monthStr) {
 
           const weekday = weekdayMap[col + 1]; // 配列インデックス+1 = 列番号
           const valueStr = String(value).trim();
+
+          // 「非利用日」は除外
+          if (valueStr.includes('非利用') || valueStr === '非利用日') continue;
 
           // 値に基づいて分類
           let category = '';

@@ -37,8 +37,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   List<Attendance> _userHealthHistory = [];  // 過去60回分の健康履歴
   bool _isLoadingUserStats = false;
 
-  // 当月退所者
-  List<User> _departedUsers = [];
+  // 当月退所者（analytics/batchから取得）
+  List<Map<String, dynamic>> _departedUsers = [];
 
   @override
   void initState() {
@@ -73,12 +73,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     }
   }
 
-  /// 施設全体の統計を読み込む
+  /// 施設全体の統計を読み込む（バッチAPIで退所者も一括取得）
   Future<void> _loadFacilityStats() async {
-    final stats = await _attendanceService.getFacilityStats();
+    final batchData = await _attendanceService.getAnalyticsBatch();
     if (!mounted) return;
+
+    // 退所者リストを取得
+    final departedList = batchData['departedUsers'] as List<dynamic>? ?? [];
+    final departed = departedList
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
     setState(() {
-      _facilityStats = stats;
+      _facilityStats = batchData['facilityStats'] as Map<String, dynamic>? ?? {};
+      _departedUsers = departed;
     });
   }
 
@@ -92,22 +100,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     });
   }
 
-  /// 利用者一覧を読み込む
+  /// 利用者一覧を読み込む（個人分析用）
   Future<void> _loadUsers() async {
     final users = await _masterService.getActiveUsers();
-    // 当月退所者をフィルタリング
-    final allUsers = await _masterService.getAllUsers();
-    final now = DateTime.now();
-    final departedThisMonth = allUsers.where((u) {
-      if (u.status != '退所済み') return false;
-      // 退所日が当月かどうかをチェック（退所日フィールドがある場合）
-      return true; // 簡易実装：退所済みユーザーをすべて表示
-    }).toList();
-
     if (!mounted) return;
     setState(() {
       _users = users;
-      _departedUsers = departedThisMonth;
     });
   }
 
@@ -685,18 +683,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ),
               )
             else
-              ...(_departedUsers.take(5).map((user) => ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.red.shade100,
-                  child: Text(
-                    user.name.isNotEmpty ? user.name.substring(0, 1) : '?',
-                    style: TextStyle(color: Colors.red.shade700),
+              ...(_departedUsers.take(5).map((user) {
+                final userName = user['userName']?.toString() ?? '';
+                final leaveDate = user['leaveDate']?.toString() ?? '';
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.red.shade100,
+                    child: Text(
+                      userName.isNotEmpty ? userName.substring(0, 1) : '?',
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
                   ),
-                ),
-                title: Text(user.name),
-                subtitle: Text(user.furigana),
-                dense: true,
-              ))),
+                  title: Text(userName),
+                  subtitle: Text('退所日: $leaveDate'),
+                  dense: true,
+                );
+              })),
             if (_departedUsers.length > 5)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
