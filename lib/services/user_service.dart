@@ -104,8 +104,8 @@ class UserService {
     String? supplyAmount,
     String? supportLevel,
     String? useStartDate,
-    // === 期間計算 ===
-    String? initialAddition,
+    // === 受給者証情報 ===
+    String? userBurdenLimit,
     // === 相談支援事業所 ===
     String? consultationFacility,
     String? consultationStaff,
@@ -182,8 +182,8 @@ class UserService {
         'supplyAmount': supplyAmount ?? '',
         'supportLevel': supportLevel ?? '',
         'useStartDate': useStartDate ?? '',
-        // 期間計算
-        'initialAddition': initialAddition ?? '',
+        // 受給者証情報
+        'userBurdenLimit': userBurdenLimit ?? '',
         // 相談支援事業所
         'consultationFacility': consultationFacility ?? '',
         'consultationStaff': consultationStaff ?? '',
@@ -274,8 +274,8 @@ class UserService {
     String? supplyAmount,
     String? supportLevel,
     String? useStartDate,
-    // === 期間計算 ===
-    String? initialAddition,
+    // === 受給者証情報 ===
+    String? userBurdenLimit,
     // === 相談支援事業所 ===
     String? consultationFacility,
     String? consultationStaff,
@@ -353,8 +353,8 @@ class UserService {
         'supplyAmount': supplyAmount ?? '',
         'supportLevel': supportLevel ?? '',
         'useStartDate': useStartDate ?? '',
-        // 期間計算
-        'initialAddition': initialAddition ?? '',
+        // 受給者証情報
+        'userBurdenLimit': userBurdenLimit ?? '',
         // 相談支援事業所
         'consultationFacility': consultationFacility ?? '',
         'consultationStaff': consultationStaff ?? '',

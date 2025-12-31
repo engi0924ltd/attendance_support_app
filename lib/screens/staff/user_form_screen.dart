@@ -71,6 +71,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
   late TextEditingController _applicableEndController;
   late TextEditingController _supplyAmountController;
   late TextEditingController _supportLevelController;
+  late TextEditingController _userBurdenLimitController;
 
   // === 銀行口座情報 ===
   late TextEditingController _bankNameController;
@@ -165,6 +166,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _applicableEndController = TextEditingController(text: widget.user?.applicableEnd ?? '');
     _supplyAmountController = TextEditingController(text: widget.user?.supplyAmount ?? '');
     _supportLevelController = TextEditingController(text: widget.user?.supportLevel ?? '');
+    _userBurdenLimitController = TextEditingController(text: widget.user?.userBurdenLimit ?? '');
 
     // 銀行口座情報
     _bankNameController = TextEditingController(text: widget.user?.bankName ?? '');
@@ -270,6 +272,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _applicableEndController.dispose();
     _supplyAmountController.dispose();
     _supportLevelController.dispose();
+    _userBurdenLimitController.dispose();
     // 銀行口座情報
     _bankNameController.dispose();
     _bankCodeController.dispose();
@@ -354,6 +357,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           applicableEnd: _applicableEndController.text.trim(),
           supplyAmount: _supplyAmountController.text.trim(),
           supportLevel: _supportLevelController.text.trim(),
+          userBurdenLimit: _userBurdenLimitController.text.trim(),
           useStartDate: _useStartDateController.text.trim(),
           // 相談支援事業所
           consultationFacility: _consultationFacilityController.text.trim(),
@@ -435,6 +439,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           applicableEnd: _applicableEndController.text.trim(),
           supplyAmount: _supplyAmountController.text.trim(),
           supportLevel: _supportLevelController.text.trim(),
+          userBurdenLimit: _userBurdenLimitController.text.trim(),
           useStartDate: _useStartDateController.text.trim(),
           // 相談支援事業所
           consultationFacility: _consultationFacilityController.text.trim(),
@@ -1202,6 +1207,20 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
             controller: _supportLevelController,
             options: _dropdownOptions?.supportLevel ?? [],
             icon: Icons.support,
+          ),
+          const SizedBox(height: 16),
+
+          // 利用者負担上限月額
+          TextFormField(
+            controller: _userBurdenLimitController,
+            decoration: const InputDecoration(
+              labelText: '利用者負担上限月額',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.payments),
+              suffixText: '円',
+            ),
+            keyboardType: TextInputType.number,
+            enabled: !_isLoading,
           ),
           const SizedBox(height: 80),
         ],

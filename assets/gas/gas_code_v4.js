@@ -230,10 +230,12 @@ const ROSTER_COLS = {
   SUPPORT_LEVEL: 33,    // AG列: 障害支援区分
   USE_START_DATE: 34,   // AH列: 利用開始日
 
-  // 期間計算（AI〜AK列）
+  // 期間計算（AI〜AJ列）
   USE_PERIOD: 35,       // AI列: 本日までの利用期間（自動計算）
   INITIAL_ADDITION: 36, // AJ列: 初期加算有効期間（30日）
-  PLAN_UPDATE: 37,      // AK列: 個別支援計画書更新日（自動計算）
+
+  // 受給者証情報（AK列）
+  USER_BURDEN_LIMIT: 37, // AK列: 利用者負担上限月額
 
   // 相談支援事業所（AL〜AN列）
   CONSULTATION_FACILITY: 38,  // AL列: 施設名
@@ -1212,8 +1214,10 @@ function writeToRosterSheet(rosterSheet, rowNumber, data) {
   if (data.supportLevel !== undefined) rosterSheet.getRange(rowNumber, cols.SUPPORT_LEVEL).setValue(data.supportLevel || '');
   if (data.useStartDate !== undefined) rosterSheet.getRange(rowNumber, cols.USE_START_DATE).setValue(data.useStartDate || '');
 
-  // 期間計算（自動計算列は書き込まない）
-  if (data.initialAddition !== undefined) rosterSheet.getRange(rowNumber, cols.INITIAL_ADDITION).setValue(data.initialAddition || '');
+  // 期間計算（AI列・AJ列は自動計算列のため書き込まない）
+
+  // 受給者証情報（AK列）
+  if (data.userBurdenLimit !== undefined) rosterSheet.getRange(rowNumber, cols.USER_BURDEN_LIMIT).setValue(data.userBurdenLimit || '');
 
   // 相談支援事業所
   if (data.consultationFacility !== undefined) rosterSheet.getRange(rowNumber, cols.CONSULTATION_FACILITY).setValue(data.consultationFacility || '');
@@ -1309,8 +1313,10 @@ function writeToRosterSheetBatch(rosterSheet, rowNumber, data) {
   setIfDefined(cols.SUPPORT_LEVEL, data.supportLevel);
   setIfDefined(cols.USE_START_DATE, data.useStartDate);
 
-  // 期間計算（自動計算列は書き込まない：USE_PERIOD, PLAN_UPDATE）
-  setIfDefined(cols.INITIAL_ADDITION, data.initialAddition);
+  // 期間計算（AI列・AJ列は自動計算列のため書き込まない）
+
+  // 受給者証情報（AK列）
+  setIfDefined(cols.USER_BURDEN_LIMIT, data.userBurdenLimit);
 
   // 相談支援事業所
   setIfDefined(cols.CONSULTATION_FACILITY, data.consultationFacility);
@@ -1473,6 +1479,9 @@ function handleGetUserList() {
 
           // 期間計算
           userObj.initialAddition = r[rc.INITIAL_ADDITION - 1] || '';
+
+          // 受給者証情報（AK列）
+          userObj.userBurdenLimit = r[rc.USER_BURDEN_LIMIT - 1] || '';
 
           // 相談支援事業所
           userObj.consultationFacility = r[rc.CONSULTATION_FACILITY - 1] || '';

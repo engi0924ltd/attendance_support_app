@@ -50,10 +50,12 @@ class User {
   final String? supportLevel;        // AG列: 障害支援区分
   final String? useStartDate;        // AH列: 利用開始日 ※必須
 
-  // === 期間計算（AI-AK列）※自動計算のため入力不要 ===
+  // === 期間計算（AI-AJ列）※自動計算のため入力不要 ===
   // AI列: 本日までの利用期間（自動計算）
   final String? initialAddition;     // AJ列: 初期加算有効期間（30日）
-  // AK列: 個別支援計画書更新日（自動計算）
+
+  // === 受給者証情報（AK列）===
+  final String? userBurdenLimit;     // AK列: 利用者負担上限月額
 
   // === 相談支援事業所（AL-AN列）===
   final String? consultationFacility; // AL列: 施設名
@@ -138,6 +140,8 @@ class User {
     this.useStartDate,
     // 期間計算
     this.initialAddition,
+    // 受給者証情報
+    this.userBurdenLimit,
     // 相談支援事業所
     this.consultationFacility,
     this.consultationStaff,
@@ -219,6 +223,8 @@ class User {
       useStartDate: json['useStartDate']?.toString(),
       // 期間計算
       initialAddition: json['initialAddition']?.toString(),
+      // 受給者証情報
+      userBurdenLimit: json['userBurdenLimit']?.toString(),
       // 相談支援事業所
       consultationFacility: json['consultationFacility']?.toString(),
       consultationStaff: json['consultationStaff']?.toString(),
@@ -305,6 +311,8 @@ class User {
       'useStartDate': useStartDate,
       // 期間計算
       'initialAddition': initialAddition,
+      // 受給者証情報
+      'userBurdenLimit': userBurdenLimit,
       // 相談支援事業所
       'consultationFacility': consultationFacility,
       'consultationStaff': consultationStaff,
@@ -397,6 +405,7 @@ class User {
     String? supportLevel,
     String? useStartDate,
     String? initialAddition,
+    String? userBurdenLimit,
     String? consultationFacility,
     String? consultationStaff,
     String? consultationContact,
@@ -463,6 +472,7 @@ class User {
       supportLevel: supportLevel ?? this.supportLevel,
       useStartDate: useStartDate ?? this.useStartDate,
       initialAddition: initialAddition ?? this.initialAddition,
+      userBurdenLimit: userBurdenLimit ?? this.userBurdenLimit,
       consultationFacility: consultationFacility ?? this.consultationFacility,
       consultationStaff: consultationStaff ?? this.consultationStaff,
       consultationContact: consultationContact ?? this.consultationContact,
