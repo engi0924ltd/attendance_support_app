@@ -9,12 +9,28 @@
  */
 
 // === 設定 ===
-const SHEET_NAMES = {
-  MASTER: 'マスタ設定',
-  ATTENDANCE: '支援記録_2025',  // 【統合】旧：勤怠_2025 → 支援記録_2025に統合
-  SUPPORT: '支援記録_2025',
-  ROSTER: '名簿_2025'
+
+// デフォルト年度（後方互換性のため）
+const DEFAULT_FISCAL_YEAR = 2025;
+
+// 固定シート名
+const FIXED_SHEET_NAMES = {
+  MASTER: 'マスタ設定'
 };
+
+// 年度付きシート名を動的に生成
+function getSheetNames(fiscalYear) {
+  const year = fiscalYear || DEFAULT_FISCAL_YEAR;
+  return {
+    MASTER: 'マスタ設定',
+    ATTENDANCE: `支援記録_${year}`,
+    SUPPORT: `支援記録_${year}`,
+    ROSTER: `名簿_${year}`
+  };
+}
+
+// 後方互換性のためのデフォルトSHEET_NAMES
+const SHEET_NAMES = getSheetNames(DEFAULT_FISCAL_YEAR);
 
 // マスタ設定シートの構造
 const MASTER_CONFIG = {
@@ -410,6 +426,10 @@ function doPost(e) {
       return handleChatworkBroadcast(data);
     } else if (action === 'chatwork/set-api-key') {
       return handleSetChatworkApiKey(data);
+    } else if (action === 'fiscal-year/create-next') {
+      return handleCreateNextFiscalYear(data);
+    } else if (action === 'fiscal-year/get-available') {
+      return handleGetAvailableFiscalYears();
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -4342,4 +4362,291 @@ function handleGetAnalyticsBatch(monthStr) {
   } catch (error) {
     return createErrorResponse('バッチ分析取得エラー: ' + error.message);
   }
+}
+
+// === 年度管理機能 ===
+
+/**
+ * 利用可能な年度一覧を取得（施設フォルダ内のスプレッドシートを検索）
+ */
+function handleGetAvailableFiscalYears() {
+  try {
+    const currentSs = SpreadsheetApp.getActiveSpreadsheet();
+    const currentSsId = currentSs.getId();
+    const currentSsName = currentSs.getName();
+
+    // 施設IDをファイル名から抽出
+    const facilityIdMatch = currentSsName.match(/^(\d+)_/);
+    const facilityId = facilityIdMatch ? facilityIdMatch[1] : null;
+
+    // 親フォルダを取得
+    const currentFile = DriveApp.getFileById(currentSsId);
+    const parentFolders = currentFile.getParents();
+
+    const yearSpreadsheets = [];
+
+    if (parentFolders.hasNext() && facilityId) {
+      const parentFolder = parentFolders.next();
+
+      // フォルダ内のスプレッドシートを検索
+      const files = parentFolder.getFilesByType(MimeType.GOOGLE_SHEETS);
+
+      while (files.hasNext()) {
+        const file = files.next();
+        const fileName = file.getName();
+
+        // ファイル名パターン: {施設ID}_マスタ設定_{年度}
+        const match = fileName.match(new RegExp(`^${facilityId}_マスタ設定_(\\d{4})$`));
+        if (match) {
+          const year = parseInt(match[1], 10);
+          yearSpreadsheets.push({
+            year: year,
+            spreadsheetId: file.getId(),
+            name: fileName,
+            url: `https://docs.google.com/spreadsheets/d/${file.getId()}/edit`
+          });
+        }
+      }
+    }
+
+    // 年度で降順ソート
+    yearSpreadsheets.sort((a, b) => b.year - a.year);
+
+    // 現在の年度を取得（4月始まりの場合）
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const currentFiscalYear = currentMonth >= 4 ? currentYear : currentYear - 1;
+
+    // 現在のスプレッドシートの年度を取得
+    const currentSsYearMatch = currentSsName.match(/_(\d{4})$/);
+    const activeYear = currentSsYearMatch ? parseInt(currentSsYearMatch[1], 10) : DEFAULT_FISCAL_YEAR;
+
+    return createSuccessResponse({
+      availableYears: yearSpreadsheets.map(s => s.year),
+      yearSpreadsheets: yearSpreadsheets,
+      currentFiscalYear: currentFiscalYear,
+      activeYear: activeYear,
+      defaultYear: DEFAULT_FISCAL_YEAR
+    });
+  } catch (error) {
+    return createErrorResponse('年度一覧取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 次年度スプレッドシートを新規ファイルとして作成し、契約中利用者をコピー
+ */
+function handleCreateNextFiscalYear(data) {
+  try {
+    const currentYear = data.currentYear || DEFAULT_FISCAL_YEAR;
+    const nextYear = currentYear + 1;
+
+    // 現在のスプレッドシート情報を取得
+    const currentSs = SpreadsheetApp.getActiveSpreadsheet();
+    const currentSsId = currentSs.getId();
+    const currentSsName = currentSs.getName();
+
+    // 施設IDをファイル名から抽出（例: "222222_マスタ設定_2025" → "222222"）
+    const facilityIdMatch = currentSsName.match(/^(\d+)_/);
+    const facilityId = facilityIdMatch ? facilityIdMatch[1] : 'unknown';
+
+    // 新しいファイル名
+    const newFileName = `${facilityId}_マスタ設定_${nextYear}`;
+
+    // 親フォルダを取得
+    const currentFile = DriveApp.getFileById(currentSsId);
+    const parentFolders = currentFile.getParents();
+
+    if (!parentFolders.hasNext()) {
+      return createErrorResponse('施設フォルダが見つかりません');
+    }
+
+    const parentFolder = parentFolders.next();
+
+    // 同じ名前のファイルが既に存在するかチェック
+    const existingFiles = parentFolder.getFilesByName(newFileName);
+    if (existingFiles.hasNext()) {
+      return createErrorResponse(`${nextYear}年度のスプレッドシートは既に存在します`);
+    }
+
+    // 現在のスプレッドシートをコピーして新しいファイルを作成
+    const newFile = currentFile.makeCopy(newFileName, parentFolder);
+    const newSs = SpreadsheetApp.openById(newFile.getId());
+
+    // 新しいスプレッドシートのシート名を更新
+    const sheetsToRename = [
+      { oldPattern: `支援記録_${currentYear}`, newName: `支援記録_${nextYear}` },
+      { oldPattern: `名簿_${currentYear}`, newName: `名簿_${nextYear}` }
+    ];
+
+    sheetsToRename.forEach(({ oldPattern, newName }) => {
+      const sheet = newSs.getSheetByName(oldPattern);
+      if (sheet) {
+        sheet.setName(newName);
+      }
+    });
+
+    // 支援記録シートのデータをクリア（A列にデータがある行を削除）
+    // 支援記録シートは1行目がヘッダー、2行目以降がデータ
+    const SUPPORT_DATA_START_ROW = 2;
+    const currentSupportSheet = currentSs.getSheetByName(`支援記録_${currentYear}`);
+
+    if (currentSupportSheet) {
+      const lastRow = currentSupportSheet.getLastRow();
+
+      if (lastRow >= SUPPORT_DATA_START_ROW) {
+        // A列のデータを取得（2行目以降）
+        const numRows = lastRow - SUPPORT_DATA_START_ROW + 1;
+        const colAData = currentSupportSheet.getRange(SUPPORT_DATA_START_ROW, 1, numRows, 1).getValues();
+
+        // A列にデータがある行数をカウント
+        let dataRowCount = 0;
+        for (let i = 0; i < colAData.length; i++) {
+          if (colAData[i][0] !== '' && colAData[i][0] !== null) {
+            dataRowCount++;
+          }
+        }
+
+        // 新しいスプレッドシートの支援記録シートからデータ行を削除
+        const newSupportSheet = newSs.getSheetByName(`支援記録_${nextYear}`);
+        if (newSupportSheet && dataRowCount > 0) {
+          newSupportSheet.deleteRows(SUPPORT_DATA_START_ROW, dataRowCount);
+        }
+      }
+    }
+
+    // 変更を強制保存
+    SpreadsheetApp.flush();
+
+    // マスタ設定シートの処理（契約中の利用者のみA〜J列に詰めて保持）
+    const newMasterSheet = newSs.getSheetByName(FIXED_SHEET_NAMES.MASTER);
+    if (newMasterSheet) {
+      const masterStartRow = MASTER_CONFIG.USER_DATA_START_ROW; // 8行目から
+      const masterLastRow = newMasterSheet.getLastRow();
+
+      if (masterLastRow >= masterStartRow) {
+        // A〜J列のデータを取得（利用者情報範囲）
+        const masterNumRows = masterLastRow - masterStartRow + 1;
+        const masterData = newMasterSheet.getRange(masterStartRow, 1, masterNumRows, 10).getValues(); // A〜J列
+
+        // 契約中の利用者のみ抽出
+        const contractedUserData = [];
+        for (let i = 0; i < masterData.length; i++) {
+          const name = masterData[i][0]; // A列（名前）
+          const status = masterData[i][2]; // C列（契約状態）
+
+          // 名前があり、契約中の利用者のみ保持
+          if (name && name !== '' && status === '契約中') {
+            contractedUserData.push(masterData[i]);
+          }
+        }
+
+        // A〜J列のデータを全てクリア
+        newMasterSheet.getRange(masterStartRow, 1, masterNumRows, 10).clearContent();
+
+        // 契約中の利用者データを8行目から詰めて書き込み
+        if (contractedUserData.length > 0) {
+          newMasterSheet.getRange(masterStartRow, 1, contractedUserData.length, 10)
+            .setValues(contractedUserData);
+        }
+      }
+    }
+
+    // 変更を強制保存
+    SpreadsheetApp.flush();
+
+    // 名簿シートの処理
+    const newRosterSheet = newSs.getSheetByName(`名簿_${nextYear}`);
+    const currentRosterSheet = currentSs.getSheetByName(`名簿_${currentYear}`);
+    let copiedUsers = 0;
+
+    if (newRosterSheet && currentRosterSheet) {
+      // 名簿の8行目以降のデータをクリア（書式・罫線は保持）
+      const rosterLastRow = newRosterSheet.getLastRow();
+      const rosterLastCol = newRosterSheet.getLastColumn();
+      if (rosterLastRow > 7 && rosterLastCol > 0) {
+        newRosterSheet.getRange(8, 1, rosterLastRow - 7, rosterLastCol).clearContent();
+      }
+
+      // 契約中の利用者を新しい名簿シートにコピー
+      copiedUsers = copyContractedUsersToNewRoster(
+        currentRosterSheet,
+        newRosterSheet
+      );
+    }
+
+    // 新しいスプレッドシートのURLとIDを返す
+    const newSsUrl = newSs.getUrl();
+    const newSsId = newSs.getId();
+
+    return createSuccessResponse({
+      message: `${nextYear}年度のスプレッドシートを作成しました`,
+      nextYear: nextYear,
+      copiedUsersCount: copiedUsers,
+      newSpreadsheet: {
+        id: newSsId,
+        name: newFileName,
+        url: newSsUrl
+      }
+    });
+  } catch (error) {
+    return createErrorResponse('次年度シート作成エラー: ' + error.message);
+  }
+}
+
+/**
+ * 契約中の利用者を新しい名簿シートにコピー
+ */
+function copyContractedUsersToNewRoster(sourceSheet, targetSheet) {
+  const cols = ROSTER_COLS;
+  const startRow = 8; // データ開始行
+  const lastRow = sourceSheet.getLastRow();
+
+  if (lastRow < startRow) {
+    return 0; // データなし
+  }
+
+  // 全データを一括取得
+  const numRows = lastRow - startRow + 1;
+  const numCols = 60; // A〜BH列（60列）
+  const allData = sourceSheet.getRange(startRow, 1, numRows, numCols).getValues();
+
+  // 契約中の利用者のみ抽出
+  const contractedUsers = [];
+  for (let i = 0; i < allData.length; i++) {
+    const row = allData[i];
+    const name = row[cols.NAME - 1]; // B列（0-indexed: 1）
+    const status = row[cols.STATUS - 1]; // E列（0-indexed: 4）
+
+    // 空行または退所済みはスキップ
+    if (!name || name === '') continue;
+    if (status !== '契約中') continue;
+
+    // コピーするデータを準備（退所関連情報はクリア）
+    const newRow = [...row];
+
+    // 退所・就労情報（AZ〜BH列）をクリア
+    newRow[cols.LEAVE_DATE - 1] = ''; // BA列: 退所日
+    newRow[cols.LEAVE_REASON - 1] = ''; // BB列: 退所理由
+    newRow[cols.WORK_NAME - 1] = ''; // BC列: 勤務先
+    newRow[cols.WORK_CONTACT - 1] = ''; // BD列: 勤務先連絡先
+    newRow[cols.WORK_CONTENT - 1] = ''; // BE列: 業務内容
+    newRow[cols.CONTRACT_TYPE - 1] = ''; // BF列: 契約形態
+    newRow[cols.EMPLOYMENT_SUPPORT - 1] = ''; // BG列: 定着支援
+
+    // 自動計算列もクリア（新年度で再計算）
+    newRow[cols.USE_PERIOD - 1] = ''; // AI列: 利用期間
+    newRow[cols.INITIAL_ADDITION - 1] = ''; // AJ列: 初期加算
+
+    contractedUsers.push(newRow);
+  }
+
+  // 契約中利用者を新シートに一括書き込み
+  if (contractedUsers.length > 0) {
+    targetSheet.getRange(startRow, 1, contractedUsers.length, numCols)
+      .setValues(contractedUsers);
+  }
+
+  return contractedUsers.length;
 }

@@ -6,6 +6,7 @@ import 'staff_list_screen.dart';
 import 'user_list_screen.dart';
 import 'daily_attendance_screen.dart';
 import 'analytics_screen.dart';
+import 'settings_screen.dart';
 
 /// 施設管理者ダッシュボード画面
 class FacilityAdminDashboardScreen extends StatelessWidget {
@@ -109,12 +110,12 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 設定（準備中）
+            // 設定
             _DashboardMenuItem(
               title: '設定',
               icon: Icons.settings,
-              color: Colors.grey,
-              onTap: () => _showComingSoonDialog(context, '設定'),
+              color: Colors.blueGrey,
+              onTap: () => _navigateToSettings(context),
             ),
             const SizedBox(height: 24), // 下部に余白を追加
           ],
@@ -172,6 +173,18 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (context) => FacilityAdminAnalyticsScreen(gasUrl: admin.gasUrl),
+      ),
+    );
+  }
+
+  void _navigateToSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FacilityAdminSettingsScreen(
+          gasUrl: admin.gasUrl,
+          facilityId: admin.facilityId,
+        ),
       ),
     );
   }
