@@ -1,6 +1,6 @@
 # 出勤支援アプリ 実装状況一覧
 
-**最終更新**: 2025年12月27日
+**最終更新**: 2026年1月1日
 
 ---
 
@@ -61,6 +61,8 @@
 | `support/upsert` | handleUpsertSupportRecord | 支援記録作成/更新 |
 | `chatwork/broadcast` | handleChatworkBroadcast | Chatworkメッセージ一斉送信 |
 | `chatwork/set-api-key` | handleSetChatworkApiKey | ChatWork APIキー設定 |
+| `fiscal-year/get-available` | handleGetAvailableFiscalYears | 利用可能年度一覧取得 |
+| `fiscal-year/create-next` | handleCreateNextFiscalYear | 次年度スプレッドシート作成 |
 
 ---
 
@@ -98,6 +100,9 @@
 | user_form_screen.dart | 利用者登録/編集（管理者用） | ✅ 実装済み |
 | daily_attendance_screen.dart | 本日の出勤一覧（管理者用） | ✅ 実装済み |
 | chatwork_settings_screen.dart | Chatwork設定画面 | ✅ 実装済み |
+| analytics_screen.dart | 統計・分析画面 | ✅ 実装済み |
+| settings_screen.dart | 年度管理設定画面 | ✅ 実装済み |
+| fiscal_year_setup_wizard_screen.dart | 次年度GASセットアップウィザード | ✅ 実装済み |
 
 ### 全権管理者向け画面（/lib/screens/superadmin/）
 
@@ -135,6 +140,7 @@
 | facility_service.dart | 施設管理サービス | ✅ 実装済み |
 | master_api_service.dart | 全権管理者APIサービス | ✅ 実装済み |
 | master_auth_service.dart | 全権管理者認証サービス | ✅ 実装済み |
+| fiscal_year_service.dart | 年度管理サービス | ✅ 実装済み |
 
 ---
 
@@ -163,6 +169,10 @@
 - [x] 利用者一覧・登録・編集・削除・契約状態変更
 - [x] 本日の出勤一覧（支援記録入力可）
 - [x] Chatwork APIキー設定
+- [x] 統計・分析画面
+- [x] 年度管理設定画面
+- [x] 次年度スプレッドシート作成機能
+- [x] 次年度GASセットアップウィザード
 
 ### 全権管理者機能
 - [x] 全権管理者ログイン
