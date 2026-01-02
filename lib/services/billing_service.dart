@@ -260,6 +260,33 @@ class BillingService {
     }
   }
 
+  /// 請求データを出力（選択した利用者を請求シートに出力）
+  Future<Map<String, dynamic>> executeBilling({
+    required List<String> users,
+    required String yearMonth,
+  }) async {
+    try {
+      final url = Uri.parse(await _gasUrl);
+      final body = jsonEncode({
+        'action': 'billing/execute',
+        'users': users,
+        'yearMonth': yearMonth,
+      });
+
+      final response = await _client
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(ApiConfig.timeout);
+
+      return await _handleResponse(response);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// レスポンス処理（302リダイレクト対応）
   Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
     // 302リダイレクトの場合

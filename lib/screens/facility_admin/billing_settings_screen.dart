@@ -1060,10 +1060,122 @@ class _BillingSettingsScreenState extends State<BillingSettingsScreen>
           // 利用者選択セクション
           _buildUserSelectionSection(),
 
+          const SizedBox(height: 24),
+
+          // 実行ボタン
+          _buildExecuteButton(),
+
           const SizedBox(height: 32),
         ],
       ),
     );
+  }
+
+  bool _isExecuting = false;
+
+  /// 実行ボタン
+  Widget _buildExecuteButton() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.send, color: Colors.green.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  '請求データ出力',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '選択した${_selectedUsers.length}名の利用者情報を請求シートに出力します。',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _selectedUsers.isEmpty || _isExecuting
+                  ? null
+                  : _executeBilling,
+              icon: _isExecuting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.play_arrow),
+              label: Text(_isExecuting ? '出力中...' : '実行'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 請求データ出力を実行
+  Future<void> _executeBilling() async {
+    if (_selectedUsers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('利用者を選択してください')),
+      );
+      return;
+    }
+
+    setState(() => _isExecuting = true);
+
+    try {
+      final yearMonth =
+          '${_selectedServiceMonth.year}-${_selectedServiceMonth.month.toString().padLeft(2, '0')}';
+      // 名簿シートの並び順を保持するため、_usersからフィルタリング
+      final orderedUsers = _users
+          .where((u) => _selectedUsers.contains(u.name))
+          .map((u) => u.name)
+          .toList();
+      final result = await _billingService.executeBilling(
+        users: orderedUsers,
+        yearMonth: yearMonth,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? '出力完了'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExecuting = false);
+      }
+    }
   }
 
   /// サービス提供年月セレクター

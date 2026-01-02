@@ -444,6 +444,8 @@ function doPost(e) {
       return handleAddMunicipality(data);
     } else if (action === 'municipality/delete') {
       return handleDeleteMunicipality(data);
+    } else if (action === 'billing/execute') {
+      return handleExecuteBilling(data);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -5132,5 +5134,152 @@ function handleDeleteMunicipality(data) {
     return createSuccessResponse({ message: '市町村を削除しました' });
   } catch (error) {
     return createErrorResponse('市町村削除エラー: ' + error.message);
+  }
+}
+
+// === 請求データ出力 ===
+
+/**
+ * 請求データを出力
+ * 選択した利用者の情報を「請求_2025」シートに出力
+ */
+function handleExecuteBilling(data) {
+  try {
+    const users = data.users || []; // 選択された利用者名の配列
+    const yearMonth = data.yearMonth || ''; // YYYY-MM形式
+
+    if (users.length === 0) {
+      return createErrorResponse('利用者が選択されていません');
+    }
+
+    // 年度を取得（4月始まり）
+    let year, month;
+    if (yearMonth && yearMonth.match(/^\d{4}-\d{2}$/)) {
+      [year, month] = yearMonth.split('-').map(Number);
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
+
+    // 年度を計算（4月始まり：1-3月は前年度）
+    const fiscalYear = month >= 4 ? year : year - 1;
+
+    // 請求シートを取得（請求_YYYY形式）
+    const billingSheetName = `請求_${fiscalYear}`;
+    let billingSheet;
+    try {
+      billingSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(billingSheetName);
+      if (!billingSheet) {
+        return createErrorResponse(`シート「${billingSheetName}」が見つかりません`);
+      }
+    } catch (e) {
+      return createErrorResponse(`シート「${billingSheetName}」の取得に失敗しました: ${e.message}`);
+    }
+
+    // 名簿シートを取得
+    const rosterSheetName = `名簿_${fiscalYear}`;
+    let rosterSheet;
+    try {
+      rosterSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(rosterSheetName);
+      if (!rosterSheet) {
+        return createErrorResponse(`シート「${rosterSheetName}」が見つかりません`);
+      }
+    } catch (e) {
+      return createErrorResponse(`シート「${rosterSheetName}」の取得に失敗しました: ${e.message}`);
+    }
+
+    // 名簿シートから全データを一括取得（3行目〜最終行）
+    const rosterLastRow = rosterSheet.getLastRow();
+    const rosterNumRows = Math.max(0, rosterLastRow - 2);
+    let rosterMap = {};
+
+    if (rosterNumRows > 0) {
+      const rosterData = rosterSheet.getRange(3, 1, rosterNumRows, 60).getValues();
+      // 名前をキーにしたマップを作成
+      for (let i = 0; i < rosterData.length; i++) {
+        const name = rosterData[i][ROSTER_COLS.NAME - 1]; // B列
+        if (name) {
+          rosterMap[name] = rosterData[i];
+        }
+      }
+    }
+
+    // 出力設定: aₙ = 170 + 78(n−1) の法則
+    const baseRow = 170;  // 開始行
+    const interval = 78;  // 間隔
+
+    // シートの最終行から最大人数を動的に計算
+    const sheetLastRow = billingSheet.getMaxRows();
+    const clearMaxUsers = Math.floor((sheetLastRow - baseRow) / interval) + 1;
+
+    // 出力対象の行オフセット（baseRowからの相対位置）
+    // B170〜B183の範囲で、B177とB180は除く
+    const outputRowOffsets = [0, 1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13];
+
+    // 前月データをクリア（出力対象セルのみ）
+    for (let i = 0; i < clearMaxUsers; i++) {
+      const userBaseRow = baseRow + (interval * i);
+      // シートの範囲を超えないようにチェック
+      if (userBaseRow + 13 > sheetLastRow) break;
+      outputRowOffsets.forEach(offset => {
+        billingSheet.getRange(userBaseRow + offset, 2).clearContent();
+      });
+    }
+
+    // 利用者ごとにデータを出力
+    users.forEach((name, index) => {
+      const userBaseRow = baseRow + (interval * index);
+      const rosterData = rosterMap[name];
+
+      // B170: 氏名
+      billingSheet.getRange(userBaseRow + 0, 2).setValue(name);
+
+      if (rosterData) {
+        // B171: フリガナ（名簿C列）
+        billingSheet.getRange(userBaseRow + 1, 2).setValue(rosterData[ROSTER_COLS.NAME_KANA - 1] || '');
+
+        // B172: 受給者証番号（名簿AA列）
+        billingSheet.getRange(userBaseRow + 2, 2).setValue(rosterData[ROSTER_COLS.CERTIFICATE_NUMBER - 1] || '');
+
+        // B173: 市町村および政令指定都市区（名簿O列&P列）
+        const city = rosterData[ROSTER_COLS.CITY - 1] || '';
+        const ward = rosterData[ROSTER_COLS.WARD - 1] || '';
+        billingSheet.getRange(userBaseRow + 3, 2).setValue(city + ward);
+
+        // B174: 障害支援区分（名簿AG列）
+        billingSheet.getRange(userBaseRow + 4, 2).setValue(rosterData[ROSTER_COLS.SUPPORT_LEVEL - 1] || '');
+
+        // B175: 利用者負担上限額（名簿AK列）
+        billingSheet.getRange(userBaseRow + 5, 2).setValue(rosterData[ROSTER_COLS.USER_BURDEN_LIMIT - 1] || '');
+
+        // B176: 利用開始日（名簿AH列）
+        billingSheet.getRange(userBaseRow + 6, 2).setValue(rosterData[ROSTER_COLS.USE_START_DATE - 1] || '');
+
+        // B178: 固定値「1」
+        billingSheet.getRange(userBaseRow + 8, 2).setValue('1');
+
+        // B179: 利用開始日（名簿AH列）
+        billingSheet.getRange(userBaseRow + 9, 2).setValue(rosterData[ROSTER_COLS.USE_START_DATE - 1] || '');
+
+        // B181: 支給決定期間有効期限（名簿AC列）
+        billingSheet.getRange(userBaseRow + 11, 2).setValue(rosterData[ROSTER_COLS.DECISION_PERIOD2 - 1] || '');
+
+        // B182: 適用期間有効期限（名簿AE列）
+        billingSheet.getRange(userBaseRow + 12, 2).setValue(rosterData[ROSTER_COLS.APPLICABLE_END - 1] || '');
+
+        // B183: 支給量（名簿AF列）
+        billingSheet.getRange(userBaseRow + 13, 2).setValue(rosterData[ROSTER_COLS.SUPPLY_AMOUNT - 1] || '');
+      }
+    });
+
+    return createSuccessResponse({
+      message: `${users.length}名の利用者情報を出力しました`,
+      sheetName: billingSheetName,
+      count: users.length,
+      outputRows: users.map((_, i) => baseRow + (interval * i))
+    });
+  } catch (error) {
+    return createErrorResponse('請求データ出力エラー: ' + error.message);
   }
 }
