@@ -7,6 +7,7 @@ import 'user_list_screen.dart';
 import 'daily_attendance_screen.dart';
 import 'analytics_screen.dart';
 import 'settings_screen.dart';
+import 'billing_settings_screen.dart';
 
 /// 施設管理者ダッシュボード画面
 class FacilityAdminDashboardScreen extends StatelessWidget {
@@ -110,6 +111,15 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
+            // 請求業務
+            _DashboardMenuItem(
+              title: '請求業務',
+              icon: Icons.receipt_long,
+              color: Colors.teal,
+              onTap: () => _navigateToBillingSettings(context),
+            ),
+            const SizedBox(height: 12),
+
             // 設定
             _DashboardMenuItem(
               title: '設定',
@@ -182,6 +192,18 @@ class FacilityAdminDashboardScreen extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (context) => FacilityAdminSettingsScreen(
+          gasUrl: admin.gasUrl,
+          facilityId: admin.facilityId,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToBillingSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BillingSettingsScreen(
           gasUrl: admin.gasUrl,
           facilityId: admin.facilityId,
         ),

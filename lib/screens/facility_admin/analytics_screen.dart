@@ -477,11 +477,15 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
             Row(
               children: [
                 Expanded(
-                  child: _buildStatCard(
-                    icon: Icons.people,
-                    label: '$monthLabel利用者数',
-                    value: '$totalUsers名',
-                    color: Colors.blue,
+                  child: InkWell(
+                    onTap: () => _showActiveUsersDialog(monthLabel),
+                    borderRadius: BorderRadius.circular(8),
+                    child: _buildStatCard(
+                      icon: Icons.people,
+                      label: '$monthLabel利用者数',
+                      value: '$totalUsers名',
+                      color: Colors.blue,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -578,6 +582,82 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
               fontWeight: FontWeight.bold,
               color: changeColor,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 利用者一覧ダイアログを表示
+  void _showActiveUsersDialog(String monthLabel) {
+    final activeUsersList = _facilityStats['activeUsersList'] as List<dynamic>? ?? [];
+    final totalUsers = _facilityStats['totalUsers'] ?? 0;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.people, color: Colors.blue.shade700),
+            const SizedBox(width: 8),
+            Text('$monthLabel利用者一覧'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: activeUsersList.isEmpty
+              ? const Center(
+                  child: Text(
+                    '利用者がいません',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: activeUsersList.length,
+                  itemBuilder: (context, index) {
+                    final userName = activeUsersList[index].toString();
+                    final isRetired = userName.contains('（退所）');
+                    return ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: isRetired
+                            ? Colors.grey.shade200
+                            : Colors.blue.shade100,
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isRetired
+                                ? Colors.grey.shade600
+                                : Colors.blue.shade700,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        userName,
+                        style: TextStyle(
+                          color: isRetired ? Colors.grey : null,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          Text(
+            '合計: $totalUsers名',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 12,
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('閉じる'),
           ),
         ],
       ),

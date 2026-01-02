@@ -430,6 +430,20 @@ function doPost(e) {
       return handleCreateNextFiscalYear(data);
     } else if (action === 'fiscal-year/get-available') {
       return handleGetAvailableFiscalYears();
+    } else if (action === 'billing/get-dropdowns') {
+      return handleGetBillingDropdowns();
+    } else if (action === 'billing/save-settings') {
+      return handleSaveBillingSettings(data);
+    } else if (action === 'billing/get-settings') {
+      return handleGetBillingSettings();
+    } else if (action === 'billing/get-monthly-users') {
+      return handleGetMonthlyUsers(data);
+    } else if (action === 'municipality/get') {
+      return handleGetMunicipalities();
+    } else if (action === 'municipality/add') {
+      return handleAddMunicipality(data);
+    } else if (action === 'municipality/delete') {
+      return handleDeleteMunicipality(data);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -673,8 +687,8 @@ function handleGetEvaluationAlerts() {
         };
       }
 
-      // 在宅支援評価対象が○の場合
-      if (homeCol[i][0] === '○') {
+      // 在宅支援評価対象が○の場合 (Unicode: ○ = U+25CB)
+      if (homeCol[i][0] === '\u25CB') {
         userEvalMap[userName].hasHomeEval = true;
         const evalDate = new Date(dateCol[i][0]);
         if (!userEvalMap[userName].lastHomeDate || evalDate > userEvalMap[userName].lastHomeDate) {
@@ -682,8 +696,8 @@ function handleGetEvaluationAlerts() {
         }
       }
 
-      // 施設外評価対象が○の場合
-      if (externalCol[i][0] === '○') {
+      // 施設外評価対象が○の場合 (Unicode: ○ = U+25CB)
+      if (externalCol[i][0] === '\u25CB') {
         userEvalMap[userName].hasExternalEval = true;
         const evalDate = new Date(dateCol[i][0]);
         if (!userEvalMap[userName].lastExternalDate || evalDate > userEvalMap[userName].lastExternalDate) {
@@ -4139,9 +4153,10 @@ function handleGetAnalyticsBatch(monthStr) {
     let rosterData = [];
     if (rosterLastRow >= 3) {
       const numRows = rosterLastRow - 2;
-      // 名前(B列)、ステータス(E列)、退所日(BA列)、退所理由(BB列)を取得
+      // 名前(B列)、ステータス(E列)、利用開始日(AH列)、退所日(BA列)、退所理由(BB列)を取得
       const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
       const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+      const useStartDateData = rosterSheet.getRange(3, ROSTER_COLS.USE_START_DATE, numRows, 1).getValues();
       const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
       const leaveReasonData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_REASON, numRows, 1).getValues();
 
@@ -4150,6 +4165,7 @@ function handleGetAnalyticsBatch(monthStr) {
           rosterData.push({
             name: nameData[i][0],
             status: statusData[i][0],
+            useStartDate: useStartDateData[i][0],
             leaveDate: leaveDateData[i][0],
             leaveReason: leaveReasonData[i][0]
           });
@@ -4158,50 +4174,53 @@ function handleGetAnalyticsBatch(monthStr) {
     }
 
     // === 1. 施設統計（facilityStats） ===
-    let contractedUsers = 0;  // 契約中の人数
-    const departedUsers = [];  // 当月退所者リスト
-    let futureDepatedCount = 0;  // 対象月より後に退所した人数
+    const contractedUsersList = [];
+    const departedUsers = [];
+    const futureDepatedUsersList = [];
+
+    // 日付パース共通関数（YYYYMMDD形式/日付型両対応）
+    const parseDate = (rawDate) => {
+      if (!rawDate) return null;
+      const rawStr = String(rawDate);
+      if (rawStr.match(/^\d{8}$/)) {
+        return new Date(
+          parseInt(rawStr.substring(0, 4), 10),
+          parseInt(rawStr.substring(4, 6), 10) - 1,
+          parseInt(rawStr.substring(6, 8), 10)
+        );
+      }
+      const d = new Date(rawDate);
+      return (!isNaN(d.getTime()) && d.getFullYear() >= 2000) ? d : null;
+    };
 
     for (const user of rosterData) {
       const status = (user.status || '').toString().trim();
 
+      // 利用開始日チェック（対象月の翌月以降に開始 → スキップ）
+      const startDate = parseDate(user.useStartDate);
+      if (startDate && startDate > lastDay) continue;
+
       if (status === '契約中') {
-        // 契約中をカウント
-        contractedUsers++;
-      } else if (status === '退所済み' && user.leaveDate) {
-        // 退所日をパース（YYYYMMDD形式の数値/文字列または日付型に対応）
-        let leaveDateObj;
-        const rawDate = user.leaveDate;
-        const rawStr = String(rawDate);  // 数値でも文字列に変換
+        contractedUsersList.push(user.name);
+      } else if (status === '退所済み') {
+        const leaveDate = parseDate(user.leaveDate);
+        if (!leaveDate) continue;
 
-        if (rawStr.match(/^\d{8}$/)) {
-          // YYYYMMDD形式（数値または文字列）
-          const y = parseInt(rawStr.substring(0, 4), 10);
-          const m = parseInt(rawStr.substring(4, 6), 10) - 1;
-          const d = parseInt(rawStr.substring(6, 8), 10);
-          leaveDateObj = new Date(y, m, d);
-        } else {
-          leaveDateObj = new Date(rawDate);
-        }
-
-        if (isNaN(leaveDateObj.getTime()) || leaveDateObj.getFullYear() < 2000) continue;
-
-        if (leaveDateObj >= firstDay && leaveDateObj <= lastDay) {
-          // 対象月に退所した人 → リストに追加
+        if (leaveDate >= firstDay && leaveDate <= lastDay) {
+          // 当月退所 → 「退所」マーク付き
           departedUsers.push({
             userName: user.name,
-            leaveDate: formatDate(leaveDateObj),
+            leaveDate: formatDate(leaveDate),
             leaveReason: user.leaveReason || ''
           });
-        } else if (leaveDateObj > lastDay) {
-          // 対象月より後に退所した人（その月は全日在籍）
-          futureDepatedCount++;
+        } else if (leaveDate > lastDay) {
+          // 後に退所（この月は在籍中）
+          futureDepatedUsersList.push(user.name);
         }
       }
     }
 
-    // 利用者数 = 契約中 + 当月退所者のみ（退所月のみカウント、翌月以降は除外）
-    const totalUsers = contractedUsers + departedUsers.length;
+    const totalUsers = contractedUsersList.length + departedUsers.length + futureDepatedUsersList.length;
 
     // 出勤データを集計（当月＋前月）
     const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
@@ -4338,12 +4357,20 @@ function handleGetAnalyticsBatch(monthStr) {
       }
     }
 
+    // 利用者名リストを結合（契約中 + 後に退所 + 当月退所者）※名簿シートの順番を維持
+    const activeUsersList = [
+      ...contractedUsersList,
+      ...futureDepatedUsersList,  // 対象月より後に退所した人（その月は在籍中だった）
+      ...departedUsers.map(u => u.userName + '（退所）')  // 当月退所者は「退所」マーク付き
+    ];
+
     return createSuccessResponse({
       // 施設統計
       facilityStats: {
         year: year,
         month: month,
         totalUsers: totalUsers,
+        activeUsersList: activeUsersList,  // 利用者名一覧
         attendanceRate: attendanceRate,
         monthlyWorkDays: workDays.size,
         monthlyAttendance: monthlyAttendance,
@@ -4649,4 +4676,428 @@ function copyContractedUsersToNewRoster(sourceSheet, targetSheet) {
   }
 
   return contractedUsers.length;
+}
+
+// === 請求業務機能 ===
+
+/**
+ * 請求業務用プルダウン選択肢を取得
+ * マスタ設定シートのK61:P90から選択肢を取得
+ */
+function handleGetBillingDropdowns() {
+  try {
+    const sheet = getSheet(FIXED_SHEET_NAMES.MASTER);
+
+    // プルダウン設定の範囲（60行目がヘッダー、61〜90行目がデータ）
+    const BILLING_DROPDOWN_START_ROW = 61;
+    const BILLING_DROPDOWN_END_ROW = 90;
+    const numRows = BILLING_DROPDOWN_END_ROW - BILLING_DROPDOWN_START_ROW + 1;
+
+    // 列定義（K〜P列）
+    const BILLING_DROPDOWN_COLS = {
+      TYPE: 11,                    // K列：種別
+      WAGE_CATEGORY: 12,           // L列：平均工賃月額区分
+      REGION_CATEGORY: 13,         // M列：地域区分
+      WELFARE_STAFF_ADDITION: 14,  // N列：福祉専門職員配置等加算
+      TRANSPORT_ADDITION: 15,      // O列：送迎加算種類
+      WELFARE_IMPROVEMENT: 16      // P列：福祉介護職員等処遇改善加算
+    };
+
+    // K〜P列のデータを一括取得（6列分）
+    const data = sheet.getRange(
+      BILLING_DROPDOWN_START_ROW,
+      BILLING_DROPDOWN_COLS.TYPE,
+      numRows,
+      6  // K〜P列（6列）
+    ).getValues();
+
+    // 各列の選択肢を抽出（空でない値のみ）
+    const extractOptions = (colIndex) => {
+      const options = [];
+      for (let i = 0; i < data.length; i++) {
+        const value = data[i][colIndex];
+        if (value !== '' && value !== null && value !== undefined) {
+          options.push(String(value));
+        }
+      }
+      return options;
+    };
+
+    const dropdowns = {
+      // K列：種別
+      type: extractOptions(0),
+      // L列：平均工賃月額区分
+      wageCategory: extractOptions(1),
+      // M列：地域区分
+      regionCategory: extractOptions(2),
+      // N列：福祉専門職員配置等加算
+      welfareStaffAddition: extractOptions(3),
+      // O列：送迎加算種類
+      transportAddition: extractOptions(4),
+      // P列：福祉介護職員等処遇改善加算
+      welfareImprovement: extractOptions(5)
+    };
+
+    return createSuccessResponse(dropdowns);
+  } catch (error) {
+    return createErrorResponse('請求業務プルダウン取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 請求業務設定を保存
+ * 請求タブのB列（3行目〜51行目）に保存
+ */
+function handleSaveBillingSettings(data) {
+  try {
+    const settings = data.settings;
+    if (!settings) {
+      return createErrorResponse('設定データがありません');
+    }
+
+    // 請求シートを取得（年度付き）
+    const fiscalYear = data.fiscalYear || DEFAULT_FISCAL_YEAR;
+    const billingSheetName = `請求_${fiscalYear}`;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(billingSheetName);
+
+    if (!sheet) {
+      return createErrorResponse(`請求シート（${billingSheetName}）が見つかりません`);
+    }
+
+    // Unicode定数: ○ = U+25CB (WHITE CIRCLE), ● = U+25CF (BLACK CIRCLE)
+    const CIRCLE = '\u25CB';
+
+    // B列の3行目から51行目に一括書き込み
+    const values = [
+      [settings.serviceYearMonth || ''],      // B3: サービス提供年月
+      [settings.corporateName || ''],          // B4: 法人名
+      [settings.representative || ''],         // B5: 代表者
+      [settings.businessName || ''],           // B6: 事業者名
+      [settings.abbreviation || ''],           // B7: 略称
+      [settings.manager || ''],                // B8: 管理者
+      [settings.businessNumber || ''],         // B9: 事業者番号
+      [settings.postalCode || ''],             // B10: 郵便番号
+      [settings.address || ''],                // B11: 住所
+      [settings.phone || ''],                  // B12: 電話番号
+      [settings.type || ''],                   // B13: 種別
+      [settings.wageCategory || ''],           // B14: 平均工賃月額区分
+      [settings.isPublic ? CIRCLE : ''],       // B15: 公立
+      [settings.regionCategory || ''],         // B16: 地域区分
+      [settings.capacity || ''],               // B17: 定員
+      [settings.typeCapacity || ''],           // B18: 種類別定員
+      [settings.standardUnit || ''],           // B19: 基準該当算定単位数
+      [settings.hasTransitionSupport ? CIRCLE : ''],  // B20: 就労移行支援体制加算
+      [settings.transitionWorkers || ''],      // B21: 就労定着者数
+      [settings.welfareStaffAddition || ''],   // B22: 福祉専門職員配置等加算
+      [settings.severeSupport || ''],          // B23: 重度者支援体制加算
+      [settings.targetWageInstructor || ''],   // B24: 目標工賃達成指導員配置加算
+      [settings.hasTargetWageAchievement ? CIRCLE : ''],  // B25: 目標工賃達成加算
+      [settings.severeSupport2 || ''],         // B26: 重度者支援体制加算２
+      [settings.medicalCooperation || ''],     // B27: 医療連携看護職員
+      [settings.transportAddition || ''],      // B28: 送迎加算種類
+      [settings.hasRestraintReduction ? CIRCLE : ''],  // B29: 身体拘束廃止未実施減算
+      [settings.hasRegionalLifeSupport ? CIRCLE : ''],  // B30: 地域生活支援拠点等
+      [settings.overCapacity || ''],           // B31: 定員超過
+      [settings.employeeShortage || ''],       // B32: 従業員欠員
+      [settings.serviceManagerShortage || ''], // B33: サービス管理責任者欠員
+      [settings.hasShortTimeReduction ? CIRCLE : ''],  // B34: 短時間利用減算
+      [settings.hasInfoDisclosureReduction ? CIRCLE : ''],  // B35: 情報公表未報告減算
+      [settings.hasBcpReduction ? CIRCLE : ''],   // B36: 業務継続計画未策定減算
+      [settings.hasAbusePreventionReduction ? CIRCLE : ''],  // B37: 虐待防止措置未実施減算
+      [settings.visualHearingSpeechSupport || ''],  // B38: 視覚聴覚言語障害者支援体制加算
+      [settings.hasHigherBrainSupport ? CIRCLE : ''],  // B39: 高次脳機能障害者支援体制加算
+      [''],  // B40: 処遇改善都道府県（自動計算）
+      [''],  // B41: 処遇改善都道府県番号（自動計算）
+      [''],  // B42: 処遇改善キャリアパス区分（自動計算）
+      [''],  // B43: 特定処遇改善加算（自動計算）
+      [''],  // B44: ベースアップ等支援加算（自動計算）
+      [settings.welfareImprovement || ''],     // B45: 福祉介護職員等処遇改善加算
+      [settings.isDesignatedFacility ? CIRCLE : ''],  // B46: 指定障害者支援施設
+      [settings.invoicePosition || ''],        // B47: 請求書役職
+      [settings.invoiceName || ''],            // B48: 請求書氏名
+      [settings.invoiceNote || ''],            // B49: 利用者請求書備考
+      [settings.expense1 || ''],               // B50: 実費１
+      [settings.expense2 || '']                // B51: 実費２
+    ];
+
+    // B3:B51に一括書き込み（49行）
+    sheet.getRange(3, 2, values.length, 1).setValues(values);
+
+    return createSuccessResponse({ message: '請求業務設定を保存しました' });
+  } catch (error) {
+    return createErrorResponse('請求業務設定保存エラー: ' + error.message);
+  }
+}
+
+/**
+ * 請求業務設定を取得
+ * 請求タブのB列（3行目〜51行目）から取得
+ */
+function handleGetBillingSettings() {
+  try {
+    // 請求シートを取得（年度付き）
+    const fiscalYear = DEFAULT_FISCAL_YEAR;
+    const billingSheetName = `請求_${fiscalYear}`;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(billingSheetName);
+
+    if (!sheet) {
+      return createErrorResponse(`請求シート（${billingSheetName}）が見つかりません`);
+    }
+
+    // Unicode定数: ○ = U+25CB (WHITE CIRCLE)
+    const CIRCLE = '\u25CB';
+
+    // B3:B51を一括取得（49行）
+    const values = sheet.getRange(3, 2, 49, 1).getValues();
+
+    const settings = {
+      serviceYearMonth: values[0][0] || '',      // B3
+      corporateName: values[1][0] || '',          // B4
+      representative: values[2][0] || '',         // B5
+      businessName: values[3][0] || '',           // B6
+      abbreviation: values[4][0] || '',           // B7
+      manager: values[5][0] || '',                // B8
+      businessNumber: values[6][0] || '',         // B9
+      postalCode: values[7][0] || '',             // B10
+      address: values[8][0] || '',                // B11
+      phone: values[9][0] || '',                  // B12
+      type: values[10][0] || '',                  // B13
+      wageCategory: values[11][0] || '',          // B14
+      isPublic: values[12][0] === CIRCLE,         // B15
+      regionCategory: values[13][0] || '',        // B16
+      capacity: values[14][0] || '',              // B17
+      typeCapacity: values[15][0] || '',          // B18
+      standardUnit: values[16][0] || '',          // B19
+      hasTransitionSupport: values[17][0] === CIRCLE, // B20
+      transitionWorkers: values[18][0] || '',     // B21
+      welfareStaffAddition: values[19][0] || '',  // B22
+      severeSupport: values[20][0] || '',         // B23
+      targetWageInstructor: values[21][0] || '',  // B24
+      hasTargetWageAchievement: values[22][0] === CIRCLE, // B25
+      severeSupport2: values[23][0] || '',        // B26
+      medicalCooperation: values[24][0] || '',    // B27
+      transportAddition: values[25][0] || '',     // B28
+      hasRestraintReduction: values[26][0] === CIRCLE, // B29
+      hasRegionalLifeSupport: values[27][0] === CIRCLE, // B30
+      overCapacity: values[28][0] || '',          // B31
+      employeeShortage: values[29][0] || '',      // B32
+      serviceManagerShortage: values[30][0] || '', // B33
+      hasShortTimeReduction: values[31][0] === CIRCLE, // B34
+      hasInfoDisclosureReduction: values[32][0] === CIRCLE, // B35
+      hasBcpReduction: values[33][0] === CIRCLE,  // B36
+      hasAbusePreventionReduction: values[34][0] === CIRCLE, // B37
+      visualHearingSpeechSupport: values[35][0] || '', // B38
+      hasHigherBrainSupport: values[36][0] === CIRCLE, // B39
+      // B40-B44は自動計算のためスキップ
+      welfareImprovement: values[42][0] || '',    // B45
+      isDesignatedFacility: values[43][0] === CIRCLE, // B46
+      invoicePosition: values[44][0] || '',       // B47
+      invoiceName: values[45][0] || '',           // B48
+      invoiceNote: values[46][0] || '',           // B49
+      expense1: values[47][0] || '',              // B50
+      expense2: values[48][0] || ''               // B51
+    };
+
+    return createSuccessResponse(settings);
+  } catch (error) {
+    return createErrorResponse('請求業務設定取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 指定月の利用者一覧を取得（統計・分析と同じロジック）
+ * 名簿シートから取得し、利用開始日・退所日を考慮
+ */
+function handleGetMonthlyUsers(data) {
+  try {
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+    const yearMonth = data.yearMonth || '';
+
+    // 対象月の範囲を計算
+    let year, month;
+    if (yearMonth && yearMonth.match(/^\d{4}-\d{2}$/)) {
+      [year, month] = yearMonth.split('-').map(Number);
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+
+    // 名簿シートからデータを一括取得
+    const rosterLastRow = rosterSheet.getLastRow();
+    if (rosterLastRow < 3) {
+      return createSuccessResponse({ users: [] });
+    }
+
+    const numRows = rosterLastRow - 2;
+    const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+    const kanaData = rosterSheet.getRange(3, ROSTER_COLS.NAME_KANA, numRows, 1).getValues();
+    const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+    const useStartDateData = rosterSheet.getRange(3, ROSTER_COLS.USE_START_DATE, numRows, 1).getValues();
+    const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+
+    // 日付パース共通関数
+    const parseDate = (rawDate) => {
+      if (!rawDate) return null;
+      const rawStr = String(rawDate);
+      if (rawStr.match(/^\d{8}$/)) {
+        return new Date(
+          parseInt(rawStr.substring(0, 4), 10),
+          parseInt(rawStr.substring(4, 6), 10) - 1,
+          parseInt(rawStr.substring(6, 8), 10)
+        );
+      }
+      const d = new Date(rawDate);
+      return (!isNaN(d.getTime()) && d.getFullYear() >= 2000) ? d : null;
+    };
+
+    const users = [];
+
+    for (let i = 0; i < numRows; i++) {
+      const name = nameData[i][0];
+      if (!name || name === '') continue;
+
+      const furigana = kanaData[i][0] || '';
+      const status = (statusData[i][0] || '').toString().trim();
+
+      // 利用開始日チェック（対象月の翌月以降に開始 → スキップ）
+      const startDate = parseDate(useStartDateData[i][0]);
+      if (startDate && startDate > lastDay) continue;
+
+      if (status === '契約中') {
+        users.push({ name, furigana, isDeparted: false });
+      } else if (status === '退所済み') {
+        const leaveDate = parseDate(leaveDateData[i][0]);
+        if (!leaveDate) continue;
+
+        if (leaveDate >= firstDay) {
+          // 退所日が対象月以降 → この月は在籍中だった
+          const isDepartedThisMonth = leaveDate <= lastDay;
+          users.push({ name, furigana, isDeparted: isDepartedThisMonth });
+        }
+        // 退所日 < firstDay → 退所月の翌月以降なのでスキップ
+      }
+    }
+
+    return createSuccessResponse({ users });
+  } catch (error) {
+    return createErrorResponse('利用者取得エラー: ' + error.message);
+  }
+}
+
+// === 市町村情報管理 ===
+
+/**
+ * 市町村一覧を取得
+ * マスタ設定シートのQ61:R列以降から取得
+ */
+function handleGetMunicipalities() {
+  try {
+    const sheet = getSheet(SHEET_NAMES.MASTER);
+    const startRow = 61;
+    const maxRows = 50; // 最大50件まで
+
+    // Q列（市町村名）とR列（市町村番号）を一括取得
+    const data = sheet.getRange(startRow, 17, maxRows, 2).getValues();
+
+    const municipalities = [];
+    for (let i = 0; i < data.length; i++) {
+      const name = data[i][0];
+      const code = data[i][1];
+
+      // 空行で終了
+      if (!name && !code) {
+        break;
+      }
+
+      municipalities.push({
+        name: name || '',
+        code: code ? String(code) : ''
+      });
+    }
+
+    return createSuccessResponse({ municipalities: municipalities });
+  } catch (error) {
+    return createErrorResponse('市町村一覧取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 市町村を追加
+ * マスタ設定シートのQ61:R列の次の空行に追加
+ */
+function handleAddMunicipality(data) {
+  try {
+    const name = data.name;
+    const code = data.code;
+
+    if (!name) {
+      return createErrorResponse('市町村名は必須です');
+    }
+
+    const sheet = getSheet(SHEET_NAMES.MASTER);
+    const startRow = 61;
+    const maxRows = 50;
+
+    // 現在のデータを取得して次の空行を探す
+    const existing = sheet.getRange(startRow, 17, maxRows, 1).getValues();
+    let nextRow = startRow;
+
+    for (let i = 0; i < existing.length; i++) {
+      if (!existing[i][0]) {
+        nextRow = startRow + i;
+        break;
+      }
+      if (i === existing.length - 1) {
+        return createErrorResponse('登録可能な市町村数の上限に達しました');
+      }
+    }
+
+    // データを書き込み
+    sheet.getRange(nextRow, 17).setValue(name);
+    sheet.getRange(nextRow, 18).setValue(code || '');
+
+    return createSuccessResponse({ message: '市町村を追加しました' });
+  } catch (error) {
+    return createErrorResponse('市町村追加エラー: ' + error.message);
+  }
+}
+
+/**
+ * 市町村を削除
+ * 指定されたインデックスの市町村を削除し、後続のデータを詰める
+ */
+function handleDeleteMunicipality(data) {
+  try {
+    const index = data.index;
+
+    if (index === undefined || index === null || index < 0) {
+      return createErrorResponse('削除対象のインデックスが無効です');
+    }
+
+    const sheet = getSheet(SHEET_NAMES.MASTER);
+    const startRow = 61;
+    const targetRow = startRow + index;
+    const maxRows = 50;
+
+    // 削除対象行以降のデータを取得
+    const remainingRows = maxRows - index - 1;
+    if (remainingRows > 0) {
+      const remaining = sheet.getRange(targetRow + 1, 17, remainingRows, 2).getValues();
+      // 1行上にシフト
+      sheet.getRange(targetRow, 17, remainingRows, 2).setValues(remaining);
+    }
+
+    // 最後の行をクリア
+    const lastRow = startRow + maxRows - 1;
+    sheet.getRange(lastRow, 17, 1, 2).clearContent();
+
+    return createSuccessResponse({ message: '市町村を削除しました' });
+  } catch (error) {
+    return createErrorResponse('市町村削除エラー: ' + error.message);
+  }
 }
