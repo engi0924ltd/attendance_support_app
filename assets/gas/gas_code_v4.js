@@ -960,7 +960,7 @@ function handleGetStaffList() {
           qualification: qualification || null,
           placement: placement || null,
           employmentType: employmentType || null,
-          retirementDate: retirementDate ? formatDateForOutput(retirementDate) : null,
+          retirementDate: retirementDate ? formatDate(retirementDate) : null,
           rowNumber: startRow + i
         });
       }
