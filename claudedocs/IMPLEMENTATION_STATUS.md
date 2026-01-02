@@ -1,6 +1,6 @@
 # 出勤支援アプリ 実装状況一覧
 
-**最終更新**: 2026年1月1日
+**最終更新**: 2026年1月2日
 
 ---
 
@@ -63,6 +63,14 @@
 | `chatwork/set-api-key` | handleSetChatworkApiKey | ChatWork APIキー設定 |
 | `fiscal-year/get-available` | handleGetAvailableFiscalYears | 利用可能年度一覧取得 |
 | `fiscal-year/create-next` | handleCreateNextFiscalYear | 次年度スプレッドシート作成 |
+| `billing/get-dropdowns` | handleGetBillingDropdowns | 請求業務用プルダウン取得 |
+| `billing/save-settings` | handleSaveBillingSettings | 請求設定保存 |
+| `billing/get-settings` | handleGetBillingSettings | 請求設定取得 |
+| `billing/get-monthly-users` | handleGetMonthlyUsers | 月別利用者一覧取得 |
+| `billing/execute` | handleExecuteBilling | 請求データ出力 |
+| `municipality/get` | handleGetMunicipalities | 市町村一覧取得 |
+| `municipality/add` | handleAddMunicipality | 市町村追加 |
+| `municipality/delete` | handleDeleteMunicipality | 市町村削除 |
 
 ---
 
@@ -103,6 +111,7 @@
 | analytics_screen.dart | 統計・分析画面 | ✅ 実装済み |
 | settings_screen.dart | 年度管理設定画面 | ✅ 実装済み |
 | fiscal_year_setup_wizard_screen.dart | 次年度GASセットアップウィザード | ✅ 実装済み |
+| billing_settings_screen.dart | 請求業務設定・実行画面 | ✅ 実装済み |
 
 ### 全権管理者向け画面（/lib/screens/superadmin/）
 
@@ -141,6 +150,7 @@
 | master_api_service.dart | 全権管理者APIサービス | ✅ 実装済み |
 | master_auth_service.dart | 全権管理者認証サービス | ✅ 実装済み |
 | fiscal_year_service.dart | 年度管理サービス | ✅ 実装済み |
+| billing_service.dart | 請求業務サービス | ✅ 実装済み |
 
 ---
 
@@ -166,6 +176,7 @@
 ### 施設管理者機能
 - [x] 施設管理者ダッシュボード
 - [x] 職員一覧・登録・編集・削除
+- [x] 退職済み職員のログイン拒否
 - [x] 利用者一覧・登録・編集・削除・契約状態変更
 - [x] 本日の出勤一覧（支援記録入力可）
 - [x] Chatwork APIキー設定
@@ -173,6 +184,9 @@
 - [x] 年度管理設定画面
 - [x] 次年度スプレッドシート作成機能
 - [x] 次年度GASセットアップウィザード
+- [x] 請求業務設定画面
+- [x] 請求データ出力（名簿情報を請求シートに78行間隔で出力）
+- [x] 市町村情報管理
 
 ### 全権管理者機能
 - [x] 全権管理者ログイン
@@ -227,6 +241,27 @@
 
 ### 名簿_2025シート
 - A〜BH列（基本情報、連絡先、住所、詳細情報、関係機関、銀行情報、退所情報等）
+
+### 請求_2025シート（出力先）
+
+請求データ出力時、78行間隔で利用者情報を出力（aₙ = 170 + 78(n−1)の法則）
+
+| 行オフセット | 内容 | 参照元 |
+|------------|------|--------|
+| +0 | 氏名 | 選択した利用者名 |
+| +1 | フリガナ | 名簿C列 |
+| +2 | 受給者証番号 | 名簿AA列 |
+| +3 | 市町村＋政令指定都市区 | 名簿O列＋P列 |
+| +4 | 障害支援区分 | 名簿AG列 |
+| +5 | 利用者負担上限額 | 名簿AK列 |
+| +6 | 利用開始日 | 名簿AH列 |
+| +8 | 「1」（固定値） | - |
+| +9 | 利用開始日 | 名簿AH列 |
+| +11 | 支給決定期間有効期限 | 名簿AC列 |
+| +12 | 適用期間有効期限 | 名簿AE列 |
+| +13 | 支給量 | 名簿AF列 |
+
+※B177（+7）、B180（+10）はスキップ
 
 ---
 
