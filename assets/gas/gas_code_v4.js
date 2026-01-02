@@ -960,7 +960,7 @@ function handleGetStaffList() {
           qualification: qualification || null,
           placement: placement || null,
           employmentType: employmentType || null,
-          retirementDate: retirementDate ? formatDate(retirementDate) : null,
+          retirementDate: retirementDate ? formatDateYYYYMMDD(retirementDate) : null,
           rowNumber: startRow + i
         });
       }
@@ -2796,7 +2796,7 @@ function getSheet(sheetName) {
 }
 
 /**
- * 日付フォーマット
+ * 日付フォーマット（YYYY-MM-DD形式）
  */
 function formatDate(dateValue) {
   if (!dateValue) return '';
@@ -2808,6 +2808,32 @@ function formatDate(dateValue) {
   const day = String(date.getDate()).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * 日付フォーマット（YYYYMMDD形式）
+ */
+function formatDateYYYYMMDD(dateValue) {
+  if (!dateValue) return '';
+
+  // 既にYYYYMMDD形式の文字列の場合
+  const str = String(dateValue);
+  if (str.match(/^\d{8}$/)) return str;
+
+  // YYYY-MM-DD形式の場合
+  if (str.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return str.replace(/-/g, '');
+  }
+
+  // 日付オブジェクトの場合
+  const date = new Date(dateValue);
+  if (isNaN(date.getTime())) return '';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}${month}${day}`;
 }
 
 /**

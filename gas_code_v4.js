@@ -9,12 +9,28 @@
  */
 
 // === 設定 ===
-const SHEET_NAMES = {
-  MASTER: 'マスタ設定',
-  ATTENDANCE: '支援記録_2025',  // 【統合】旧：勤怠_2025 → 支援記録_2025に統合
-  SUPPORT: '支援記録_2025',
-  ROSTER: '名簿_2025'
+
+// デフォルト年度（後方互換性のため）
+const DEFAULT_FISCAL_YEAR = 2025;
+
+// 固定シート名
+const FIXED_SHEET_NAMES = {
+  MASTER: 'マスタ設定'
 };
+
+// 年度付きシート名を動的に生成
+function getSheetNames(fiscalYear) {
+  const year = fiscalYear || DEFAULT_FISCAL_YEAR;
+  return {
+    MASTER: 'マスタ設定',
+    ATTENDANCE: `支援記録_${year}`,
+    SUPPORT: `支援記録_${year}`,
+    ROSTER: `名簿_${year}`
+  };
+}
+
+// 後方互換性のためのデフォルトSHEET_NAMES
+const SHEET_NAMES = getSheetNames(DEFAULT_FISCAL_YEAR);
 
 // マスタ設定シートの構造
 const MASTER_CONFIG = {
@@ -74,28 +90,55 @@ const MASTER_CONFIG = {
   // 職員セクション
   STAFF_HEADER_ROW: 6,
   STAFF_DATA_START_ROW: 8,
-  STAFF_DATA_END_ROW: 200,  // 200行まで対応
+  STAFF_DATA_END_ROW: 40,   // 40行まで対応（V8:V40、最大33人）
 
   STAFF_COLS: {
-    NAME: 22,       // V列: 職員名（元P列から+6列）
-    ROLE: 23,       // W列: 権限（元Q列から+6列）
-    EMAIL: 24,      // X列: メールアドレス（元R列から+6列）
-    PASSWORD: 25,   // Y列: パスワード（元S列から+6列）
-    JOB_TYPE: 26    // Z列: 職種（元T列から+6列）
+    NAME: 22,       // V列: 職員名
+    ROLE: 23,       // W列: 権限
+    EMAIL: 24,      // X列: メールアドレス
+    PASSWORD: 25,   // Y列: パスワード
+    JOB_TYPE: 26,   // Z列: 職種
+    QUALIFICATION: 27,  // AA列: 保有福祉資格
+    PLACEMENT: 28,  // AB列: 職員配置
+    EMPLOYMENT_TYPE: 29, // AC列: 雇用形態
+    RETIREMENT_DATE: 30  // AD列: 退職日
   },
 
-  // 支援記録用プルダウン選択肢（AB列、V列、AD〜AH列、8〜25行目）
+  // 支援記録用プルダウン選択肢（AC列、V列、AD〜AH列、8〜25行目）
   SUPPORT_DROPDOWN_START_ROW: 8,
   SUPPORT_DROPDOWN_END_ROW: 25,
-  WORK_LOCATION_DROPDOWN_END_ROW: 20,  // 勤務地は8〜20行目
+  // 職員関連プルダウン選択肢（T〜W列、44〜55行目）
+  WORK_LOCATION_DROPDOWN_START_ROW: 44,   // 勤務地: W44〜W55
+  WORK_LOCATION_DROPDOWN_END_ROW: 55,
+  WORK_LOCATION_DROPDOWN_COL: 23,         // W列: 勤務地
+  QUALIFICATION_DROPDOWN_START_ROW: 44,   // 資格選択肢: T44〜T55
+  QUALIFICATION_DROPDOWN_END_ROW: 55,
+  QUALIFICATION_DROPDOWN_COL: 20,         // T列: 資格選択肢
+  PLACEMENT_DROPDOWN_START_ROW: 44,       // 職員配置選択肢: U44〜U55
+  PLACEMENT_DROPDOWN_END_ROW: 55,
+  PLACEMENT_DROPDOWN_COL: 21,             // U列: 職員配置選択肢
+  JOB_TYPE_DROPDOWN_START_ROW: 44,        // 職種選択肢: V44〜V55
+  JOB_TYPE_DROPDOWN_END_ROW: 55,
+  JOB_TYPE_DROPDOWN_COL: 22,              // V列: 職種
+  // 雇用形態プルダウン（X列、44〜55行目）
+  EMPLOYMENT_TYPE_DROPDOWN_START_ROW: 44, // 雇用形態: X44〜X55
+  EMPLOYMENT_TYPE_DROPDOWN_END_ROW: 55,
+  EMPLOYMENT_TYPE_DROPDOWN_COL: 24,       // X列: 雇用形態
+  // 勤怠評価プルダウン（AE列、30〜40行目）
+  WORK_EVAL_DROPDOWN_START_ROW: 30,       // 勤怠評価: AE30〜AE40
+  WORK_EVAL_DROPDOWN_END_ROW: 40,
+  WORK_EVAL_DROPDOWN_COL: 31,             // AE列: 勤怠評価
   SUPPORT_DROPDOWN_COLS: {
-    WORK_LOCATION: 28,    // AB列: 勤務地
-    RECORDER: 22,         // V列: 記録者（職員名と同じ列）
-    WORK_EVAL: 30,        // AD列: 勤怠評価
-    EMPLOYMENT_EVAL: 31,  // AE列: 就労評価（品質・生産性）
-    WORK_MOTIVATION: 32,  // AF列: 就労意欲
-    COMMUNICATION: 33,    // AG列: 通信連絡対応度
-    EVALUATION: 34        // AH列: 評価
+    WORK_LOCATION: 23,    // W列: 勤務地（44〜55行目）
+    QUALIFICATION: 20,    // T列: 資格選択肢（44〜55行目）
+    PLACEMENT: 21,        // U列: 職員配置選択肢（44〜55行目）
+    JOB_TYPE: 22,         // V列: 職種（44〜55行目）
+    RECORDER: 22,         // V列: 記録者（職員名と同じ列）※旧設定維持
+    WORK_EVAL: 31,        // AE列: 勤怠評価（30〜40行目）
+    EMPLOYMENT_EVAL: 32,  // AF列: 就労評価（品質・生産性）
+    WORK_MOTIVATION: 33,  // AG列: 就労意欲
+    COMMUNICATION: 34,    // AH列: 通信連絡対応度
+    EVALUATION: 35        // AI列: 評価
   },
 
   // 名簿用プルダウン選択肢（L〜S列、44〜50行目）
@@ -203,10 +246,12 @@ const ROSTER_COLS = {
   SUPPORT_LEVEL: 33,    // AG列: 障害支援区分
   USE_START_DATE: 34,   // AH列: 利用開始日
 
-  // 期間計算（AI〜AK列）
+  // 期間計算（AI〜AJ列）
   USE_PERIOD: 35,       // AI列: 本日までの利用期間（自動計算）
   INITIAL_ADDITION: 36, // AJ列: 初期加算有効期間（30日）
-  PLAN_UPDATE: 37,      // AK列: 個別支援計画書更新日（自動計算）
+
+  // 受給者証情報（AK列）
+  USER_BURDEN_LIMIT: 37, // AK列: 利用者負担上限月額
 
   // 相談支援事業所（AL〜AN列）
   CONSULTATION_FACILITY: 38,  // AL列: 施設名
@@ -306,11 +351,35 @@ function doGet(e) {
       return handleGetChatworkUsers();
     } else if (action === 'analytics/facility-stats') {
       return handleGetFacilityStats();
+    } else if (action.startsWith('analytics/facility-stats/')) {
+      // 月別統計: analytics/facility-stats/2025-01
+      const month = action.split('/')[2];
+      return handleGetFacilityStats(month);
     } else if (action === 'analytics/weekly-schedule') {
       return handleGetWeeklySchedule();
     } else if (action.startsWith('analytics/user-stats/')) {
       const userName = decodeURIComponent(action.split('/')[2]);
       return handleGetUserStats(userName);
+    } else if (action === 'analytics/departed-users') {
+      return handleGetDepartedUsers();
+    } else if (action.startsWith('analytics/departed-users/')) {
+      // 月別退所者: analytics/departed-users/2025-01
+      const month = action.split('/')[2];
+      return handleGetDepartedUsers(month);
+    } else if (action === 'analytics/yearly-stats') {
+      // 当年度統計
+      return handleGetYearlyStats();
+    } else if (action.startsWith('analytics/yearly-stats/')) {
+      // 指定年度統計: analytics/yearly-stats/2024 (2024年度 = 2024/4 - 2025/3)
+      const fiscalYear = parseInt(action.split('/')[2], 10);
+      return handleGetYearlyStats(fiscalYear);
+    } else if (action === 'analytics/batch') {
+      // バッチ取得（施設統計・退所者・曜日別予定を一括取得）
+      return handleGetAnalyticsBatch();
+    } else if (action.startsWith('analytics/batch/')) {
+      // 月別バッチ取得: analytics/batch/2025-01
+      const month = action.split('/')[2];
+      return handleGetAnalyticsBatch(month);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -357,6 +426,10 @@ function doPost(e) {
       return handleChatworkBroadcast(data);
     } else if (action === 'chatwork/set-api-key') {
       return handleSetChatworkApiKey(data);
+    } else if (action === 'fiscal-year/create-next') {
+      return handleCreateNextFiscalYear(data);
+    } else if (action === 'fiscal-year/get-available') {
+      return handleGetAvailableFiscalYears();
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -463,20 +536,25 @@ function handleGetDropdowns() {
     otherBreak: getTimeListOptions(sheet, MASTER_CONFIG.DROPDOWN_COLS.OTHER_BREAK, 8, 25),  // T列: その他休憩（8〜25行目）
     specialNotes: [],                                                                                                                                             // 特記事項（使用しない）
     breaks: [],                                                                                                                                                   // 休憩時間（使用しない）
-    workLocations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_LOCATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_END_ROW),  // AB列: 勤務地（8〜20行目）
+    // 職員関連プルダウン（T〜X列、44〜55行目）
+    workLocations: getColumnOptions(sheet, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_COL, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_LOCATION_DROPDOWN_END_ROW),  // W列: 勤務地（44〜55行目）
+    qualifications: getColumnOptions(sheet, MASTER_CONFIG.QUALIFICATION_DROPDOWN_COL, MASTER_CONFIG.QUALIFICATION_DROPDOWN_START_ROW, MASTER_CONFIG.QUALIFICATION_DROPDOWN_END_ROW),  // T列: 資格選択肢（44〜55行目）
+    placements: getColumnOptions(sheet, MASTER_CONFIG.PLACEMENT_DROPDOWN_COL, MASTER_CONFIG.PLACEMENT_DROPDOWN_START_ROW, MASTER_CONFIG.PLACEMENT_DROPDOWN_END_ROW),  // U列: 職員配置選択肢（44〜55行目）
+    jobTypes: getColumnOptions(sheet, MASTER_CONFIG.JOB_TYPE_DROPDOWN_COL, MASTER_CONFIG.JOB_TYPE_DROPDOWN_START_ROW, MASTER_CONFIG.JOB_TYPE_DROPDOWN_END_ROW),  // V列: 職種選択肢（44〜55行目）
+    employmentTypes: getColumnOptions(sheet, MASTER_CONFIG.EMPLOYMENT_TYPE_DROPDOWN_COL, MASTER_CONFIG.EMPLOYMENT_TYPE_DROPDOWN_START_ROW, MASTER_CONFIG.EMPLOYMENT_TYPE_DROPDOWN_END_ROW),  // X列: 雇用形態（44〜55行目）
 
-    // 曜日別出欠予定用プルダウン（K列、44〜50行目）
+    // 曜日別出欠予定用プルダウン（K列、44〜55行目）
     scheduledWeekly: getColumnOptions(sheet, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_COL, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_START_ROW, MASTER_CONFIG.SCHEDULED_WEEKLY_DROPDOWN_END_ROW), // K列: 曜日別出欠予定
 
     // 支援記録用プルダウン
     recorders: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.RECORDER, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),  // V列: 記録者（8〜25行目）
 
-    // 評価項目プルダウン（AD〜AH列、8〜25行目）
-    workEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),           // AD列: 勤怠評価（8〜25行目）
-    employmentEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EMPLOYMENT_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),   // AE列: 就労評価（8〜25行目）
-    workMotivations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_MOTIVATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),     // AF列: 就労意欲（8〜25行目）
-    communications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.COMMUNICATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),         // AG列: 通信連絡対応度（8〜25行目）
-    evaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EVALUATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),               // AH列: 評価（8〜25行目）
+    // 評価項目プルダウン（AE〜AI列）
+    workEvaluations: getColumnOptions(sheet, MASTER_CONFIG.WORK_EVAL_DROPDOWN_COL, MASTER_CONFIG.WORK_EVAL_DROPDOWN_START_ROW, MASTER_CONFIG.WORK_EVAL_DROPDOWN_END_ROW),           // AE列: 勤怠評価（30〜40行目）
+    employmentEvaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EMPLOYMENT_EVAL, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),   // AF列: 就労評価（8〜25行目）
+    workMotivations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.WORK_MOTIVATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),     // AG列: 就労意欲（8〜25行目）
+    communications: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.COMMUNICATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),         // AH列: 通信連絡対応度（8〜25行目）
+    evaluations: getColumnOptions(sheet, MASTER_CONFIG.SUPPORT_DROPDOWN_COLS.EVALUATION, MASTER_CONFIG.SUPPORT_DROPDOWN_START_ROW, MASTER_CONFIG.SUPPORT_DROPDOWN_END_ROW),               // AI列: 評価（8〜25行目）
 
     // 名簿用プルダウン（L〜S列、44〜50行目）
     rosterStatus: getColumnOptions(sheet, MASTER_CONFIG.ROSTER_DROPDOWN_COLS.STATUS, MASTER_CONFIG.ROSTER_DROPDOWN_START_ROW, MASTER_CONFIG.ROSTER_DROPDOWN_END_ROW),                     // L列: ステータス
@@ -826,14 +904,18 @@ function handleGetStaffList() {
     const endRow = MASTER_CONFIG.STAFF_DATA_END_ROW;
     const numRows = endRow - startRow + 1;
 
-    // 必要な列を一括取得（V:名前, W:権限, X:メール, Z:職種）
+    // 必要な列を一括取得（V:名前, W:権限, X:メール, Z:職種, AA:資格, AB:配置, AC:雇用形態, AD:退職日）
     const nameCol = MASTER_CONFIG.STAFF_COLS.NAME;      // V列 = 22
     const roleCol = MASTER_CONFIG.STAFF_COLS.ROLE;      // W列 = 23
     const emailCol = MASTER_CONFIG.STAFF_COLS.EMAIL;    // X列 = 24
     const jobTypeCol = MASTER_CONFIG.STAFF_COLS.JOB_TYPE; // Z列 = 26
+    const qualificationCol = MASTER_CONFIG.STAFF_COLS.QUALIFICATION; // AA列 = 27
+    const placementCol = MASTER_CONFIG.STAFF_COLS.PLACEMENT; // AB列 = 28
+    const employmentTypeCol = MASTER_CONFIG.STAFF_COLS.EMPLOYMENT_TYPE; // AC列 = 29
+    const retirementDateCol = MASTER_CONFIG.STAFF_COLS.RETIREMENT_DATE; // AD列 = 30
 
-    // V列からZ列まで一括取得（22列目から26列目 = 5列分）
-    const allData = sheet.getRange(startRow, nameCol, numRows, jobTypeCol - nameCol + 1).getValues();
+    // V列からAD列まで一括取得（22列目から30列目 = 9列分）
+    const allData = sheet.getRange(startRow, nameCol, numRows, retirementDateCol - nameCol + 1).getValues();
 
     const staffList = [];
     for (let i = 0; i < allData.length; i++) {
@@ -842,6 +924,10 @@ function handleGetStaffList() {
       const role = row[roleCol - nameCol];        // W列
       const email = row[emailCol - nameCol];      // X列
       const jobType = row[jobTypeCol - nameCol];  // Z列
+      const qualification = row[qualificationCol - nameCol];  // AA列
+      const placement = row[placementCol - nameCol];  // AB列
+      const employmentType = row[employmentTypeCol - nameCol];  // AC列
+      const retirementDate = row[retirementDateCol - nameCol];  // AD列
 
       // 名前とメールアドレスが両方入力されている行のみ取得
       if (name && email) {
@@ -850,6 +936,10 @@ function handleGetStaffList() {
           email: email,
           role: role || '従業員',
           jobType: jobType || null,
+          qualification: qualification || null,
+          placement: placement || null,
+          employmentType: employmentType || null,
+          retirementDate: retirementDate ? formatDateForOutput(retirementDate) : null,
           rowNumber: startRow + i
         });
       }
@@ -922,9 +1012,19 @@ function handleCreateStaff(data) {
       newRow = startRow + allData.length;
     }
 
-    // データを一括書き込み
-    const writeData = [[data.name, data.role, data.email, data.password, data.jobType || '']];
-    sheet.getRange(newRow, cols.NAME, 1, 5).setValues(writeData);
+    // データを一括書き込み（V:名前, W:権限, X:メール, Y:パスワード, Z:職種, AA:資格, AB:配置, AC:雇用形態, AD:退職日）
+    const writeData = [[
+      data.name,
+      data.role,
+      data.email,
+      data.password,
+      data.jobType || '',
+      data.qualification || '',
+      data.placement || '',
+      data.employmentType || '',
+      data.retirementDate || ''
+    ]];
+    sheet.getRange(newRow, cols.NAME, 1, 9).setValues(writeData);
 
     return createSuccessResponse({
       message: '職員を登録しました',
@@ -933,6 +1033,10 @@ function handleCreateStaff(data) {
         email: data.email,
         role: data.role,
         jobType: data.jobType || null,
+        qualification: data.qualification || null,
+        placement: data.placement || null,
+        employmentType: data.employmentType || null,
+        retirementDate: data.retirementDate || null,
         rowNumber: newRow
       }
     });
@@ -994,9 +1098,19 @@ function handleUpdateStaff(data) {
       password = sheet.getRange(data.rowNumber, cols.PASSWORD).getValue();
     }
 
-    // データを一括書き込み
-    const writeData = [[data.name, data.role, data.email, password, data.jobType || '']];
-    sheet.getRange(data.rowNumber, cols.NAME, 1, 5).setValues(writeData);
+    // データを一括書き込み（V:名前, W:権限, X:メール, Y:パスワード, Z:職種, AA:資格, AB:配置, AC:雇用形態, AD:退職日）
+    const writeData = [[
+      data.name,
+      data.role,
+      data.email,
+      password,
+      data.jobType || '',
+      data.qualification || '',
+      data.placement || '',
+      data.employmentType || '',
+      data.retirementDate || ''
+    ]];
+    sheet.getRange(data.rowNumber, cols.NAME, 1, 9).setValues(writeData);
 
     return createSuccessResponse({
       message: '職員情報を更新しました',
@@ -1005,6 +1119,10 @@ function handleUpdateStaff(data) {
         email: data.email,
         role: data.role,
         jobType: data.jobType || null,
+        qualification: data.qualification || null,
+        placement: data.placement || null,
+        employmentType: data.employmentType || null,
+        retirementDate: data.retirementDate || null,
         rowNumber: data.rowNumber
       }
     });
@@ -1026,13 +1144,9 @@ function handleDeleteStaff(data) {
 
     const sheet = getSheet(SHEET_NAMES.MASTER);
 
-    // P-T列のデータをクリア
+    // V-AD列のデータを一括クリア（V:名前〜AD:退職日 = 9列分）
     const cols = MASTER_CONFIG.STAFF_COLS;
-    sheet.getRange(data.rowNumber, cols.NAME).clearContent();
-    sheet.getRange(data.rowNumber, cols.ROLE).clearContent();
-    sheet.getRange(data.rowNumber, cols.EMAIL).clearContent();
-    sheet.getRange(data.rowNumber, cols.PASSWORD).clearContent();
-    sheet.getRange(data.rowNumber, cols.JOB_TYPE).clearContent();
+    sheet.getRange(data.rowNumber, cols.NAME, 1, 9).clearContent();
 
     return createSuccessResponse({
       message: '職員を削除しました'
@@ -1120,8 +1234,10 @@ function writeToRosterSheet(rosterSheet, rowNumber, data) {
   if (data.supportLevel !== undefined) rosterSheet.getRange(rowNumber, cols.SUPPORT_LEVEL).setValue(data.supportLevel || '');
   if (data.useStartDate !== undefined) rosterSheet.getRange(rowNumber, cols.USE_START_DATE).setValue(data.useStartDate || '');
 
-  // 期間計算（自動計算列は書き込まない）
-  if (data.initialAddition !== undefined) rosterSheet.getRange(rowNumber, cols.INITIAL_ADDITION).setValue(data.initialAddition || '');
+  // 期間計算（AI列・AJ列は自動計算列のため書き込まない）
+
+  // 受給者証情報（AK列）
+  if (data.userBurdenLimit !== undefined) rosterSheet.getRange(rowNumber, cols.USER_BURDEN_LIMIT).setValue(data.userBurdenLimit || '');
 
   // 相談支援事業所
   if (data.consultationFacility !== undefined) rosterSheet.getRange(rowNumber, cols.CONSULTATION_FACILITY).setValue(data.consultationFacility || '');
@@ -1217,8 +1333,10 @@ function writeToRosterSheetBatch(rosterSheet, rowNumber, data) {
   setIfDefined(cols.SUPPORT_LEVEL, data.supportLevel);
   setIfDefined(cols.USE_START_DATE, data.useStartDate);
 
-  // 期間計算（自動計算列は書き込まない：USE_PERIOD, PLAN_UPDATE）
-  setIfDefined(cols.INITIAL_ADDITION, data.initialAddition);
+  // 期間計算（AI列・AJ列は自動計算列のため書き込まない）
+
+  // 受給者証情報（AK列）
+  setIfDefined(cols.USER_BURDEN_LIMIT, data.userBurdenLimit);
 
   // 相談支援事業所
   setIfDefined(cols.CONSULTATION_FACILITY, data.consultationFacility);
@@ -1381,6 +1499,9 @@ function handleGetUserList() {
 
           // 期間計算
           userObj.initialAddition = r[rc.INITIAL_ADDITION - 1] || '';
+
+          // 受給者証情報（AK列）
+          userObj.userBurdenLimit = r[rc.USER_BURDEN_LIMIT - 1] || '';
 
           // 相談支援事業所
           userObj.consultationFacility = r[rc.CONSULTATION_FACILITY - 1] || '';
@@ -2082,9 +2203,11 @@ function handleGetScheduledUsers(date) {
 
         const status = masterData[i][MASTER_CONFIG.USER_COLS.STATUS - 1];
         const scheduledValue = masterData[i][dayColumn - 1];
+        const scheduledValueStr = String(scheduledValue).trim();
 
-        // 契約中かつ出勤予定がある利用者のみ
-        if (status === '契約中' && scheduledValue && scheduledValue !== '') {
+        // 契約中かつ出勤予定がある利用者のみ（非利用日は除外）
+        if (status === '契約中' && scheduledValue && scheduledValue !== '' &&
+            !scheduledValueStr.includes('非利用') && scheduledValueStr !== '非利用日') {
           const userData = {
             userName: name,
             scheduledAttendance: scheduledValue,
@@ -3363,45 +3486,85 @@ function handleSetChatworkApiKey(data) {
 
 /**
  * 施設全体の統計を取得
+ * @param {string} [monthStr] - 対象月（YYYY-MM形式）。省略時は当月
  */
-function handleGetFacilityStats() {
+function handleGetFacilityStats(monthStr) {
   try {
     const masterSheet = getSheet(SHEET_NAMES.MASTER);
     const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
 
-    // 当月の範囲を計算
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
+    // 対象月の範囲を計算
+    let year, month;
+    if (monthStr && monthStr.match(/^\d{4}-\d{2}$/)) {
+      const parts = monthStr.split('-');
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
     const firstDay = new Date(year, month - 1, 1);
     const lastDay = new Date(year, month, 0);
 
-    // 契約中の利用者数を取得
+    // 当月かどうか
+    const now = new Date();
+    const isCurrentMonth = (year === now.getFullYear() && month === now.getMonth() + 1);
+
+    // 利用者数を取得（当月は契約中、過去月は退所日を考慮）
     let totalUsers = 0;
     const masterLastRow = masterSheet.getLastRow();
-    if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
-      const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
-      const numRows = masterLastRow - startRow + 1;
-      const masterData = masterSheet.getRange(startRow, MASTER_CONFIG.USER_COLS.NAME, numRows, 3).getValues();
 
-      for (let i = 0; i < masterData.length; i++) {
-        const name = masterData[i][0];
-        if (!name || name === '') break;
-        const status = masterData[i][2];
+    // 名簿から利用者数をカウント（契約中 + 当月退所者のみ）
+    const rosterLastRow = rosterSheet.getLastRow();
+    if (rosterLastRow >= 3) {
+      const numRows = rosterLastRow - 2;
+      // 名前(B列)、ステータス(E列)、退所日(BA列)を取得
+      const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+      const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+      const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+
+      for (let i = 0; i < numRows; i++) {
+        const name = nameData[i][0];
+        if (!name || name === '') continue;
+
+        const status = statusData[i][0];
+        const leaveDate = leaveDateData[i][0];
+
         if (status === '契約中') {
+          // 契約中はカウント
           totalUsers++;
+        } else if (status === '退所済み' && leaveDate) {
+          // 退所者は退所月のみカウント（翌月以降は除外）
+          let leaveDateObj;
+          const rawStr = String(leaveDate);
+          if (rawStr.match(/^\d{8}$/)) {
+            // YYYYMMDD形式
+            const y = parseInt(rawStr.substring(0, 4), 10);
+            const m = parseInt(rawStr.substring(4, 6), 10) - 1;
+            const d = parseInt(rawStr.substring(6, 8), 10);
+            leaveDateObj = new Date(y, m, d);
+          } else {
+            leaveDateObj = new Date(leaveDate);
+          }
+          // 退所日が対象月内であればカウント
+          if (leaveDateObj >= firstDay && leaveDateObj <= lastDay) {
+            totalUsers++;
+          }
         }
       }
     }
 
-    // 当月の出勤データを集計
+    // 対象月の出勤データを集計
     const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
     let monthlyAttendance = 0;
     let totalScheduled = 0;
     const workDays = new Set();
 
     if (actualLastRow >= 2) {
-      const MAX_SEARCH_ROWS = 1000;
+      // 過去月の場合は全データを検索する必要がある可能性
+      const MAX_SEARCH_ROWS = isCurrentMonth ? 1000 : 3000;
       const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
       const startRow = Math.max(2, actualLastRow - searchRows + 1);
 
@@ -3413,7 +3576,7 @@ function handleGetFacilityStats() {
         if (!dateVal) continue;
 
         const rowDate = new Date(dateVal);
-        // 当月のデータのみ集計
+        // 対象月のデータのみ集計
         if (rowDate >= firstDay && rowDate <= lastDay) {
           const userName = data[i][1];
           if (!userName || userName === '') continue;
@@ -3426,12 +3589,15 @@ function handleGetFacilityStats() {
             totalScheduled++;
           }
 
-          // 出勤の場合カウント
-          if (attendance === '出勤' || attendance === '遅刻') {
-            monthlyAttendance++;
-            // 稼働日として記録
+          // 出欠に何か入力があれば稼働日としてカウント
+          if (attendance && attendance !== '') {
             const dateStr = formatDate(dateVal);
             workDays.add(dateStr);
+          }
+
+          // 出勤・在宅・施設外・遅刻・早退の場合、出勤延べ数としてカウント
+          if (attendance === '出勤' || attendance === '在宅' || attendance === '施設外' || attendance === '遅刻' || attendance === '早退') {
+            monthlyAttendance++;
           }
         }
       }
@@ -3441,6 +3607,8 @@ function handleGetFacilityStats() {
     const attendanceRate = totalScheduled > 0 ? monthlyAttendance / totalScheduled : 0;
 
     return createSuccessResponse({
+      year: year,
+      month: month,
       totalUsers: totalUsers,
       attendanceRate: attendanceRate,
       monthlyWorkDays: workDays.size,
@@ -3500,6 +3668,9 @@ function handleGetWeeklySchedule() {
 
           const weekday = weekdayMap[col + 1]; // 配列インデックス+1 = 列番号
           const valueStr = String(value).trim();
+
+          // 「非利用日」は除外
+          if (valueStr.includes('非利用') || valueStr === '非利用日') continue;
 
           // 値に基づいて分類
           let category = '';
@@ -3608,4 +3779,874 @@ function handleGetUserStats(userName) {
   } catch (error) {
     return createErrorResponse('利用者統計取得エラー: ' + error.message);
   }
+}
+
+/**
+ * 月別退所者一覧を取得
+ * @param {string} [monthStr] - 対象月（YYYY-MM形式）。省略時は当月
+ */
+function handleGetDepartedUsers(monthStr) {
+  try {
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+
+    // 対象月の範囲を計算
+    let year, month;
+    if (monthStr && monthStr.match(/^\d{4}-\d{2}$/)) {
+      const parts = monthStr.split('-');
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+
+    const rosterLastRow = rosterSheet.getLastRow();
+    if (rosterLastRow < 3) {
+      return createSuccessResponse({ users: [], year: year, month: month });
+    }
+
+    const numRows = rosterLastRow - 2;
+
+    // 名前(B列)、カナ(C列)、ステータス(E列)、退所日(BA列)、退所理由(BB列)を一括取得
+    const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+    const kanaData = rosterSheet.getRange(3, ROSTER_COLS.NAME_KANA, numRows, 1).getValues();
+    const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+    const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+    const leaveReasonData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_REASON, numRows, 1).getValues();
+
+    const departedUsers = [];
+
+    for (let i = 0; i < numRows; i++) {
+      const name = nameData[i][0];
+      if (!name || name === '') continue;
+
+      const status = statusData[i][0];
+      const leaveDate = leaveDateData[i][0];
+
+      // 退所済みで、退所日が対象月内の人をフィルタリング
+      if (status === '退所済み' && leaveDate) {
+        const leaveDateObj = new Date(leaveDate);
+        if (leaveDateObj >= firstDay && leaveDateObj <= lastDay) {
+          departedUsers.push({
+            name: name,
+            furigana: kanaData[i][0] || '',
+            leaveDate: formatDate(leaveDate),
+            leaveReason: leaveReasonData[i][0] || ''
+          });
+        }
+      }
+    }
+
+    // 退所日順にソート（新しい順）
+    departedUsers.sort((a, b) => {
+      return new Date(b.leaveDate) - new Date(a.leaveDate);
+    });
+
+    return createSuccessResponse({
+      users: departedUsers,
+      year: year,
+      month: month
+    });
+  } catch (error) {
+    return createErrorResponse('退所者一覧取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 年度統計を取得
+ * @param {number} [fiscalYear] - 年度（4月始まり）。省略時は当年度
+ */
+function handleGetYearlyStats(fiscalYear) {
+  try {
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+
+    // 年度の範囲を計算（4月〜翌3月）
+    const now = new Date();
+    if (!fiscalYear) {
+      // 当年度を計算（1-3月は前年度）
+      fiscalYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    }
+    const fiscalStart = new Date(fiscalYear, 3, 1);  // 4月1日
+    const fiscalEnd = new Date(fiscalYear + 1, 2, 31, 23, 59, 59);  // 翌年3月31日
+
+    // 月別統計を格納
+    const monthlyData = {};
+    for (let m = 4; m <= 12; m++) {
+      monthlyData[`${fiscalYear}-${String(m).padStart(2, '0')}`] = {
+        attendance: 0, scheduled: 0, workDays: new Set(),
+        facilityHome: 0,  // 本施設 + 在宅 の実利用数
+        external: 0       // 施設外 の実利用数
+      };
+    }
+    for (let m = 1; m <= 3; m++) {
+      monthlyData[`${fiscalYear + 1}-${String(m).padStart(2, '0')}`] = {
+        attendance: 0, scheduled: 0, workDays: new Set(),
+        facilityHome: 0,
+        external: 0
+      };
+    }
+
+    // 年度内の出勤データを集計
+    const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
+    let yearlyAttendance = 0;
+    let yearlyScheduled = 0;
+    const yearlyWorkDays = new Set();
+
+    if (actualLastRow >= 2) {
+      // 年度分のデータを検索（最大5000行）
+      const MAX_SEARCH_ROWS = 5000;
+      const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+      const startRow = Math.max(2, actualLastRow - searchRows + 1);
+
+      // 日付、利用者名、出欠予定、出欠を一括取得
+      const data = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, searchRows, 4).getValues();
+
+      for (let i = 0; i < data.length; i++) {
+        const dateVal = data[i][0];
+        if (!dateVal) continue;
+
+        const rowDate = new Date(dateVal);
+        // 年度内のデータのみ集計
+        if (rowDate >= fiscalStart && rowDate <= fiscalEnd) {
+          const userName = data[i][1];
+          if (!userName || userName === '') continue;
+
+          const scheduled = data[i][2];
+          const attendance = data[i][3];
+
+          // 月キーを作成
+          const monthKey = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}`;
+
+          // 出欠予定がある場合カウント
+          if (scheduled && scheduled !== '') {
+            yearlyScheduled++;
+            if (monthlyData[monthKey]) {
+              monthlyData[monthKey].scheduled++;
+            }
+          }
+
+          // 出欠に何か入力があれば稼働日としてカウント
+          if (attendance && attendance !== '') {
+            const dateStr = formatDate(dateVal);
+            yearlyWorkDays.add(dateStr);
+
+            if (monthlyData[monthKey]) {
+              monthlyData[monthKey].workDays.add(dateStr);
+            }
+          }
+
+          // 出勤・在宅・施設外・遅刻・早退の場合、出勤延べ数としてカウント
+          if (attendance === '出勤' || attendance === '在宅' || attendance === '施設外' || attendance === '遅刻' || attendance === '早退') {
+            yearlyAttendance++;
+
+            if (monthlyData[monthKey]) {
+              monthlyData[monthKey].attendance++;
+
+              // 種別ごとに実利用数をカウント（出欠の値で判定）
+              if (attendance === '施設外') {
+                monthlyData[monthKey].external++;
+              } else {
+                // 出勤、在宅、遅刻、早退は全て facilityHome としてカウント
+                monthlyData[monthKey].facilityHome++;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 年度内の退所者数を集計
+    let yearlyDeparted = 0;
+    const rosterLastRow = rosterSheet.getLastRow();
+    if (rosterLastRow >= 3) {
+      const numRows = rosterLastRow - 2;
+      const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+      const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+
+      for (let i = 0; i < numRows; i++) {
+        const status = statusData[i][0];
+        const leaveDate = leaveDateData[i][0];
+
+        if (status === '退所済み' && leaveDate) {
+          const leaveDateObj = new Date(leaveDate);
+          if (leaveDateObj >= fiscalStart && leaveDateObj <= fiscalEnd) {
+            yearlyDeparted++;
+          }
+        }
+      }
+    }
+
+    // 出勤率を計算
+    const attendanceRate = yearlyScheduled > 0 ? yearlyAttendance / yearlyScheduled : 0;
+
+    // 月別サマリーを作成
+    const monthlySummary = [];
+    Object.keys(monthlyData).sort().forEach(key => {
+      const data = monthlyData[key];
+      const rate = data.scheduled > 0 ? data.attendance / data.scheduled : 0;
+      monthlySummary.push({
+        month: key,
+        attendance: data.attendance,
+        scheduled: data.scheduled,
+        workDays: data.workDays.size,
+        attendanceRate: rate,
+        facilityHome: data.facilityHome,  // 本施設 + 在宅 の実利用数
+        external: data.external           // 施設外 の実利用数
+      });
+    });
+
+    // 直接支援員（生活支援員・職業指導員）の配置を雇用形態別に集計
+    // 雇用形態: 常勤職員、非常勤職員（2日以下）、非常勤職員（3日以上）
+    const directSupportByType = {
+      fullTime: { facilityHome: 0, external: 0 },           // 常勤職員
+      partTimeLess2: { facilityHome: 0, external: 0 },      // 非常勤職員（2日以下）
+      partTimeMore3: { facilityHome: 0, external: 0 }       // 非常勤職員（3日以上）
+    };
+
+    // 福祉専門員等配置加算要件: 常勤の直接処遇職員の福祉資格保有率
+    let fullTimeDirectSupportTotal = 0;      // 常勤の直接処遇職員数
+    let fullTimeWithQualification = 0;       // うち福祉資格保有者数
+
+    const staffStartRow = MASTER_CONFIG.STAFF_DATA_START_ROW;
+    const staffLastRow = masterSheet.getLastRow();
+    if (staffLastRow >= staffStartRow) {
+      const numStaffRows = staffLastRow - staffStartRow + 1;
+      const cols = MASTER_CONFIG.STAFF_COLS;
+      // V列(22)からAD列(30)まで取得（退職日を含む）
+      const staffData = masterSheet.getRange(staffStartRow, cols.NAME, numStaffRows, cols.RETIREMENT_DATE - cols.NAME + 1).getValues();
+
+      for (let i = 0; i < staffData.length; i++) {
+        const name = staffData[i][0];  // V列: 職員名
+        if (!name || name === '') continue;
+
+        const jobType = staffData[i][cols.JOB_TYPE - cols.NAME];  // Z列: 職種
+        const qualification = staffData[i][cols.QUALIFICATION - cols.NAME];  // AA列: 保有福祉資格
+        const placement = staffData[i][cols.PLACEMENT - cols.NAME];  // AB列: 職員配置
+        const employmentType = staffData[i][cols.EMPLOYMENT_TYPE - cols.NAME];  // AC列: 雇用形態
+        const retirementDate = staffData[i][cols.RETIREMENT_DATE - cols.NAME];  // AD列: 退職日
+
+        // 退職日が入力されている場合はスキップ（統計から除外）
+        if (retirementDate && retirementDate !== '') continue;
+
+        // 直接支援員（生活支援員・職業指導員）のみ集計
+        if (jobType === '生活支援員' || jobType === '職業指導員') {
+          // 配置場所で分類（「本施設」を含む場合は本施設・在宅、それ以外は施設外）
+          const isFacilityHome = placement && placement.includes('本施設');
+
+          // 雇用形態で分類（「非常勤」も「常勤」を含むため、非常勤を先に判定）
+          if (employmentType && (employmentType.includes('週2以下') || employmentType.includes('2日以下'))) {
+            // 非常勤職員（週2以下）
+            if (isFacilityHome) {
+              directSupportByType.partTimeLess2.facilityHome++;
+            } else {
+              directSupportByType.partTimeLess2.external++;
+            }
+          } else if (employmentType && (employmentType.includes('週3以上') || employmentType.includes('3日以上'))) {
+            // 非常勤職員（週3以上）
+            if (isFacilityHome) {
+              directSupportByType.partTimeMore3.facilityHome++;
+            } else {
+              directSupportByType.partTimeMore3.external++;
+            }
+          } else if (employmentType && employmentType.includes('常勤') && !employmentType.includes('非常勤')) {
+            // 常勤職員（「非常勤」を含まないもののみ）
+            if (isFacilityHome) {
+              directSupportByType.fullTime.facilityHome++;
+            } else {
+              directSupportByType.fullTime.external++;
+            }
+            // 福祉専門員等配置加算要件: 常勤の直接処遇職員をカウント
+            fullTimeDirectSupportTotal++;
+            if (qualification && qualification !== '') {
+              fullTimeWithQualification++;
+            }
+          }
+        }
+      }
+    }
+
+    // 合計も計算
+    const totalFacilityHome = directSupportByType.fullTime.facilityHome +
+                              directSupportByType.partTimeLess2.facilityHome +
+                              directSupportByType.partTimeMore3.facilityHome;
+    const totalExternal = directSupportByType.fullTime.external +
+                          directSupportByType.partTimeLess2.external +
+                          directSupportByType.partTimeMore3.external;
+
+    // 福祉専門員等配置加算要件: 割合を計算
+    const qualificationRate = fullTimeDirectSupportTotal > 0
+      ? Math.round((fullTimeWithQualification / fullTimeDirectSupportTotal) * 100)
+      : 0;
+
+    return createSuccessResponse({
+      fiscalYear: fiscalYear,
+      fiscalYearLabel: `${fiscalYear}年度`,
+      yearlyAttendance: yearlyAttendance,
+      yearlyScheduled: yearlyScheduled,
+      yearlyWorkDays: yearlyWorkDays.size,
+      attendanceRate: attendanceRate,
+      yearlyDeparted: yearlyDeparted,
+      monthlySummary: monthlySummary,
+      directSupportStaff: {
+        facilityHome: totalFacilityHome,  // 本施設配置の直接支援員数（後方互換性）
+        external: totalExternal,           // 施設外配置の直接支援員数（後方互換性）
+        byEmploymentType: directSupportByType  // 雇用形態別の詳細
+      },
+      welfareQualification: {
+        total: fullTimeDirectSupportTotal,           // 常勤の直接処遇職員数
+        withQualification: fullTimeWithQualification, // うち福祉資格保有者数
+        rate: qualificationRate                       // 福祉資格保有率（%）
+      }
+    });
+  } catch (error) {
+    return createErrorResponse('年度統計取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 分析データをバッチ取得（施設統計・退所者・曜日別予定を一括）
+ * @param {string} monthStr - 月（YYYY-MM形式）
+ */
+function handleGetAnalyticsBatch(monthStr) {
+  try {
+    const masterSheet = getSheet(SHEET_NAMES.MASTER);
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+
+    // === 対象月の設定 ===
+    let year, month;
+    if (monthStr && monthStr.match(/^\d{4}-\d{2}$/)) {
+      const parts = monthStr.split('-');
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const now = new Date();
+    const isCurrentMonth = (year === now.getFullYear() && month === now.getMonth() + 1);
+
+    // === 名簿データを一括取得 ===
+    const rosterLastRow = rosterSheet.getLastRow();
+    let rosterData = [];
+    if (rosterLastRow >= 3) {
+      const numRows = rosterLastRow - 2;
+      // 名前(B列)、ステータス(E列)、退所日(BA列)、退所理由(BB列)を取得
+      const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+      const statusData = rosterSheet.getRange(3, ROSTER_COLS.STATUS, numRows, 1).getValues();
+      const leaveDateData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_DATE, numRows, 1).getValues();
+      const leaveReasonData = rosterSheet.getRange(3, ROSTER_COLS.LEAVE_REASON, numRows, 1).getValues();
+
+      for (let i = 0; i < numRows; i++) {
+        if (nameData[i][0] && nameData[i][0] !== '') {
+          rosterData.push({
+            name: nameData[i][0],
+            status: statusData[i][0],
+            leaveDate: leaveDateData[i][0],
+            leaveReason: leaveReasonData[i][0]
+          });
+        }
+      }
+    }
+
+    // === 1. 施設統計（facilityStats） ===
+    let contractedUsers = 0;  // 契約中の人数
+    const departedUsers = [];  // 当月退所者リスト
+    let futureDepatedCount = 0;  // 対象月より後に退所した人数
+
+    for (const user of rosterData) {
+      const status = (user.status || '').toString().trim();
+
+      if (status === '契約中') {
+        // 契約中をカウント
+        contractedUsers++;
+      } else if (status === '退所済み' && user.leaveDate) {
+        // 退所日をパース（YYYYMMDD形式の数値/文字列または日付型に対応）
+        let leaveDateObj;
+        const rawDate = user.leaveDate;
+        const rawStr = String(rawDate);  // 数値でも文字列に変換
+
+        if (rawStr.match(/^\d{8}$/)) {
+          // YYYYMMDD形式（数値または文字列）
+          const y = parseInt(rawStr.substring(0, 4), 10);
+          const m = parseInt(rawStr.substring(4, 6), 10) - 1;
+          const d = parseInt(rawStr.substring(6, 8), 10);
+          leaveDateObj = new Date(y, m, d);
+        } else {
+          leaveDateObj = new Date(rawDate);
+        }
+
+        if (isNaN(leaveDateObj.getTime()) || leaveDateObj.getFullYear() < 2000) continue;
+
+        if (leaveDateObj >= firstDay && leaveDateObj <= lastDay) {
+          // 対象月に退所した人 → リストに追加
+          departedUsers.push({
+            userName: user.name,
+            leaveDate: formatDate(leaveDateObj),
+            leaveReason: user.leaveReason || ''
+          });
+        } else if (leaveDateObj > lastDay) {
+          // 対象月より後に退所した人（その月は全日在籍）
+          futureDepatedCount++;
+        }
+      }
+    }
+
+    // 利用者数 = 契約中 + 当月退所者のみ（退所月のみカウント、翌月以降は除外）
+    const totalUsers = contractedUsers + departedUsers.length;
+
+    // 出勤データを集計（当月＋前月）
+    const actualLastRow = findActualLastRow(supportSheet, SUPPORT_COLS.USER_NAME);
+    let monthlyAttendance = 0;
+    let totalScheduled = 0;
+    const workDays = new Set();
+
+    // 前月の範囲
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevFirstDay = new Date(prevYear, prevMonth - 1, 1);
+    const prevLastDay = new Date(prevYear, prevMonth, 0);
+    let prevMonthlyAttendance = 0;
+    const prevWorkDays = new Set();
+
+    if (actualLastRow >= 2) {
+      const MAX_SEARCH_ROWS = isCurrentMonth ? 1500 : 3500;  // 前月も含めるため増加
+      const searchRows = Math.min(actualLastRow - 1, MAX_SEARCH_ROWS);
+      const startRow = Math.max(2, actualLastRow - searchRows + 1);
+
+      const data = supportSheet.getRange(startRow, SUPPORT_COLS.DATE, searchRows, 4).getValues();
+
+      for (let i = 0; i < data.length; i++) {
+        const dateVal = data[i][0];
+        if (!dateVal) continue;
+
+        const rowDate = new Date(dateVal);
+        const userName = data[i][1];
+        if (!userName || userName === '') continue;
+
+        const scheduled = data[i][2];
+        const attendance = data[i][3];
+
+        // 当月のデータ
+        if (rowDate >= firstDay && rowDate <= lastDay) {
+          if (scheduled && scheduled !== '') {
+            totalScheduled++;
+          }
+          // 出欠に何か入力があれば稼働日としてカウント
+          if (attendance && attendance !== '') {
+            workDays.add(formatDate(dateVal));
+          }
+          // 出勤・在宅・施設外・遅刻・早退の場合、出勤延べ数としてカウント
+          if (attendance === '出勤' || attendance === '在宅' || attendance === '施設外' || attendance === '遅刻' || attendance === '早退') {
+            monthlyAttendance++;
+          }
+        }
+
+        // 前月のデータ
+        if (rowDate >= prevFirstDay && rowDate <= prevLastDay) {
+          // 出欠に何か入力があれば稼働日としてカウント
+          if (attendance && attendance !== '') {
+            prevWorkDays.add(formatDate(dateVal));
+          }
+          // 出勤・在宅・施設外・遅刻・早退の場合、出勤延べ数としてカウント
+          if (attendance === '出勤' || attendance === '在宅' || attendance === '施設外' || attendance === '遅刻' || attendance === '早退') {
+            prevMonthlyAttendance++;
+          }
+        }
+      }
+    }
+
+    const attendanceRate = totalScheduled > 0 ? monthlyAttendance / totalScheduled : 0;
+
+    // 1日あたりの平均利用人数
+    const avgUsersPerDay = workDays.size > 0 ? monthlyAttendance / workDays.size : 0;
+    const prevAvgUsersPerDay = prevWorkDays.size > 0 ? prevMonthlyAttendance / prevWorkDays.size : 0;
+    const avgUsersChange = avgUsersPerDay - prevAvgUsersPerDay;
+
+    // === 2. 曜日別予定（weeklySchedule） ===
+    const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+    const schedule = {};
+    const details = {};
+    weekdays.forEach(day => {
+      schedule[day] = { '本施設': 0, '施設外': 0, '在宅': 0 };
+      details[day] = { '本施設': {}, '施設外': {}, '在宅': {} };
+    });
+
+    const weekdayMap = {
+      4: '月', // D列
+      5: '火', // E列
+      6: '水', // F列
+      7: '木', // G列
+      8: '金', // H列
+      9: '土', // I列
+      10: '日' // J列
+    };
+
+    const masterLastRow = masterSheet.getLastRow();
+    if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
+      const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+      const numRows = masterLastRow - startRow + 1;
+
+      // 名前(A列)、ステータス(C列)、曜日別予定(D-J列)を一括取得
+      const masterData = masterSheet.getRange(startRow, 1, numRows, 10).getValues();
+
+      for (let i = 0; i < masterData.length; i++) {
+        const name = masterData[i][0];
+        if (!name || name === '') break;
+
+        const status = masterData[i][2]; // C列: ステータス
+        if (status !== '契約中') continue;
+
+        // D列〜J列（曜日別予定）をチェック
+        for (let col = 3; col <= 9; col++) { // 配列インデックス3-9 = D-J列
+          const value = masterData[i][col];
+          if (!value || value === '') continue;
+
+          const weekday = weekdayMap[col + 1]; // 配列インデックス+1 = 列番号
+          const valueStr = String(value).trim();
+
+          // 「非利用日」は除外
+          if (valueStr.includes('非利用') || valueStr === '非利用日') continue;
+
+          // 値に基づいて分類
+          let category = '';
+          if (valueStr.includes('施設外') || valueStr.includes('外')) {
+            category = '施設外';
+          } else if (valueStr.includes('在宅') || valueStr.includes('自宅')) {
+            category = '在宅';
+          } else if (valueStr !== '') {
+            category = '本施設';
+          }
+
+          if (category) {
+            schedule[weekday][category]++;
+            // 詳細データに元の値をカウント
+            if (!details[weekday][category][valueStr]) {
+              details[weekday][category][valueStr] = 0;
+            }
+            details[weekday][category][valueStr]++;
+          }
+        }
+      }
+    }
+
+    return createSuccessResponse({
+      // 施設統計
+      facilityStats: {
+        year: year,
+        month: month,
+        totalUsers: totalUsers,
+        attendanceRate: attendanceRate,
+        monthlyWorkDays: workDays.size,
+        monthlyAttendance: monthlyAttendance,
+        avgUsersPerDay: Math.round(avgUsersPerDay * 10) / 10,  // 小数点1桁
+        prevAvgUsersPerDay: Math.round(prevAvgUsersPerDay * 10) / 10,
+        avgUsersChange: Math.round(avgUsersChange * 10) / 10
+      },
+      // 退所者一覧
+      departedUsers: departedUsers,
+      // 曜日別予定
+      weeklySchedule: {
+        schedule: schedule,
+        details: details
+      }
+    });
+  } catch (error) {
+    return createErrorResponse('バッチ分析取得エラー: ' + error.message);
+  }
+}
+
+// === 年度管理機能 ===
+
+/**
+ * 利用可能な年度一覧を取得（施設フォルダ内のスプレッドシートを検索）
+ */
+function handleGetAvailableFiscalYears() {
+  try {
+    const currentSs = SpreadsheetApp.getActiveSpreadsheet();
+    const currentSsId = currentSs.getId();
+    const currentSsName = currentSs.getName();
+
+    // 施設IDをファイル名から抽出
+    const facilityIdMatch = currentSsName.match(/^(\d+)_/);
+    const facilityId = facilityIdMatch ? facilityIdMatch[1] : null;
+
+    // 親フォルダを取得
+    const currentFile = DriveApp.getFileById(currentSsId);
+    const parentFolders = currentFile.getParents();
+
+    const yearSpreadsheets = [];
+
+    if (parentFolders.hasNext() && facilityId) {
+      const parentFolder = parentFolders.next();
+
+      // フォルダ内のスプレッドシートを検索
+      const files = parentFolder.getFilesByType(MimeType.GOOGLE_SHEETS);
+
+      while (files.hasNext()) {
+        const file = files.next();
+        const fileName = file.getName();
+
+        // ファイル名パターン: {施設ID}_マスタ設定_{年度}
+        const match = fileName.match(new RegExp(`^${facilityId}_マスタ設定_(\\d{4})$`));
+        if (match) {
+          const year = parseInt(match[1], 10);
+          yearSpreadsheets.push({
+            year: year,
+            spreadsheetId: file.getId(),
+            name: fileName,
+            url: `https://docs.google.com/spreadsheets/d/${file.getId()}/edit`
+          });
+        }
+      }
+    }
+
+    // 年度で降順ソート
+    yearSpreadsheets.sort((a, b) => b.year - a.year);
+
+    // 現在の年度を取得（4月始まりの場合）
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const currentFiscalYear = currentMonth >= 4 ? currentYear : currentYear - 1;
+
+    // 現在のスプレッドシートの年度を取得
+    const currentSsYearMatch = currentSsName.match(/_(\d{4})$/);
+    const activeYear = currentSsYearMatch ? parseInt(currentSsYearMatch[1], 10) : DEFAULT_FISCAL_YEAR;
+
+    return createSuccessResponse({
+      availableYears: yearSpreadsheets.map(s => s.year),
+      yearSpreadsheets: yearSpreadsheets,
+      currentFiscalYear: currentFiscalYear,
+      activeYear: activeYear,
+      defaultYear: DEFAULT_FISCAL_YEAR
+    });
+  } catch (error) {
+    return createErrorResponse('年度一覧取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 次年度スプレッドシートを新規ファイルとして作成し、契約中利用者をコピー
+ */
+function handleCreateNextFiscalYear(data) {
+  try {
+    const currentYear = data.currentYear || DEFAULT_FISCAL_YEAR;
+    const nextYear = currentYear + 1;
+
+    // 現在のスプレッドシート情報を取得
+    const currentSs = SpreadsheetApp.getActiveSpreadsheet();
+    const currentSsId = currentSs.getId();
+    const currentSsName = currentSs.getName();
+
+    // 施設IDをファイル名から抽出（例: "222222_マスタ設定_2025" → "222222"）
+    const facilityIdMatch = currentSsName.match(/^(\d+)_/);
+    const facilityId = facilityIdMatch ? facilityIdMatch[1] : 'unknown';
+
+    // 新しいファイル名
+    const newFileName = `${facilityId}_マスタ設定_${nextYear}`;
+
+    // 親フォルダを取得
+    const currentFile = DriveApp.getFileById(currentSsId);
+    const parentFolders = currentFile.getParents();
+
+    if (!parentFolders.hasNext()) {
+      return createErrorResponse('施設フォルダが見つかりません');
+    }
+
+    const parentFolder = parentFolders.next();
+
+    // 同じ名前のファイルが既に存在するかチェック
+    const existingFiles = parentFolder.getFilesByName(newFileName);
+    if (existingFiles.hasNext()) {
+      return createErrorResponse(`${nextYear}年度のスプレッドシートは既に存在します`);
+    }
+
+    // 現在のスプレッドシートをコピーして新しいファイルを作成
+    const newFile = currentFile.makeCopy(newFileName, parentFolder);
+    const newSs = SpreadsheetApp.openById(newFile.getId());
+
+    // 新しいスプレッドシートのシート名を更新
+    const sheetsToRename = [
+      { oldPattern: `支援記録_${currentYear}`, newName: `支援記録_${nextYear}` },
+      { oldPattern: `名簿_${currentYear}`, newName: `名簿_${nextYear}` }
+    ];
+
+    sheetsToRename.forEach(({ oldPattern, newName }) => {
+      const sheet = newSs.getSheetByName(oldPattern);
+      if (sheet) {
+        sheet.setName(newName);
+      }
+    });
+
+    // 支援記録シートのデータをクリア（A列にデータがある行を削除）
+    // 支援記録シートは1行目がヘッダー、2行目以降がデータ
+    const SUPPORT_DATA_START_ROW = 2;
+    const currentSupportSheet = currentSs.getSheetByName(`支援記録_${currentYear}`);
+
+    if (currentSupportSheet) {
+      const lastRow = currentSupportSheet.getLastRow();
+
+      if (lastRow >= SUPPORT_DATA_START_ROW) {
+        // A列のデータを取得（2行目以降）
+        const numRows = lastRow - SUPPORT_DATA_START_ROW + 1;
+        const colAData = currentSupportSheet.getRange(SUPPORT_DATA_START_ROW, 1, numRows, 1).getValues();
+
+        // A列にデータがある行数をカウント
+        let dataRowCount = 0;
+        for (let i = 0; i < colAData.length; i++) {
+          if (colAData[i][0] !== '' && colAData[i][0] !== null) {
+            dataRowCount++;
+          }
+        }
+
+        // 新しいスプレッドシートの支援記録シートからデータ行を削除
+        const newSupportSheet = newSs.getSheetByName(`支援記録_${nextYear}`);
+        if (newSupportSheet && dataRowCount > 0) {
+          newSupportSheet.deleteRows(SUPPORT_DATA_START_ROW, dataRowCount);
+        }
+      }
+    }
+
+    // 変更を強制保存
+    SpreadsheetApp.flush();
+
+    // マスタ設定シートの処理（契約中の利用者のみA〜J列に詰めて保持）
+    const newMasterSheet = newSs.getSheetByName(FIXED_SHEET_NAMES.MASTER);
+    if (newMasterSheet) {
+      const masterStartRow = MASTER_CONFIG.USER_DATA_START_ROW; // 8行目から
+      const masterLastRow = newMasterSheet.getLastRow();
+
+      if (masterLastRow >= masterStartRow) {
+        // A〜J列のデータを取得（利用者情報範囲）
+        const masterNumRows = masterLastRow - masterStartRow + 1;
+        const masterData = newMasterSheet.getRange(masterStartRow, 1, masterNumRows, 10).getValues(); // A〜J列
+
+        // 契約中の利用者のみ抽出
+        const contractedUserData = [];
+        for (let i = 0; i < masterData.length; i++) {
+          const name = masterData[i][0]; // A列（名前）
+          const status = masterData[i][2]; // C列（契約状態）
+
+          // 名前があり、契約中の利用者のみ保持
+          if (name && name !== '' && status === '契約中') {
+            contractedUserData.push(masterData[i]);
+          }
+        }
+
+        // A〜J列のデータを全てクリア
+        newMasterSheet.getRange(masterStartRow, 1, masterNumRows, 10).clearContent();
+
+        // 契約中の利用者データを8行目から詰めて書き込み
+        if (contractedUserData.length > 0) {
+          newMasterSheet.getRange(masterStartRow, 1, contractedUserData.length, 10)
+            .setValues(contractedUserData);
+        }
+      }
+    }
+
+    // 変更を強制保存
+    SpreadsheetApp.flush();
+
+    // 名簿シートの処理
+    const newRosterSheet = newSs.getSheetByName(`名簿_${nextYear}`);
+    const currentRosterSheet = currentSs.getSheetByName(`名簿_${currentYear}`);
+    let copiedUsers = 0;
+
+    if (newRosterSheet && currentRosterSheet) {
+      // 名簿の8行目以降のデータをクリア（書式・罫線は保持）
+      const rosterLastRow = newRosterSheet.getLastRow();
+      const rosterLastCol = newRosterSheet.getLastColumn();
+      if (rosterLastRow > 7 && rosterLastCol > 0) {
+        newRosterSheet.getRange(8, 1, rosterLastRow - 7, rosterLastCol).clearContent();
+      }
+
+      // 契約中の利用者を新しい名簿シートにコピー
+      copiedUsers = copyContractedUsersToNewRoster(
+        currentRosterSheet,
+        newRosterSheet
+      );
+    }
+
+    // 新しいスプレッドシートのURLとIDを返す
+    const newSsUrl = newSs.getUrl();
+    const newSsId = newSs.getId();
+
+    return createSuccessResponse({
+      message: `${nextYear}年度のスプレッドシートを作成しました`,
+      nextYear: nextYear,
+      copiedUsersCount: copiedUsers,
+      newSpreadsheet: {
+        id: newSsId,
+        name: newFileName,
+        url: newSsUrl
+      }
+    });
+  } catch (error) {
+    return createErrorResponse('次年度シート作成エラー: ' + error.message);
+  }
+}
+
+/**
+ * 契約中の利用者を新しい名簿シートにコピー
+ */
+function copyContractedUsersToNewRoster(sourceSheet, targetSheet) {
+  const cols = ROSTER_COLS;
+  const startRow = 8; // データ開始行
+  const lastRow = sourceSheet.getLastRow();
+
+  if (lastRow < startRow) {
+    return 0; // データなし
+  }
+
+  // 全データを一括取得
+  const numRows = lastRow - startRow + 1;
+  const numCols = 60; // A〜BH列（60列）
+  const allData = sourceSheet.getRange(startRow, 1, numRows, numCols).getValues();
+
+  // 契約中の利用者のみ抽出
+  const contractedUsers = [];
+  for (let i = 0; i < allData.length; i++) {
+    const row = allData[i];
+    const name = row[cols.NAME - 1]; // B列（0-indexed: 1）
+    const status = row[cols.STATUS - 1]; // E列（0-indexed: 4）
+
+    // 空行または退所済みはスキップ
+    if (!name || name === '') continue;
+    if (status !== '契約中') continue;
+
+    // コピーするデータを準備（退所関連情報はクリア）
+    const newRow = [...row];
+
+    // 退所・就労情報（AZ〜BH列）をクリア
+    newRow[cols.LEAVE_DATE - 1] = ''; // BA列: 退所日
+    newRow[cols.LEAVE_REASON - 1] = ''; // BB列: 退所理由
+    newRow[cols.WORK_NAME - 1] = ''; // BC列: 勤務先
+    newRow[cols.WORK_CONTACT - 1] = ''; // BD列: 勤務先連絡先
+    newRow[cols.WORK_CONTENT - 1] = ''; // BE列: 業務内容
+    newRow[cols.CONTRACT_TYPE - 1] = ''; // BF列: 契約形態
+    newRow[cols.EMPLOYMENT_SUPPORT - 1] = ''; // BG列: 定着支援
+
+    // 自動計算列もクリア（新年度で再計算）
+    newRow[cols.USE_PERIOD - 1] = ''; // AI列: 利用期間
+    newRow[cols.INITIAL_ADDITION - 1] = ''; // AJ列: 初期加算
+
+    contractedUsers.push(newRow);
+  }
+
+  // 契約中利用者を新シートに一括書き込み
+  if (contractedUsers.length > 0) {
+    targetSheet.getRange(startRow, 1, contractedUsers.length, numCols)
+      .setValues(contractedUsers);
+  }
+
+  return contractedUsers.length;
 }

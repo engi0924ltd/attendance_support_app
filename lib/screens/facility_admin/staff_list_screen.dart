@@ -223,12 +223,31 @@ class _StaffListScreenState extends State<StaffListScreen> {
             color: Colors.white,
           ),
         ),
-        title: Text(
-          staff.name,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+        title: Row(
+          children: [
+            Text(
+              staff.name,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: staff.isRetired ? Colors.grey : null,
+              ),
+            ),
+            if (staff.isRetired) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '退職済',
+                  style: TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
+            ],
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

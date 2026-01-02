@@ -77,6 +77,9 @@ class Staff {
   /// 従業員権限か
   bool get isEmployee => role == '従業員';
 
+  /// 退職済みか
+  bool get isRetired => retirementDate != null && retirementDate!.isNotEmpty;
+
   /// 権限レベル（1: 管理者、2: 従業員）
   int get permissionLevel => isAdmin ? 1 : 2;
 
