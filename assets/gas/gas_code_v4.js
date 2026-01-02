@@ -860,26 +860,33 @@ function handleStaffLogin(data) {
   }
 
   const sheet = getSheet(SHEET_NAMES.MASTER);
+  const cols = MASTER_CONFIG.STAFF_COLS;
 
-  // 【最適化】職員データを一括取得（V列〜Y列: NAME, ROLE, EMAIL, PASSWORD）
+  // 職員データを一括取得（V列〜AD列: NAME〜RETIREMENT_DATE）
   const numRows = MASTER_CONFIG.STAFF_DATA_END_ROW - MASTER_CONFIG.STAFF_DATA_START_ROW + 1;
-  const numCols = 4; // V列からY列まで（NAME, ROLE, EMAIL, PASSWORD）
+  const numCols = cols.RETIREMENT_DATE - cols.NAME + 1; // V列からAD列まで
   const allData = sheet.getRange(
     MASTER_CONFIG.STAFF_DATA_START_ROW,
-    MASTER_CONFIG.STAFF_COLS.NAME,  // 22列目（V列）から開始
+    cols.NAME,
     numRows,
     numCols
   ).getValues();
 
   // データを検索
   for (let i = 0; i < allData.length; i++) {
-    const staffName = allData[i][0];     // V列 (22): NAME
-    const staffRole = allData[i][1];     // W列 (23): ROLE
-    const staffEmail = allData[i][2];    // X列 (24): EMAIL
-    const staffPassword = allData[i][3]; // Y列 (25): PASSWORD
+    const staffName = allData[i][0];     // V列: NAME
+    const staffRole = allData[i][1];     // W列: ROLE
+    const staffEmail = allData[i][2];    // X列: EMAIL
+    const staffPassword = allData[i][3]; // Y列: PASSWORD
+    const retirementDate = allData[i][cols.RETIREMENT_DATE - cols.NAME]; // AD列: 退職日
 
     // メールアドレスチェック（前後の空白を削除して比較）
     if (staffEmail && String(staffEmail).trim() === String(email).trim()) {
+      // 退職日が入力されている場合はログイン拒否
+      if (retirementDate && retirementDate !== '') {
+        return createErrorResponse('このアカウントは無効です');
+      }
+
       if (staffPassword && String(staffPassword).trim() === String(password).trim()) {
         const token = generateToken(email);
 
