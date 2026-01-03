@@ -2839,6 +2839,48 @@ function formatDateYYYYMMDD(dateValue) {
 }
 
 /**
+ * 時刻をHHMM形式にフォーマット（請求出力用）
+ * 「12:00」→「1200」、Date型も対応
+ */
+function formatTimeToHHMM(timeValue) {
+  if (!timeValue) return '';
+
+  // 文字列の場合（例：「12:00」「9:30」）
+  if (typeof timeValue === 'string') {
+    // コロンを削除
+    const cleaned = timeValue.replace(/:/g, '');
+    // 数字のみ抽出
+    const match = cleaned.match(/^(\d+)$/);
+    if (match) {
+      // 3桁の場合は先頭に0を追加（例：「930」→「0930」）
+      return match[1].padStart(4, '0');
+    }
+    return '';
+  }
+
+  // Date型の場合
+  if (timeValue instanceof Date || (typeof timeValue === 'object' && timeValue.getHours)) {
+    const date = new Date(timeValue);
+    if (isNaN(date.getTime())) return '';
+
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}${minutes}`;
+  }
+
+  // 数値の場合（シリアル値）
+  if (typeof timeValue === 'number') {
+    // Excelのシリアル時刻値を変換
+    const totalMinutes = Math.round(timeValue * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60) % 24;
+    const minutes = totalMinutes % 60;
+    return String(hours).padStart(2, '0') + String(minutes).padStart(2, '0');
+  }
+
+  return '';
+}
+
+/**
  * 日付から曜日列を取得（マスタ設定シートの曜日別出欠予定用）
  */
 function getDayOfWeekColumn(dateValue) {
@@ -5140,6 +5182,30 @@ function handleDeleteMunicipality(data) {
 // === 請求データ出力 ===
 
 /**
+ * 値を取得（null/undefined/空文字のみ空欄に変換、"0"は保持）
+ * @param {*} value - 取得する値
+ * @returns {*} 値（null/undefined/空文字の場合は空文字）
+ */
+function getValueOrEmpty(value) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  return value;
+}
+
+/**
+ * 値をテキストとして保持（先頭に'を付けて数値変換を防ぐ）
+ * @param {*} value - 取得する値
+ * @returns {string} テキスト値（空の場合は空文字）
+ */
+function getValueAsText(value) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  return "'" + String(value);
+}
+
+/**
  * 請求データを出力
  * 選択した利用者の情報を「請求_2025」シートに出力
  */
@@ -5189,6 +5255,60 @@ function handleExecuteBilling(data) {
       return createErrorResponse(`シート「${rosterSheetName}」の取得に失敗しました: ${e.message}`);
     }
 
+    // 支援記録シートを取得
+    const supportSheetName = `支援記録_${fiscalYear}`;
+    let supportSheet;
+    try {
+      supportSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(supportSheetName);
+      if (!supportSheet) {
+        return createErrorResponse(`シート「${supportSheetName}」が見つかりません`);
+      }
+    } catch (e) {
+      return createErrorResponse(`シート「${supportSheetName}」の取得に失敗しました: ${e.message}`);
+    }
+
+    // === B3に年月（YYYYMM形式）を出力 ===
+    const yearMonthFormatted = `${year}${String(month).padStart(2, '0')}`;
+    billingSheet.getRange(3, 2).setValue(yearMonthFormatted);
+
+    // === マスタ設定シートから市町村データを取得して請求シートに出力 ===
+    const masterSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('マスタ設定');
+    if (masterSheet) {
+      // Q61:R90から市町村と市町村番号を取得（30行分）
+      const municipalityData = masterSheet.getRange(61, 17, 30, 2).getValues(); // Q列=17, R列=18
+
+      // 市町村出力の設定
+      const municipalityBaseRow = 54; // 市町村の開始行
+      const municipalityInterval = 4; // 間隔
+      const municipalityMaxCount = 29; // 最大件数（A169までに収める：54 + 4*28 = 166、市町村番号は167）
+
+      // === 市町村クリア処理（全ブロック、A列・B列） ===
+      for (let i = 0; i < municipalityMaxCount; i++) {
+        const cityRow = municipalityBaseRow + (municipalityInterval * i);
+        // A列とB列を2行分クリア（市町村行と市町村番号行）
+        billingSheet.getRange(cityRow, 1, 2, 2).clearContent();
+      }
+
+      // === 市町村出力処理 ===
+      let outputCount = 0;
+      for (let i = 0; i < municipalityData.length; i++) {
+        const cityName = municipalityData[i][0]; // Q列: 市町村名
+        const cityCode = municipalityData[i][1]; // R列: 市町村番号
+
+        if (cityName || cityCode) {
+          const cityRow = municipalityBaseRow + (municipalityInterval * outputCount); // 市町村の行
+
+          // A列にラベル、B列に値を出力（一括書き込み）
+          billingSheet.getRange(cityRow, 1, 2, 2).setValues([
+            ['市町村', cityName || ''],
+            ['市町村番号', cityCode || '']
+          ]);
+
+          outputCount++;
+        }
+      }
+    }
+
     // 名簿シートから全データを一括取得（3行目〜最終行）
     const rosterLastRow = rosterSheet.getLastRow();
     const rosterNumRows = Math.max(0, rosterLastRow - 2);
@@ -5205,78 +5325,148 @@ function handleExecuteBilling(data) {
       }
     }
 
+    // === 支援記録シートから対象月のデータを取得 ===
+    const supportLastRow = supportSheet.getLastRow();
+    const supportNumRows = Math.max(0, supportLastRow - 1);
+    // 利用者名→日付→記録データのマップを作成
+    let supportMap = {}; // { userName: { day: { attendance, checkinTime, checkoutTime, workLocation } } }
+
+    if (supportNumRows > 0) {
+      // A列（日時）、B列（利用者名）、D列（出欠）、P列（開始時刻）、Q列（終了時刻）、AA列（勤務地）を取得
+      const supportData = supportSheet.getRange(2, 1, supportNumRows, 27).getValues();
+
+      for (let i = 0; i < supportData.length; i++) {
+        const dateValue = supportData[i][SUPPORT_COLS.DATE - 1]; // A列
+        const userName = supportData[i][SUPPORT_COLS.USER_NAME - 1]; // B列
+
+        if (!dateValue || !userName) continue;
+
+        // 日付を解析
+        const recordDate = new Date(dateValue);
+        const recordYear = recordDate.getFullYear();
+        const recordMonth = recordDate.getMonth() + 1;
+        const recordDay = recordDate.getDate();
+
+        // 対象年月のみ処理
+        if (recordYear !== year || recordMonth !== month) continue;
+
+        // 選択された利用者のみ処理
+        if (!users.includes(userName)) continue;
+
+        // マップに追加
+        if (!supportMap[userName]) {
+          supportMap[userName] = {};
+        }
+
+        const attendance = supportData[i][SUPPORT_COLS.ATTENDANCE - 1] || ''; // D列
+        const checkinTime = supportData[i][SUPPORT_COLS.CHECKIN_TIME - 1] || ''; // P列
+        const checkoutTime = supportData[i][SUPPORT_COLS.CHECKOUT_TIME - 1] || ''; // Q列
+        const workLocation = supportData[i][SUPPORT_COLS.WORK_LOCATION - 1] || ''; // AA列
+
+        supportMap[userName][recordDay] = {
+          attendance: attendance,
+          checkinTime: checkinTime,
+          checkoutTime: checkoutTime,
+          workLocation: workLocation
+        };
+      }
+    }
+
     // 出力設定: aₙ = 170 + 78(n−1) の法則
-    const baseRow = 170;  // 開始行
+    const baseRow = 170;  // 開始行（氏名）
+    const dayBaseOffset = 42; // 氏名行から1日目までのオフセット（212 - 170 = 42）
     const interval = 78;  // 間隔
 
     // シートの最終行から最大人数を動的に計算
     const sheetLastRow = billingSheet.getMaxRows();
     const clearMaxUsers = Math.floor((sheetLastRow - baseRow) / interval) + 1;
 
-    // 出力対象の行オフセット（baseRowからの相対位置）
+    // 出力対象の行オフセット（baseRowからの相対位置）- 名簿情報
     // B170〜B183の範囲で、B177とB180は除く
     const outputRowOffsets = [0, 1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13];
 
-    // 前月データをクリア（出力対象セルのみ）
+    // === クリア処理（一括処理で高速化） ===
+    // 全ブロックをクリア（前回出力分も含めて完全にクリア）
     for (let i = 0; i < clearMaxUsers; i++) {
       const userBaseRow = baseRow + (interval * i);
-      // シートの範囲を超えないようにチェック
-      if (userBaseRow + 13 > sheetLastRow) break;
-      outputRowOffsets.forEach(offset => {
-        billingSheet.getRange(userBaseRow + offset, 2).clearContent();
-      });
+      if (userBaseRow + dayBaseOffset + 31 > sheetLastRow) break;
+
+      // 名簿情報のクリア（B列、14行分を一括）
+      billingSheet.getRange(userBaseRow, 2, 14, 1).clearContent();
+
+      // 支援記録情報のクリア（C〜E列、31日分を一括）
+      const dayStartRow = userBaseRow + dayBaseOffset;
+      billingSheet.getRange(dayStartRow, 3, 31, 3).clearContent(); // C,D,E列
+
+      // S列のクリア（31日分を一括）
+      billingSheet.getRange(dayStartRow, 19, 31, 1).clearContent(); // S列
     }
 
-    // 利用者ごとにデータを出力
+    // === 利用者ごとにデータを出力（一括処理で高速化） ===
     users.forEach((name, index) => {
       const userBaseRow = baseRow + (interval * index);
       const rosterData = rosterMap[name];
+      const userSupportData = supportMap[name] || {};
 
-      // B170: 氏名
-      billingSheet.getRange(userBaseRow + 0, 2).setValue(name);
+      // === 名簿情報の出力（B列）- 一括書き込み ===
+      const nameInfoData = [
+        [name], // B170: 氏名
+        [rosterData ? (rosterData[ROSTER_COLS.NAME_KANA - 1] || '') : ''], // B171: フリガナ
+        [rosterData ? getValueAsText(rosterData[ROSTER_COLS.CERTIFICATE_NUMBER - 1]) : ''], // B172: 受給者証番号
+        [rosterData ? ((rosterData[ROSTER_COLS.CITY - 1] || '') + (rosterData[ROSTER_COLS.WARD - 1] || '')) : ''], // B173: 市町村
+        [rosterData ? (rosterData[ROSTER_COLS.SUPPORT_LEVEL - 1] || '') : ''], // B174: 障害支援区分
+        [rosterData ? getValueAsText(rosterData[ROSTER_COLS.USER_BURDEN_LIMIT - 1]) : ''], // B175: 利用者負担上限額
+        [rosterData ? (rosterData[ROSTER_COLS.USE_START_DATE - 1] || '') : ''], // B176: 利用開始日
+        [''], // B177: スキップ
+        ['1'], // B178: 固定値「1」
+        [rosterData ? (rosterData[ROSTER_COLS.USE_START_DATE - 1] || '') : ''], // B179: 利用開始日
+        [''], // B180: スキップ
+        [rosterData ? (rosterData[ROSTER_COLS.DECISION_PERIOD2 - 1] || '') : ''], // B181: 支給決定期間
+        [rosterData ? (rosterData[ROSTER_COLS.APPLICABLE_END - 1] || '') : ''], // B182: 適用期間
+        [rosterData ? (rosterData[ROSTER_COLS.SUPPLY_AMOUNT - 1] || '') : ''] // B183: 支給量
+      ];
+      billingSheet.getRange(userBaseRow, 2, 14, 1).setValues(nameInfoData);
 
-      if (rosterData) {
-        // B171: フリガナ（名簿C列）
-        billingSheet.getRange(userBaseRow + 1, 2).setValue(rosterData[ROSTER_COLS.NAME_KANA - 1] || '');
+      // === 支援記録情報の出力（C, D, E, S列）- 一括書き込み ===
+      const dayStartRow = userBaseRow + dayBaseOffset;
 
-        // B172: 受給者証番号（名簿AA列）
-        billingSheet.getRange(userBaseRow + 2, 2).setValue(rosterData[ROSTER_COLS.CERTIFICATE_NUMBER - 1] || '');
+      // 31日分のデータ配列を準備
+      const cdeData = []; // C,D,E列用
+      const sData = [];   // S列用
 
-        // B173: 市町村および政令指定都市区（名簿O列&P列）
-        const city = rosterData[ROSTER_COLS.CITY - 1] || '';
-        const ward = rosterData[ROSTER_COLS.WARD - 1] || '';
-        billingSheet.getRange(userBaseRow + 3, 2).setValue(city + ward);
+      for (let day = 1; day <= 31; day++) {
+        const dayData = userSupportData[day];
 
-        // B174: 障害支援区分（名簿AG列）
-        billingSheet.getRange(userBaseRow + 4, 2).setValue(rosterData[ROSTER_COLS.SUPPORT_LEVEL - 1] || '');
+        if (dayData) {
+          // C列: 出欠 → 「出勤」「在宅」「施設外」「遅刻」「早退」の場合は「○」
+          const attendance = dayData.attendance;
+          const attendanceOutput = (attendance === '出勤' || attendance === '在宅' ||
+            attendance === '施設外' || attendance === '遅刻' || attendance === '早退') ? '○' : '';
 
-        // B175: 利用者負担上限額（名簿AK列）
-        billingSheet.getRange(userBaseRow + 5, 2).setValue(rosterData[ROSTER_COLS.USER_BURDEN_LIMIT - 1] || '');
+          // D列: 開始時刻（HHMM形式に変換）
+          const checkinFormatted = formatTimeToHHMM(dayData.checkinTime);
 
-        // B176: 利用開始日（名簿AH列）
-        billingSheet.getRange(userBaseRow + 6, 2).setValue(rosterData[ROSTER_COLS.USE_START_DATE - 1] || '');
+          // E列: 終了時刻（HHMM形式に変換）
+          const checkoutFormatted = formatTimeToHHMM(dayData.checkoutTime);
 
-        // B178: 固定値「1」
-        billingSheet.getRange(userBaseRow + 8, 2).setValue('1');
-
-        // B179: 利用開始日（名簿AH列）
-        billingSheet.getRange(userBaseRow + 9, 2).setValue(rosterData[ROSTER_COLS.USE_START_DATE - 1] || '');
-
-        // B181: 支給決定期間有効期限（名簿AC列）
-        billingSheet.getRange(userBaseRow + 11, 2).setValue(rosterData[ROSTER_COLS.DECISION_PERIOD2 - 1] || '');
-
-        // B182: 適用期間有効期限（名簿AE列）
-        billingSheet.getRange(userBaseRow + 12, 2).setValue(rosterData[ROSTER_COLS.APPLICABLE_END - 1] || '');
-
-        // B183: 支給量（名簿AF列）
-        billingSheet.getRange(userBaseRow + 13, 2).setValue(rosterData[ROSTER_COLS.SUPPLY_AMOUNT - 1] || '');
+          cdeData.push([attendanceOutput, checkinFormatted, checkoutFormatted]);
+          sData.push([dayData.workLocation || '']);
+        } else {
+          cdeData.push(['', '', '']);
+          sData.push(['']);
+        }
       }
+
+      // 一括書き込み
+      billingSheet.getRange(dayStartRow, 3, 31, 3).setValues(cdeData); // C,D,E列
+      billingSheet.getRange(dayStartRow, 19, 31, 1).setValues(sData);  // S列
     });
 
     return createSuccessResponse({
       message: `${users.length}名の利用者情報を出力しました`,
       sheetName: billingSheetName,
       count: users.length,
+      yearMonth: yearMonthFormatted,
       outputRows: users.map((_, i) => baseRow + (interval * i))
     });
   } catch (error) {
