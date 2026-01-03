@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
+import '../../services/master_service.dart';
 import 'user_form_screen.dart';
 
 /// 利用者一覧画面（施設管理者用）
@@ -15,6 +16,7 @@ class UserListScreen extends StatefulWidget {
 
 class _UserListScreenState extends State<UserListScreen> {
   late final UserService _userService;
+  late final MasterService _masterService;
   List<User> _userList = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -23,6 +25,7 @@ class _UserListScreenState extends State<UserListScreen> {
   void initState() {
     super.initState();
     _userService = UserService(facilityGasUrl: widget.gasUrl);
+    _masterService = MasterService(gasUrl: widget.gasUrl);
     _loadUserList();
   }
 
@@ -47,6 +50,23 @@ class _UserListScreenState extends State<UserListScreen> {
         _errorMessage = 'データの読み込みに失敗しました\n$e';
         _isLoading = false;
       });
+    }
+  }
+
+  /// 全データをリフレッシュ（利用者データ + プルダウンキャッシュクリア）
+  Future<void> _refreshAll() async {
+    // プルダウンキャッシュをクリア
+    await _masterService.clearDropdownCache();
+    // 利用者データを再読み込み
+    await _loadUserList();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('データを更新しました'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -215,8 +235,8 @@ class _UserListScreenState extends State<UserListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadUserList,
-            tooltip: '更新',
+            onPressed: _refreshAll,
+            tooltip: 'データを更新',
           ),
         ],
       ),

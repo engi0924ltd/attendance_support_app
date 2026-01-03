@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
+import '../../services/master_service.dart';
 import 'user_form_screen.dart';
 
 /// 利用者一覧画面（支援者用）
@@ -13,6 +14,7 @@ class UserListScreen extends StatefulWidget {
 
 class _UserListScreenState extends State<UserListScreen> {
   final UserService _userService = UserService();
+  final MasterService _masterService = MasterService();
   List<User> _users = [];
   List<User> _filteredUsers = [];
   bool _isLoading = true;
@@ -49,6 +51,23 @@ class _UserListScreenState extends State<UserListScreen> {
         _errorMessage = '利用者一覧の読み込みに失敗しました\n$e';
         _isLoading = false;
       });
+    }
+  }
+
+  /// 全データをリフレッシュ（利用者データ + プルダウンキャッシュクリア）
+  Future<void> _refreshAll() async {
+    // プルダウンキャッシュをクリア
+    await _masterService.clearDropdownCache();
+    // 利用者データを再読み込み
+    await _loadUsers();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('データを更新しました'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -233,8 +252,8 @@ class _UserListScreenState extends State<UserListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadUsers,
-            tooltip: '再読み込み',
+            onPressed: _refreshAll,
+            tooltip: 'データを更新',
           ),
         ],
       ),
