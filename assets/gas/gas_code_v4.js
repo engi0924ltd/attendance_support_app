@@ -5480,10 +5480,10 @@ function handleExecuteBilling(data) {
     const supportLastRow = supportSheet.getLastRow();
     const supportNumRows = Math.max(0, supportLastRow - 1);
     // 利用者名→日付→記録データのマップを作成
-    let supportMap = {}; // { userName: { day: { attendance, checkinTime, checkoutTime, workLocation } } }
+    let supportMap = {}; // { userName: { day: { attendance, checkinTime, checkoutTime, workLocation, mealService, visitSupport, transport } } }
 
     if (supportNumRows > 0) {
-      // A列（日時）、B列（利用者名）、D列（出欠）、P列（開始時刻）、Q列（終了時刻）、AA列（勤務地）を取得
+      // A列（日時）、B列（利用者名）、D列（出欠）、P列（開始時刻）、Q列（終了時刻）、V列（食事提供）、X列（訪問支援）、Y列（送迎）、AA列（勤務地）を取得
       const supportData = supportSheet.getRange(2, 1, supportNumRows, 27).getValues();
 
       for (let i = 0; i < supportData.length; i++) {
@@ -5513,12 +5513,18 @@ function handleExecuteBilling(data) {
         const checkinTime = supportData[i][SUPPORT_COLS.CHECKIN_TIME - 1] || ''; // P列
         const checkoutTime = supportData[i][SUPPORT_COLS.CHECKOUT_TIME - 1] || ''; // Q列
         const workLocation = supportData[i][SUPPORT_COLS.WORK_LOCATION - 1] || ''; // AA列
+        const mealService = supportData[i][SUPPORT_COLS.MEAL_SERVICE - 1] || ''; // V列: 食事提供加算
+        const visitSupport = supportData[i][SUPPORT_COLS.VISIT_SUPPORT - 1] || ''; // X列: 訪問支援加算
+        const transport = supportData[i][SUPPORT_COLS.TRANSPORT - 1] || ''; // Y列: 送迎加算
 
         supportMap[userName][recordDay] = {
           attendance: attendance,
           checkinTime: checkinTime,
           checkoutTime: checkoutTime,
-          workLocation: workLocation
+          workLocation: workLocation,
+          mealService: mealService,
+          visitSupport: visitSupport,
+          transport: transport
         };
       }
     }
@@ -5545,9 +5551,9 @@ function handleExecuteBilling(data) {
       // 名簿情報のクリア（B列、14行分を一括）
       billingSheet.getRange(userBaseRow, 2, 14, 1).clearContent();
 
-      // 支援記録情報のクリア（C〜E列、31日分を一括）
+      // 支援記録情報のクリア（C〜I列、31日分を一括）- 加算列も含む
       const dayStartRow = userBaseRow + dayBaseOffset;
-      billingSheet.getRange(dayStartRow, 3, 31, 3).clearContent(); // C,D,E列
+      billingSheet.getRange(dayStartRow, 3, 31, 7).clearContent(); // C,D,E,F,G,H,I列
 
       // S列のクリア（31日分を一括）
       billingSheet.getRange(dayStartRow, 19, 31, 1).clearContent(); // S列
@@ -5578,12 +5584,12 @@ function handleExecuteBilling(data) {
       ];
       billingSheet.getRange(userBaseRow, 2, 14, 1).setValues(nameInfoData);
 
-      // === 支援記録情報の出力（C, D, E, S列）- 一括書き込み ===
+      // === 支援記録情報の出力（C〜I列, S列）- 一括書き込み ===
       const dayStartRow = userBaseRow + dayBaseOffset;
 
       // 31日分のデータ配列を準備
-      const cdeData = []; // C,D,E列用
-      const sData = [];   // S列用
+      const dailyData = []; // C,D,E,F,G,H,I列用（7列）
+      const sData = [];     // S列用
 
       for (let day = 1; day <= 31; day++) {
         const dayData = userSupportData[day];
@@ -5600,17 +5606,29 @@ function handleExecuteBilling(data) {
           // E列: 終了時刻（HHMM形式に変換）
           const checkoutFormatted = formatTimeToHHMM(dayData.checkoutTime);
 
-          cdeData.push([attendanceOutput, checkinFormatted, checkoutFormatted]);
+          // F列: 食事提供加算（「○」をそのまま出力）
+          const mealServiceOutput = dayData.mealService === '○' ? '○' : '';
+
+          // G列: 送迎加算（「○」をそのまま出力）
+          const transportOutput = dayData.transport === '○' ? '○' : '';
+
+          // H列: 空欄（予備）
+          const reserveH = '';
+
+          // I列: 訪問支援加算（「○」をそのまま出力）
+          const visitSupportOutput = dayData.visitSupport === '○' ? '○' : '';
+
+          dailyData.push([attendanceOutput, checkinFormatted, checkoutFormatted, mealServiceOutput, transportOutput, reserveH, visitSupportOutput]);
           sData.push([dayData.workLocation || '']);
         } else {
-          cdeData.push(['', '', '']);
+          dailyData.push(['', '', '', '', '', '', '']);
           sData.push(['']);
         }
       }
 
       // 一括書き込み
-      billingSheet.getRange(dayStartRow, 3, 31, 3).setValues(cdeData); // C,D,E列
-      billingSheet.getRange(dayStartRow, 19, 31, 1).setValues(sData);  // S列
+      billingSheet.getRange(dayStartRow, 3, 31, 7).setValues(dailyData); // C,D,E,F,G,H,I列
+      billingSheet.getRange(dayStartRow, 19, 31, 1).setValues(sData);    // S列
     });
 
     return createSuccessResponse({
