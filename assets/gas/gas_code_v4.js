@@ -446,6 +446,12 @@ function doPost(e) {
       return handleDeleteMunicipality(data);
     } else if (action === 'billing/execute') {
       return handleExecuteBilling(data);
+    } else if (action === 'tasks/get') {
+      return handleGetTasks();
+    } else if (action === 'tasks/add') {
+      return handleAddTask(data);
+    } else if (action === 'tasks/delete') {
+      return handleDeleteTask(data);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -5176,6 +5182,123 @@ function handleDeleteMunicipality(data) {
     return createSuccessResponse({ message: '市町村を削除しました' });
   } catch (error) {
     return createErrorResponse('市町村削除エラー: ' + error.message);
+  }
+}
+
+// === 担当業務管理 ===
+
+/**
+ * 担当業務一覧を取得
+ * マスタ設定シートのL列8〜29行目から取得
+ */
+function handleGetTasks() {
+  try {
+    const sheet = getSheet(SHEET_NAMES.MASTER);
+    const startRow = MASTER_CONFIG.DROPDOWN_START_ROW; // 8行目
+    const endRow = MASTER_CONFIG.DROPDOWN_END_ROW;     // 29行目
+    const numRows = endRow - startRow + 1;             // 22行
+
+    // L列（担当業務）を一括取得
+    const data = sheet.getRange(startRow, MASTER_CONFIG.DROPDOWN_COLS.MORNING_TASK, numRows, 1).getValues();
+
+    const tasks = [];
+    for (let i = 0; i < data.length; i++) {
+      const task = data[i][0];
+      if (task) {
+        tasks.push(String(task));
+      }
+    }
+
+    return createSuccessResponse({ tasks: tasks });
+  } catch (error) {
+    return createErrorResponse('担当業務一覧取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 担当業務を追加
+ * マスタ設定シートのL列の次の空行に追加
+ */
+function handleAddTask(data) {
+  try {
+    const taskName = data.name;
+
+    if (!taskName || !taskName.trim()) {
+      return createErrorResponse('担当業務名は必須です');
+    }
+
+    const sheet = getSheet(SHEET_NAMES.MASTER);
+    const startRow = MASTER_CONFIG.DROPDOWN_START_ROW; // 8行目
+    const endRow = MASTER_CONFIG.DROPDOWN_END_ROW;     // 29行目
+    const numRows = endRow - startRow + 1;             // 22行
+    const col = MASTER_CONFIG.DROPDOWN_COLS.MORNING_TASK; // L列
+
+    // 現在のデータを取得して重複チェック＆次の空行を探す
+    const existing = sheet.getRange(startRow, col, numRows, 1).getValues();
+    let nextRow = -1;
+
+    for (let i = 0; i < existing.length; i++) {
+      const current = existing[i][0];
+      // 重複チェック
+      if (current && String(current).trim() === taskName.trim()) {
+        return createErrorResponse('同じ担当業務が既に存在します');
+      }
+      // 最初の空行を記録
+      if (!current && nextRow === -1) {
+        nextRow = startRow + i;
+      }
+    }
+
+    if (nextRow === -1) {
+      return createErrorResponse('登録可能な担当業務数の上限（22件）に達しました');
+    }
+
+    // データを書き込み
+    sheet.getRange(nextRow, col).setValue(taskName.trim());
+
+    return createSuccessResponse({ message: '担当業務を追加しました' });
+  } catch (error) {
+    return createErrorResponse('担当業務追加エラー: ' + error.message);
+  }
+}
+
+/**
+ * 担当業務を削除
+ * 指定されたインデックスの担当業務を削除し、後続のデータを詰める
+ */
+function handleDeleteTask(data) {
+  try {
+    const index = data.index;
+
+    if (index === undefined || index === null || index < 0) {
+      return createErrorResponse('削除対象のインデックスが無効です');
+    }
+
+    const sheet = getSheet(SHEET_NAMES.MASTER);
+    const startRow = MASTER_CONFIG.DROPDOWN_START_ROW; // 8行目
+    const endRow = MASTER_CONFIG.DROPDOWN_END_ROW;     // 29行目
+    const numRows = endRow - startRow + 1;             // 22行
+    const col = MASTER_CONFIG.DROPDOWN_COLS.MORNING_TASK; // L列
+    const targetRow = startRow + index;
+
+    if (index >= numRows) {
+      return createErrorResponse('削除対象のインデックスが範囲外です');
+    }
+
+    // 削除対象行以降のデータを取得
+    const remainingRows = numRows - index - 1;
+    if (remainingRows > 0) {
+      const remaining = sheet.getRange(targetRow + 1, col, remainingRows, 1).getValues();
+      // 1行上にシフト
+      sheet.getRange(targetRow, col, remainingRows, 1).setValues(remaining);
+    }
+
+    // 最後の行をクリア
+    sheet.getRange(endRow, col).clearContent();
+
+    return createSuccessResponse({ message: '担当業務を削除しました' });
+  } catch (error) {
+    return createErrorResponse('担当業務削除エラー: ' + error.message);
   }
 }
 

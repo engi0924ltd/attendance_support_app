@@ -1,6 +1,6 @@
 # 出勤支援アプリ 実装状況一覧
 
-**最終更新**: 2026年1月2日
+**最終更新**: 2026年1月3日
 
 ---
 
@@ -71,6 +71,9 @@
 | `municipality/get` | handleGetMunicipalities | 市町村一覧取得 |
 | `municipality/add` | handleAddMunicipality | 市町村追加 |
 | `municipality/delete` | handleDeleteMunicipality | 市町村削除 |
+| `tasks/get` | handleGetTasks | 担当業務一覧取得 |
+| `tasks/add` | handleAddTask | 担当業務追加 |
+| `tasks/delete` | handleDeleteTask | 担当業務削除 |
 
 ---
 
@@ -130,6 +133,7 @@
 | ファイル名 | 画面名 | 状態 |
 |-----------|--------|------|
 | menu_selection_screen.dart | メニュー選択画面 | ✅ 実装済み |
+| tasks_settings_screen.dart | 担当業務設定画面 | ✅ 実装済み |
 
 ---
 
@@ -151,6 +155,7 @@
 | master_auth_service.dart | 全権管理者認証サービス | ✅ 実装済み |
 | fiscal_year_service.dart | 年度管理サービス | ✅ 実装済み |
 | billing_service.dart | 請求業務サービス | ✅ 実装済み |
+| tasks_service.dart | 担当業務管理サービス | ✅ 実装済み |
 
 ---
 
@@ -172,6 +177,7 @@
 - [x] Chatwork一斉連絡
 - [x] 分析機能（施設統計、個人統計、週間スケジュール）
 - [x] 評価アラート表示
+- [x] 担当業務設定（マスタ設定L列の選択肢管理）
 
 ### 施設管理者機能
 - [x] 施設管理者ダッシュボード
@@ -187,6 +193,7 @@
 - [x] 請求業務設定画面
 - [x] 請求データ出力（名簿情報を請求シートに78行間隔で出力）
 - [x] 市町村情報管理
+- [x] 担当業務設定（マスタ設定L列の選択肢管理）
 
 ### 全権管理者機能
 - [x] 全権管理者ログイン

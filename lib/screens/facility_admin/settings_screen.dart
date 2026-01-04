@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/fiscal_year_service.dart';
 import 'fiscal_year_setup_wizard_screen.dart';
+import '../common/tasks_settings_screen.dart';
 
 /// 施設管理者設定画面
 class FacilityAdminSettingsScreen extends StatefulWidget {
@@ -195,6 +196,17 @@ class _FacilityAdminSettingsScreenState
     }
   }
 
+  void _navigateToTasksSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TasksSettingsScreen(
+          facilityGasUrl: widget.gasUrl,
+        ),
+      ),
+    );
+  }
+
   Future<void> _switchToYear(Map<String, dynamic> yearInfo) async {
     final year = yearInfo['year'] as int;
     final spreadsheetId = yearInfo['spreadsheetId'] as String;
@@ -304,6 +316,39 @@ class _FacilityAdminSettingsScreenState
                           ),
                         ),
                       ),
+
+                    // マスタ設定セクション
+                    const Text(
+                      'マスタ設定',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 担当業務設定
+                    Card(
+                      child: ListTile(
+                        leading: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.work_outline,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                        title: const Text('作業登録・編集'),
+                        subtitle: const Text('出勤時に選択する作業を管理'),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () => _navigateToTasksSettings(context),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
 
                     // 年度管理セクション
                     const Text(

@@ -63,7 +63,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
   late TextEditingController _disabilityGradeController;
   late TextEditingController _disabilityTypeController;
   late TextEditingController _handbookValidController;
-  late TextEditingController _municipalNumberController;
   late TextEditingController _certificateNumberController;
   late TextEditingController _decisionPeriod1Controller;
   late TextEditingController _decisionPeriod2Controller;
@@ -158,7 +157,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _disabilityGradeController = TextEditingController(text: widget.user?.disabilityGrade ?? '');
     _disabilityTypeController = TextEditingController(text: widget.user?.disabilityType ?? '');
     _handbookValidController = TextEditingController(text: widget.user?.handbookValid ?? '');
-    _municipalNumberController = TextEditingController(text: widget.user?.municipalNumber ?? '');
     _certificateNumberController = TextEditingController(text: widget.user?.certificateNumber ?? '');
     _decisionPeriod1Controller = TextEditingController(text: widget.user?.decisionPeriod1 ?? '');
     _decisionPeriod2Controller = TextEditingController(text: widget.user?.decisionPeriod2 ?? '');
@@ -264,7 +262,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _disabilityGradeController.dispose();
     _disabilityTypeController.dispose();
     _handbookValidController.dispose();
-    _municipalNumberController.dispose();
     _certificateNumberController.dispose();
     _decisionPeriod1Controller.dispose();
     _decisionPeriod2Controller.dispose();
@@ -349,7 +346,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           disabilityGrade: _disabilityGradeController.text.trim(),
           disabilityType: _disabilityTypeController.text.trim(),
           handbookValid: _handbookValidController.text.trim(),
-          municipalNumber: _municipalNumberController.text.trim(),
           certificateNumber: _certificateNumberController.text.trim(),
           decisionPeriod1: _decisionPeriod1Controller.text.trim(),
           decisionPeriod2: _decisionPeriod2Controller.text.trim(),
@@ -431,7 +427,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           disabilityGrade: _disabilityGradeController.text.trim(),
           disabilityType: _disabilityTypeController.text.trim(),
           handbookValid: _handbookValidController.text.trim(),
-          municipalNumber: _municipalNumberController.text.trim(),
           certificateNumber: _certificateNumberController.text.trim(),
           decisionPeriod1: _decisionPeriod1Controller.text.trim(),
           decisionPeriod2: _decisionPeriod2Controller.text.trim(),
@@ -643,6 +638,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.assignment_turned_in),
                     hintText: '読み込み中...',
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
                   ),
                   enabled: false,
                 )
@@ -654,6 +650,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
                     labelText: '契約状態 ※',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.assignment_turned_in),
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
                   ),
                   items: [
                     const DropdownMenuItem<String>(
@@ -1097,18 +1094,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
             ),
             keyboardType: TextInputType.number,
             maxLength: 8,
-            enabled: !_isLoading,
-          ),
-          const SizedBox(height: 16),
-
-          // 市区町村番号
-          TextFormField(
-            controller: _municipalNumberController,
-            decoration: const InputDecoration(
-              labelText: '市区町村番号',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.pin),
-            ),
             enabled: !_isLoading,
           ),
           const SizedBox(height: 16),
@@ -1638,6 +1623,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           border: const OutlineInputBorder(),
           prefixIcon: Icon(icon),
           hintText: '読み込み中...',
+          floatingLabelBehavior: FloatingLabelBehavior.always,
         ),
         enabled: false,
       );
@@ -1652,6 +1638,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           border: const OutlineInputBorder(),
           prefixIcon: Icon(icon),
           hintText: hintText,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
         ),
         enabled: !_isLoading,
       );
@@ -1666,6 +1653,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
         labelText: label,
         border: const OutlineInputBorder(),
         prefixIcon: Icon(icon),
+        floatingLabelBehavior: FloatingLabelBehavior.always,
       ),
       items: [
         // 空の選択肢

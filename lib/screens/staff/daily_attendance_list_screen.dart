@@ -7,6 +7,7 @@ import '../../services/master_service.dart';
 import '../../config/constants.dart';
 import '../../widgets/health_line_chart.dart';
 import '../common/menu_selection_screen.dart';
+import '../common/tasks_settings_screen.dart';
 import 'user_list_screen.dart';
 import 'user_detail_screen.dart';
 import 'past_records_screen.dart';
@@ -1007,6 +1008,31 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
                   builder: (context) => const ChatworkBroadcastScreen(
                     mode: ChatworkSendMode.selective,
                   ),
+                ),
+              );
+            },
+          ),
+          // 設定セクション
+          const Padding(
+            padding: EdgeInsets.only(left: 16, top: 8, bottom: 4),
+            child: Text(
+              '設定',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.work_outline, color: Colors.orange),
+            title: const Text('作業登録・編集'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const TasksSettingsScreen(),
                 ),
               );
             },

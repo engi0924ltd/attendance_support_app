@@ -42,6 +42,9 @@ class AttendanceSupportApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         useMaterial3: true,
+        inputDecorationTheme: const InputDecorationTheme(
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+        ),
       ),
       // 最初に表示する画面
       home: const MenuSelectionScreen(),
