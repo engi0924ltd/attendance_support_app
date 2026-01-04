@@ -39,8 +39,8 @@ class User {
   final String? disabilityNumber;    // V列: 障害者手帳番号
   final String? disabilityGrade;     // W列: 障害等級
   final String? disabilityType;      // X列: 障害種別
-  final String? handbookValid;       // Y列: 手帳有効期間
-  final String? municipalNumber;     // Z列: 市区町村番号
+  final String? mealSubsidy;         // Y列: 食事提供加算（○または空白）
+  final String? transportSubsidy;    // Z列: 送迎加算（○または空白）
   final String? certificateNumber;   // AA列: 受給者証番号等
   final String? decisionPeriod1;     // AB列: 支給決定期間
   final String? decisionPeriod2;     // AC列: 支給決定期間
@@ -128,8 +128,8 @@ class User {
     this.disabilityNumber,
     this.disabilityGrade,
     this.disabilityType,
-    this.handbookValid,
-    this.municipalNumber,
+    this.mealSubsidy,
+    this.transportSubsidy,
     this.certificateNumber,
     this.decisionPeriod1,
     this.decisionPeriod2,
@@ -211,8 +211,8 @@ class User {
       disabilityNumber: json['disabilityNumber']?.toString(),
       disabilityGrade: json['disabilityGrade']?.toString(),
       disabilityType: json['disabilityType']?.toString(),
-      handbookValid: json['handbookValid']?.toString(),
-      municipalNumber: json['municipalNumber']?.toString(),
+      mealSubsidy: json['mealSubsidy']?.toString(),
+      transportSubsidy: json['transportSubsidy']?.toString(),
       certificateNumber: json['certificateNumber']?.toString(),
       decisionPeriod1: json['decisionPeriod1']?.toString(),
       decisionPeriod2: json['decisionPeriod2']?.toString(),
@@ -299,8 +299,8 @@ class User {
       'disabilityNumber': disabilityNumber,
       'disabilityGrade': disabilityGrade,
       'disabilityType': disabilityType,
-      'handbookValid': handbookValid,
-      'municipalNumber': municipalNumber,
+      'mealSubsidy': mealSubsidy,
+      'transportSubsidy': transportSubsidy,
       'certificateNumber': certificateNumber,
       'decisionPeriod1': decisionPeriod1,
       'decisionPeriod2': decisionPeriod2,
@@ -394,8 +394,8 @@ class User {
     String? disabilityNumber,
     String? disabilityGrade,
     String? disabilityType,
-    String? handbookValid,
-    String? municipalNumber,
+    String? mealSubsidy,
+    String? transportSubsidy,
     String? certificateNumber,
     String? decisionPeriod1,
     String? decisionPeriod2,
@@ -461,8 +461,8 @@ class User {
       disabilityNumber: disabilityNumber ?? this.disabilityNumber,
       disabilityGrade: disabilityGrade ?? this.disabilityGrade,
       disabilityType: disabilityType ?? this.disabilityType,
-      handbookValid: handbookValid ?? this.handbookValid,
-      municipalNumber: municipalNumber ?? this.municipalNumber,
+      mealSubsidy: mealSubsidy ?? this.mealSubsidy,
+      transportSubsidy: transportSubsidy ?? this.transportSubsidy,
       certificateNumber: certificateNumber ?? this.certificateNumber,
       decisionPeriod1: decisionPeriod1 ?? this.decisionPeriod1,
       decisionPeriod2: decisionPeriod2 ?? this.decisionPeriod2,

@@ -1,5 +1,13 @@
 /// 勤怠データ（出勤・退勤などの記録）
 class Attendance {
+  /// GASからの値をboolに変換（"○" → true, それ以外 → false）
+  static bool _parseBool(dynamic value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is String) return value == '○';
+    return false;
+  }
+
   final int? rowId;                 // スプレッドシートの行番号
   final String date;                // 日時（D列）
   final String userName;            // 利用者名（E列）
@@ -74,10 +82,10 @@ class Attendance {
       shortBreak: json['shortBreak']?.toString(),
       otherBreak: json['otherBreak']?.toString(),
       actualWorkMinutes: json['actualWorkMinutes'],
-      mealService: json['mealService'] ?? false,
-      absenceSupport: json['absenceSupport'] ?? false,
-      visitSupport: json['visitSupport'] ?? false,
-      transportService: json['transportService'] ?? false,
+      mealService: _parseBool(json['mealService']),
+      absenceSupport: _parseBool(json['absenceSupport']),
+      visitSupport: _parseBool(json['visitSupport']),
+      transportService: _parseBool(json['transportService']),
       userStatus: json['userStatus']?.toString(),
     );
   }

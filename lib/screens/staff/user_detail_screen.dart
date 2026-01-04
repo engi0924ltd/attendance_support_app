@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../models/attendance.dart';
 import '../../models/support_record.dart';
 import '../../models/dropdown_options.dart';
+import '../../models/user.dart';
 import '../../services/attendance_service.dart';
 import '../../services/support_service.dart';
 import '../../services/master_service.dart';
@@ -41,6 +42,12 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   String? _errorMessage;
   List<Attendance> _healthHistory = []; // 過去7回分の健康データ
   List<EvaluationAlert> _evaluationAlerts = []; // この利用者の評価アラート
+  User? _user; // 利用者の名簿情報（加算設定を取得するため）
+
+  // 加算チェックボックスの状態
+  bool _isMealSubsidy = false;      // 食事提供加算
+  bool _isTransportSubsidy = false; // 送迎加算
+  bool _isVisitSupport = false;     // 訪問支援加算
 
   // 勤怠編集用の状態変数
   String? _editedAttendanceStatus;
@@ -105,13 +112,14 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         DateFormat(AppConstants.dateFormat).parse(widget.date),
       );
 
-      // 勤怠データ、支援記録、プルダウンオプション、健康履歴、評価アラートを並行取得
+      // 勤怠データ、支援記録、プルダウンオプション、健康履歴、評価アラート、利用者一覧を並行取得
       final results = await Future.wait([
         _attendanceService.getUserAttendance(widget.userName, dateStr),
         _supportService.getSupportRecord(dateStr, widget.userName),
         _masterService.getDropdownOptions(),
         _attendanceService.getUserHistory(widget.userName),
         _masterService.getEvaluationAlerts(),
+        _masterService.getActiveUsers(), // 利用者の名簿情報取得
       ]);
 
       // 非同期処理後のmountedチェック
@@ -127,6 +135,12 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         // この利用者の評価アラートのみフィルタリング
         final allAlerts = results[4] as List<EvaluationAlert>;
         _evaluationAlerts = allAlerts.where((a) => a.userName == widget.userName).toList();
+        // 利用者の名簿情報を検索
+        final allUsers = results[5] as List<User>;
+        _user = allUsers.firstWhere(
+          (u) => u.name == widget.userName,
+          orElse: () => User(name: widget.userName, furigana: '', status: ''),
+        );
         _isLoading = false;
 
         // 勤怠データがあれば編集用変数に設定（文字列に変換）
@@ -157,6 +171,20 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           _editedCommunication = _supportRecord!.communication;
           _editedEvaluation = _supportRecord!.evaluation;
           _userFeedbackController.text = _supportRecord!.userFeedback ?? '';
+          // 食事提供加算・送迎加算の初期値設定
+          // 支援記録に明示的に値が保存されている場合はその値を使用
+          // 保存されていない場合は名簿の設定をデフォルトとして使用
+          final hasMealRecord = _supportRecord!.mealService != null && _supportRecord!.mealService!.isNotEmpty;
+          final hasTransportRecord = _supportRecord!.transport != null && _supportRecord!.transport!.isNotEmpty;
+          _isMealSubsidy = hasMealRecord ? (_supportRecord!.mealService == '○') : (_user?.mealSubsidy == '○');
+          _isTransportSubsidy = hasTransportRecord ? (_supportRecord!.transport == '○') : (_user?.transportSubsidy == '○');
+          // 訪問支援加算の初期値設定（名簿に依存しない）
+          _isVisitSupport = _supportRecord!.visitSupport == '○';
+        } else {
+          // 支援記録がない場合：名簿の加算設定をデフォルト値として使用
+          _isMealSubsidy = _user?.mealSubsidy == '○';
+          _isTransportSubsidy = _user?.transportSubsidy == '○';
+          _isVisitSupport = false; // 訪問支援は新規作成時はチェックなし
         }
       });
     } catch (e) {
@@ -170,8 +198,8 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
 
   /// 勤怠データと支援記録を統合保存
   Future<void> _saveAll() async {
-    // 出欠の必須チェック
-    if (_editedAttendanceStatus == null || _editedAttendanceStatus!.trim().isEmpty) {
+    // 出欠の必須チェック（訪問支援加算時はスキップ）
+    if (!_isVisitSupport && (_editedAttendanceStatus == null || _editedAttendanceStatus!.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('出欠を選択してください。'),
@@ -193,8 +221,8 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       return;
     }
 
-    // 欠席でない場合のみ勤務地を必須チェック
-    if (!_isAbsent && (_editedWorkLocation == null || _editedWorkLocation!.trim().isEmpty)) {
+    // 欠席・訪問支援でない場合のみ勤務地を必須チェック
+    if (!_isAbsent && !_isVisitSupport && (_editedWorkLocation == null || _editedWorkLocation!.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('勤務地を選択してください。'),
@@ -204,10 +232,42 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       return;
     }
 
+    // 訪問支援加算の場合、開始時間と終了時間が必須
+    if (_isVisitSupport) {
+      final hasCheckinTime = _editedCheckinTime != null && _editedCheckinTime!.trim().isNotEmpty;
+      final hasCheckoutTime = _editedCheckoutTime != null && _editedCheckoutTime!.trim().isNotEmpty;
+      if (!hasCheckinTime || !hasCheckoutTime) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('訪問支援加算の場合、開始時間と終了時間を入力してください。'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    }
+
     if (_recorderController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('記録者を入力してください。'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // 加算チェックのバリデーション
+    // 「在宅」「欠勤」「事前連絡あり欠勤」「休養中」の場合は加算チェック不可
+    final isSubsidyNotAllowed = _editedAttendanceStatus == '在宅' ||
+        _editedAttendanceStatus == '欠勤' ||
+        _editedAttendanceStatus == '事前連絡あり欠勤' ||
+        _editedAttendanceStatus == '休養中';
+
+    if (isSubsidyNotAllowed && (_isMealSubsidy || _isTransportSubsidy)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('「在宅」「欠勤」「休養中」の場合は加算を選択できません。チェックを外してください。'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -232,6 +292,13 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         otherBreak: _editedOtherBreak,
       );
 
+      // 食事提供加算・送迎加算の保存判定
+      // 「出勤」「施設外」「遅刻」「早退」の場合のみ○を保存
+      final isSubsidyEligible = _editedAttendanceStatus == '出勤' ||
+          _editedAttendanceStatus == '施設外' ||
+          _editedAttendanceStatus == '遅刻' ||
+          _editedAttendanceStatus == '早退';
+
       // 支援記録を保存（勤怠データに依存）
       final newRecord = SupportRecord(
         date: widget.date,
@@ -248,6 +315,10 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         communication: _editedCommunication,
         evaluation: _editedEvaluation,
         userFeedback: _userFeedbackController.text.trim(),
+        // 食事提供加算・送迎加算（対象出欠かつチェックがある場合のみ○）
+        mealService: (isSubsidyEligible && _isMealSubsidy) ? '○' : '',
+        visitSupport: _isVisitSupport ? '○' : '', // 訪問支援加算
+        transport: (isSubsidyEligible && _isTransportSubsidy) ? '○' : '',
       );
 
       await _supportService.upsertSupportRecord(newRecord);
@@ -408,7 +479,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
 
   /// 勤怠データセクション
   Widget _buildAttendanceSection() {
-    // 勤怠データがない場合は最小限のフォームを表示（欠席登録用）
+    // 勤怠データがない場合は最小限のフォームを表示（欠席登録用・訪問支援用）
     if (_attendance == null) {
       return Card(
         child: Padding(
@@ -427,12 +498,17 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: _isVisitSupport ? Colors.orange.shade50 : Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
-                  '利用者の出勤登録がありません。\n出欠状況を選択して登録できます。',
-                  style: TextStyle(color: Colors.blue, fontSize: 13),
+                child: Text(
+                  _isVisitSupport
+                      ? '訪問支援加算が選択されています。\n開始時間と終了時間を入力してください。'
+                      : '利用者の出勤登録がありません。\n出欠状況を選択して登録できます。',
+                  style: TextStyle(
+                    color: _isVisitSupport ? Colors.orange.shade800 : Colors.blue,
+                    fontSize: 13,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -442,21 +518,48 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 _buildInfoRow('利用者名', widget.userName),
               ),
               const SizedBox(height: 16),
-              // 出欠（編集可能）
+              // 出欠（編集可能）- 訪問支援時はグレーアウト
               _buildEditableDropdown(
                 '出欠',
-                _editedAttendanceStatus,
+                _isVisitSupport ? null : _editedAttendanceStatus,
                 _dropdownOptions?.attendanceStatus ?? [],
                 (value) => setState(() {
                   _editedAttendanceStatus = value;
-                  // 欠勤系に変更した場合は勤務地をクリア
+                  // 欠勤系・在宅に変更した場合は勤務地と加算チェックをクリア
                   if (value == '欠勤' || value == '事前連絡あり欠勤' ||
-                      value == '非利用日' || value == '休養中') {
+                      value == '非利用日' || value == '休養中' || value == '在宅') {
                     _editedWorkLocation = null;
+                    _isMealSubsidy = false;
+                    _isTransportSubsidy = false;
                   }
                 }),
                 allowNull: false,
+                disabled: _isVisitSupport, // 訪問支援加算時はグレーアウト
               ),
+              const SizedBox(height: 8),
+              // 加算チェックボックス
+              _buildSubsidyCheckboxes(),
+              // 訪問支援時は開始時間・終了時間の入力欄を表示
+              if (_isVisitSupport) ...[
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                // 開始時間 & 終了時間（横並び）- P列・Q列に保存
+                _buildTwoColumnRow(
+                  _buildEditableDropdown(
+                    '開始時間 *',
+                    _editedCheckinTime,
+                    _dropdownOptions?.checkinTimeList ?? [],
+                    (value) => setState(() => _editedCheckinTime = value),
+                  ),
+                  _buildEditableDropdown(
+                    '終了時間 *',
+                    _editedCheckoutTime,
+                    _dropdownOptions?.checkoutTimeList ?? [],
+                    (value) => setState(() => _editedCheckoutTime = value),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -489,19 +592,25 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
               _buildInfoRow('出欠（予定）', _attendance!.scheduledUse ?? '-'),
               _buildEditableDropdown(
                 '出欠',
-                _editedAttendanceStatus,
+                _isVisitSupport ? null : _editedAttendanceStatus, // 訪問支援時はクリア表示
                 _dropdownOptions?.attendanceStatus ?? [],
                 (value) => setState(() {
                   _editedAttendanceStatus = value;
-                  // 欠勤系に変更した場合は勤務地をクリア
+                  // 欠勤系・在宅に変更した場合は勤務地と加算チェックをクリア
                   if (value == '欠勤' || value == '事前連絡あり欠勤' ||
-                      value == '非利用日' || value == '休養中') {
+                      value == '非利用日' || value == '休養中' || value == '在宅') {
                     _editedWorkLocation = null;
+                    _isMealSubsidy = false;
+                    _isTransportSubsidy = false;
                   }
                 }),
                 allowNull: false,
+                disabled: _isVisitSupport, // 訪問支援加算時はグレーアウト
               ),
             ),
+            const SizedBox(height: 8),
+            // 加算チェックボックス
+            _buildSubsidyCheckboxes(),
             const SizedBox(height: 8),
 
             // 担当業務AM & 担当業務PM（横並び）
@@ -583,9 +692,11 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     String label,
     String? currentValue,
     List<String> options,
-    Function(String?) onChanged, {
+    Function(String?)? onChanged, {
     bool allowNull = true, // デフォルトは"選択なし"を表示
+    bool disabled = false, // グレーアウト用
   }) {
+    final isDisabled = disabled || onChanged == null;
     // 選択肢を文字列に変換し、空白と重複を除外
     final uniqueOptions = options
         .map((e) => e.toString().trim())
@@ -624,6 +735,8 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(4),
                 ),
+                filled: isDisabled,
+                fillColor: isDisabled ? Colors.grey.shade200 : null,
               ),
               items: [
                 // allowNullがtrueの場合のみ"選択なし"を表示
@@ -637,7 +750,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                       child: Text(option),
                     )),
               ],
-              onChanged: onChanged,
+              onChanged: isDisabled ? null : onChanged,
             ),
           ),
         ],
@@ -667,6 +780,87 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 食事提供加算・送迎加算のチェックボックス
+  Widget _buildSubsidyCheckboxes() {
+    // 名簿で加算設定がされているかどうか
+    final hasMealSubsidy = _user?.mealSubsidy == '○';
+    final hasTransportSubsidy = _user?.transportSubsidy == '○';
+
+    return Column(
+      children: [
+        // 食事提供加算
+        CheckboxListTile(
+          title: Text(
+            '食事提供加算',
+            style: TextStyle(
+              color: hasMealSubsidy ? Colors.black : Colors.grey,
+            ),
+          ),
+          subtitle: !hasMealSubsidy
+              ? const Text(
+                  '名簿で加算対象外',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                )
+              : null,
+          value: _isMealSubsidy,
+          onChanged: hasMealSubsidy
+              ? (value) => setState(() => _isMealSubsidy = value ?? false)
+              : null, // 名簿で設定されていない場合はグレーアウト
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+        ),
+        // 送迎加算
+        CheckboxListTile(
+          title: Text(
+            '送迎加算',
+            style: TextStyle(
+              color: hasTransportSubsidy ? Colors.black : Colors.grey,
+            ),
+          ),
+          subtitle: !hasTransportSubsidy
+              ? const Text(
+                  '名簿で加算対象外',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                )
+              : null,
+          value: _isTransportSubsidy,
+          onChanged: hasTransportSubsidy
+              ? (value) => setState(() => _isTransportSubsidy = value ?? false)
+              : null, // 名簿で設定されていない場合はグレーアウト
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+        ),
+        // 訪問支援加算（常に選択可能）
+        CheckboxListTile(
+          title: const Text(
+            '訪問支援加算',
+            style: TextStyle(color: Colors.black),
+          ),
+          subtitle: _isVisitSupport
+              ? const Text(
+                  '※出欠・勤務地は入力不要です',
+                  style: TextStyle(fontSize: 12, color: Colors.blue),
+                )
+              : null,
+          value: _isVisitSupport,
+          onChanged: (value) => setState(() {
+            _isVisitSupport = value ?? false;
+            // 訪問支援加算をチェックした場合、出欠と勤務地をクリア
+            if (_isVisitSupport) {
+              _editedAttendanceStatus = null;
+              _editedWorkLocation = null;
+            }
+          }),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+        ),
+      ],
     );
   }
 
@@ -704,11 +898,11 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 勤務地 & 記録者（横並び）※勤務地は欠席以外で必須
+          // 勤務地 & 記録者（横並び）※勤務地は欠席・訪問支援以外で必須
           _buildTwoColumnRow(
             DropdownButtonFormField<String>(
-              value: _isAbsent
-                  ? null  // 欠席時は選択値をクリア
+              value: (_isAbsent || _isVisitSupport)
+                  ? null  // 欠席・訪問支援時は選択値をクリア
                   : (_editedWorkLocation != null &&
                      _editedWorkLocation!.trim().isNotEmpty &&
                      (_dropdownOptions?.workLocations ?? [])
@@ -718,13 +912,15 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                       ? _editedWorkLocation!.trim()
                       : null),
               decoration: InputDecoration(
-                labelText: _isAbsent ? '勤務地（欠席のため不要）' : '勤務地 *',
+                labelText: _isVisitSupport
+                    ? '勤務地（訪問支援のため不要）'
+                    : (_isAbsent ? '勤務地（欠席のため不要）' : '勤務地 *'),
                 labelStyle: TextStyle(
-                  color: _isAbsent ? Colors.grey : Colors.red.shade700,
+                  color: (_isAbsent || _isVisitSupport) ? Colors.grey : Colors.red.shade700,
                 ),
                 border: const OutlineInputBorder(),
-                filled: _isAbsent,
-                fillColor: _isAbsent ? Colors.grey.shade200 : null,
+                filled: (_isAbsent || _isVisitSupport),
+                fillColor: (_isAbsent || _isVisitSupport) ? Colors.grey.shade200 : null,
               ),
               items: [
                 ...(_dropdownOptions?.workLocations ?? [])
@@ -738,8 +934,8 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                   );
                 }),
               ],
-              onChanged: _isAbsent
-                  ? null  // 欠席時は変更不可
+              onChanged: (_isAbsent || _isVisitSupport)
+                  ? null  // 欠席・訪問支援時は変更不可
                   : (value) => setState(() => _editedWorkLocation = value),
             ),
             TextFormField(

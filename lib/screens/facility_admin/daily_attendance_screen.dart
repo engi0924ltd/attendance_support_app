@@ -281,8 +281,14 @@ class _FacilityAdminDailyAttendanceScreenState
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-            tooltip: '再読み込み',
+            onPressed: () async {
+              // 全キャッシュをクリアしてから再読み込み
+              await _masterService.clearUsersCache();
+              await _masterService.clearDropdownCache();
+              await _masterService.clearAlertsCache();
+              _loadData();
+            },
+            tooltip: '再読み込み（キャッシュクリア）',
           ),
         ],
         bottom: TabBar(

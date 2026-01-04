@@ -139,6 +139,9 @@ class SupportRecord {
       'communication': communication,
       'evaluation': evaluation,
       'userFeedback': userFeedback,
+      'mealService': mealService,  // V列: 食事提供加算
+      'visitSupport': visitSupport, // X列: 訪問支援加算
+      'transport': transport,       // Y列: 送迎加算
     };
   }
 
@@ -156,6 +159,9 @@ class SupportRecord {
     String? communication,
     String? evaluation,
     String? userFeedback,
+    String? mealService,
+    String? visitSupport,
+    String? transport,
   }) {
     return SupportRecord(
       rowId: rowId,
@@ -178,10 +184,10 @@ class SupportRecord {
       shortBreak: shortBreak,
       otherBreak: otherBreak,
       workMinutes: workMinutes,
-      mealService: mealService,
+      mealService: mealService ?? this.mealService,
       absenceSupport: absenceSupport,
-      visitSupport: visitSupport,
-      transport: transport,
+      visitSupport: visitSupport ?? this.visitSupport,
+      transport: transport ?? this.transport,
       userStatus: userStatus ?? this.userStatus,
       workLocation: workLocation ?? this.workLocation,
       recorder: recorder ?? this.recorder,

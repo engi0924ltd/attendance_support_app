@@ -62,7 +62,9 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
   late TextEditingController _disabilityNumberController;
   late TextEditingController _disabilityGradeController;
   late TextEditingController _disabilityTypeController;
-  late TextEditingController _handbookValidController;
+  // 加算項目（ラジオボタン用）
+  String _mealSubsidyValue = '';  // 食事提供加算: '○' or ''
+  String _transportSubsidyValue = '';  // 送迎加算: '○' or ''
   late TextEditingController _certificateNumberController;
   late TextEditingController _decisionPeriod1Controller;
   late TextEditingController _decisionPeriod2Controller;
@@ -156,7 +158,9 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _disabilityNumberController = TextEditingController(text: widget.user?.disabilityNumber ?? '');
     _disabilityGradeController = TextEditingController(text: widget.user?.disabilityGrade ?? '');
     _disabilityTypeController = TextEditingController(text: widget.user?.disabilityType ?? '');
-    _handbookValidController = TextEditingController(text: widget.user?.handbookValid ?? '');
+    // 加算項目の初期化
+    _mealSubsidyValue = widget.user?.mealSubsidy ?? '';
+    _transportSubsidyValue = widget.user?.transportSubsidy ?? '';
     _certificateNumberController = TextEditingController(text: widget.user?.certificateNumber ?? '');
     _decisionPeriod1Controller = TextEditingController(text: widget.user?.decisionPeriod1 ?? '');
     _decisionPeriod2Controller = TextEditingController(text: widget.user?.decisionPeriod2 ?? '');
@@ -261,7 +265,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _disabilityNumberController.dispose();
     _disabilityGradeController.dispose();
     _disabilityTypeController.dispose();
-    _handbookValidController.dispose();
     _certificateNumberController.dispose();
     _decisionPeriod1Controller.dispose();
     _decisionPeriod2Controller.dispose();
@@ -345,7 +348,8 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           disabilityNumber: _disabilityNumberController.text.trim(),
           disabilityGrade: _disabilityGradeController.text.trim(),
           disabilityType: _disabilityTypeController.text.trim(),
-          handbookValid: _handbookValidController.text.trim(),
+          mealSubsidy: _mealSubsidyValue,
+          transportSubsidy: _transportSubsidyValue,
           certificateNumber: _certificateNumberController.text.trim(),
           decisionPeriod1: _decisionPeriod1Controller.text.trim(),
           decisionPeriod2: _decisionPeriod2Controller.text.trim(),
@@ -426,7 +430,8 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           disabilityNumber: _disabilityNumberController.text.trim(),
           disabilityGrade: _disabilityGradeController.text.trim(),
           disabilityType: _disabilityTypeController.text.trim(),
-          handbookValid: _handbookValidController.text.trim(),
+          mealSubsidy: _mealSubsidyValue,
+          transportSubsidy: _transportSubsidyValue,
           certificateNumber: _certificateNumberController.text.trim(),
           decisionPeriod1: _decisionPeriod1Controller.text.trim(),
           decisionPeriod2: _decisionPeriod2Controller.text.trim(),
@@ -678,6 +683,29 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
                     return null;
                   },
                 ),
+          const SizedBox(height: 24),
+
+          // 加算項目セクション
+          const Text(
+            '加算項目',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+
+          // 食事提供加算の有無
+          _buildSubsidyRadioGroup(
+            label: '食事提供加算の有無 ※',
+            value: _mealSubsidyValue,
+            onChanged: (val) => setState(() => _mealSubsidyValue = val),
+          ),
+          const SizedBox(height: 16),
+
+          // 送迎加算の有無
+          _buildSubsidyRadioGroup(
+            label: '送迎加算の有無 ※',
+            value: _transportSubsidyValue,
+            onChanged: (val) => setState(() => _transportSubsidyValue = val),
+          ),
           const SizedBox(height: 24),
 
           // 住所情報セクション
@@ -1079,22 +1107,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
             controller: _disabilityTypeController,
             options: _dropdownOptions?.disabilityType ?? [],
             icon: Icons.category,
-          ),
-          const SizedBox(height: 16),
-
-          // 手帳有効期間
-          TextFormField(
-            controller: _handbookValidController,
-            decoration: const InputDecoration(
-              labelText: '手帳有効期間',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.date_range),
-              hintText: '例: 20301231（8桁の数字）',
-              counterText: '',
-            ),
-            keyboardType: TextInputType.number,
-            maxLength: 8,
-            enabled: !_isLoading,
           ),
           const SizedBox(height: 16),
 
@@ -1676,6 +1688,53 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
                 controller.text = value ?? '';
               });
             },
+    );
+  }
+
+  /// 加算項目用のラジオボタングループを生成
+  Widget _buildSubsidyRadioGroup({
+    required String label,
+    required String value,
+    required void Function(String) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Column(
+            children: [
+              RadioListTile<String>(
+                title: const Text('加算を算定する'),
+                value: '○',
+                groupValue: value,
+                onChanged: _isLoading ? null : (val) => onChanged(val ?? ''),
+                dense: true,
+              ),
+              const Divider(height: 1),
+              RadioListTile<String>(
+                title: const Text('加算を算定しない'),
+                value: '',
+                groupValue: value,
+                onChanged: _isLoading ? null : (val) => onChanged(val ?? ''),
+                dense: true,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

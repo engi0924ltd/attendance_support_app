@@ -235,8 +235,8 @@ const ROSTER_COLS = {
   DISABILITY_NUMBER: 22, // V列: 障害者手帳番号
   DISABILITY_GRADE: 23, // W列: 障害等級
   DISABILITY_TYPE: 24,  // X列: 障害種別
-  HANDBOOK_VALID: 25,   // Y列: 手帳有効期間
-  MUNICIPAL_NUMBER: 26, // Z列: 市区町村番号
+  MEAL_SUBSIDY: 25,     // Y列: 食事提供加算（○または空白）
+  TRANSPORT_SUBSIDY: 26, // Z列: 送迎加算（○または空白）
   CERTIFICATE_NUMBER: 27, // AA列: 受給者証番号等
   DECISION_PERIOD1: 28, // AB列: 支給決定期間
   DECISION_PERIOD2: 29, // AC列: 支給決定期間
@@ -467,6 +467,7 @@ function doPost(e) {
  */
 function handleGetUsers() {
   const sheet = getSheet(SHEET_NAMES.MASTER);
+  const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
   const users = [];
 
   // 【最適化】利用者データを一括取得（8行目から最大500行まで）
@@ -476,6 +477,24 @@ function handleGetUsers() {
 
   // 一括取得（C列、D列、E列）
   const allData = sheet.getRange(startRow, MASTER_CONFIG.USER_COLS.NAME, maxRows, numCols).getValues();
+
+  // 名簿シートから加算情報を一括取得（B列:氏名, Y列:食事提供加算, Z列:送迎加算）
+  const rosterLastRow = rosterSheet.getLastRow();
+  const rosterData = rosterLastRow >= 2
+    ? rosterSheet.getRange(2, 1, rosterLastRow - 1, ROSTER_COLS.TRANSPORT_SUBSIDY).getValues()
+    : [];
+
+  // 名簿データをマップ化（名前 → 加算情報）
+  const rosterMap = {};
+  for (let i = 0; i < rosterData.length; i++) {
+    const rosterName = rosterData[i][ROSTER_COLS.NAME - 1];
+    if (rosterName) {
+      rosterMap[rosterName] = {
+        mealSubsidy: rosterData[i][ROSTER_COLS.MEAL_SUBSIDY - 1] || '',
+        transportSubsidy: rosterData[i][ROSTER_COLS.TRANSPORT_SUBSIDY - 1] || ''
+      };
+    }
+  }
 
   // データを処理
   for (let i = 0; i < allData.length; i++) {
@@ -490,10 +509,14 @@ function handleGetUsers() {
 
     // 契約中の利用者のみ返す
     if (status === '契約中') {
+      // 名簿から加算情報を取得
+      const rosterInfo = rosterMap[name] || {};
       users.push({
         name: name,
         furigana: furigana || '',
-        status: status
+        status: status,
+        mealSubsidy: rosterInfo.mealSubsidy || '',
+        transportSubsidy: rosterInfo.transportSubsidy || ''
       });
     }
   }
@@ -1252,8 +1275,8 @@ function writeToRosterSheet(rosterSheet, rowNumber, data) {
   if (data.disabilityNumber !== undefined) rosterSheet.getRange(rowNumber, cols.DISABILITY_NUMBER).setValue(data.disabilityNumber || '');
   if (data.disabilityGrade !== undefined) rosterSheet.getRange(rowNumber, cols.DISABILITY_GRADE).setValue(data.disabilityGrade || '');
   if (data.disabilityType !== undefined) rosterSheet.getRange(rowNumber, cols.DISABILITY_TYPE).setValue(data.disabilityType || '');
-  if (data.handbookValid !== undefined) rosterSheet.getRange(rowNumber, cols.HANDBOOK_VALID).setValue(data.handbookValid || '');
-  if (data.municipalNumber !== undefined) rosterSheet.getRange(rowNumber, cols.MUNICIPAL_NUMBER).setValue(data.municipalNumber || '');
+  if (data.mealSubsidy !== undefined) rosterSheet.getRange(rowNumber, cols.MEAL_SUBSIDY).setValue(data.mealSubsidy || '');
+  if (data.transportSubsidy !== undefined) rosterSheet.getRange(rowNumber, cols.TRANSPORT_SUBSIDY).setValue(data.transportSubsidy || '');
   if (data.certificateNumber !== undefined) rosterSheet.getRange(rowNumber, cols.CERTIFICATE_NUMBER).setValue(data.certificateNumber || '');
   if (data.decisionPeriod1 !== undefined) rosterSheet.getRange(rowNumber, cols.DECISION_PERIOD1).setValue(data.decisionPeriod1 || '');
   if (data.decisionPeriod2 !== undefined) rosterSheet.getRange(rowNumber, cols.DECISION_PERIOD2).setValue(data.decisionPeriod2 || '');
@@ -1351,8 +1374,8 @@ function writeToRosterSheetBatch(rosterSheet, rowNumber, data) {
   setIfDefined(cols.DISABILITY_NUMBER, data.disabilityNumber);
   setIfDefined(cols.DISABILITY_GRADE, data.disabilityGrade);
   setIfDefined(cols.DISABILITY_TYPE, data.disabilityType);
-  setIfDefined(cols.HANDBOOK_VALID, data.handbookValid);
-  setIfDefined(cols.MUNICIPAL_NUMBER, data.municipalNumber);
+  setIfDefined(cols.MEAL_SUBSIDY, data.mealSubsidy);
+  setIfDefined(cols.TRANSPORT_SUBSIDY, data.transportSubsidy);
   setIfDefined(cols.CERTIFICATE_NUMBER, data.certificateNumber);
   setIfDefined(cols.DECISION_PERIOD1, data.decisionPeriod1);
   setIfDefined(cols.DECISION_PERIOD2, data.decisionPeriod2);
@@ -1515,8 +1538,8 @@ function handleGetUserList() {
           userObj.disabilityNumber = r[rc.DISABILITY_NUMBER - 1] || '';
           userObj.disabilityGrade = r[rc.DISABILITY_GRADE - 1] || '';
           userObj.disabilityType = r[rc.DISABILITY_TYPE - 1] || '';
-          userObj.handbookValid = r[rc.HANDBOOK_VALID - 1] || '';
-          userObj.municipalNumber = r[rc.MUNICIPAL_NUMBER - 1] || '';
+          userObj.mealSubsidy = r[rc.MEAL_SUBSIDY - 1] || '';
+          userObj.transportSubsidy = r[rc.TRANSPORT_SUBSIDY - 1] || '';
           userObj.certificateNumber = r[rc.CERTIFICATE_NUMBER - 1] || '';
           userObj.decisionPeriod1 = r[rc.DECISION_PERIOD1 - 1] || '';
           userObj.decisionPeriod2 = r[rc.DECISION_PERIOD2 - 1] || '';
@@ -3151,6 +3174,11 @@ function handleUpsertSupportRecord(data) {
     }
 
     // A-Y列のデータ（勤怠から）
+    // V列（食事提供）、X列（訪問支援）、Y列（送迎）はFlutterから送信された値があれば上書き
+    const mealServiceValue = (data.mealService !== undefined) ? data.mealService : attendanceData.mealService;
+    const visitSupportValue = (data.visitSupport !== undefined) ? data.visitSupport : attendanceData.visitSupport;
+    const transportValue = (data.transport !== undefined) ? data.transport : attendanceData.transport;
+
     const baseData = [
       attendanceData.date,              // A列: 日時
       attendanceData.userName,          // B列: 利用者名
@@ -3173,10 +3201,10 @@ function handleUpsertSupportRecord(data) {
       attendanceData.shortBreak,        // S列: 15分休憩
       attendanceData.otherBreak,        // T列: 他休憩時間
       attendanceData.workMinutes,       // U列: 実労時間
-      attendanceData.mealService,       // V列: 食事提供
+      mealServiceValue || '',           // V列: 食事提供（Flutterから送信された値優先）
       attendanceData.absenceSupport,    // W列: 欠席対応
-      attendanceData.visitSupport,      // X列: 訪問支援
-      attendanceData.transport          // Y列: 送迎
+      visitSupportValue || '',          // X列: 訪問支援（Flutterから送信された値優先）
+      transportValue || ''              // Y列: 送迎（Flutterから送信された値優先）
     ];
 
     // Z-AL列のデータ（手動入力）
