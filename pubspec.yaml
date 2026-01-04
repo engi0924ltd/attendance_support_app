@@ -30,6 +30,11 @@ dependencies:
   # グラフ描画（健康状態の推移表示）
   fl_chart: ^0.69.0
 
+  # Excel出力（請求データダウンロード）
+  excel: ^4.0.6
+  path_provider: ^2.1.2
+  share_plus: ^10.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -5631,14 +5631,87 @@ function handleExecuteBilling(data) {
       billingSheet.getRange(dayStartRow, 19, 31, 1).setValues(sData);    // S列
     });
 
+    // xlsx出力用にデータを整形
+    const billingData = users.map((name) => {
+      const userSupportData = supportMap[name] || {};
+      const days = [];
+      for (let day = 1; day <= 31; day++) {
+        const dayData = userSupportData[day];
+        if (dayData) {
+          days.push({
+            day: day,
+            attendance: dayData.attendance || '',
+            checkinTime: formatTimeToHHMM(dayData.checkinTime) || '',
+            checkoutTime: formatTimeToHHMM(dayData.checkoutTime) || '',
+            mealService: dayData.mealService === '○' ? '○' : '',
+            transport: dayData.transport === '○' ? '○' : '',
+            visitSupport: dayData.visitSupport === '○' ? '○' : '',
+            workLocation: dayData.workLocation || ''
+          });
+        }
+      }
+      return {
+        name: name,
+        days: days
+      };
+    });
+
+    // === 請求シートをxlsxとしてエクスポート ===
+    let xlsxBase64 = null;
+    let xlsxError = null;
+    try {
+      // 一時スプレッドシートを作成
+      const tempSpreadsheet = SpreadsheetApp.create('請求データ_' + yearMonthFormatted + '_temp');
+      const tempSheetId = tempSpreadsheet.getId();
+
+      // 請求シートを一時スプレッドシートにコピー
+      billingSheet.copyTo(tempSpreadsheet).setName('請求');
+
+      // デフォルトの空シートを削除（英語環境: Sheet1、日本語環境: シート1）
+      const defaultSheetNames = ['Sheet1', 'シート1'];
+      for (const sheetName of defaultSheetNames) {
+        const defaultSheet = tempSpreadsheet.getSheetByName(sheetName);
+        if (defaultSheet) {
+          tempSpreadsheet.deleteSheet(defaultSheet);
+          break;
+        }
+      }
+
+      // xlsxとしてエクスポート
+      const exportUrl = 'https://docs.google.com/spreadsheets/d/' + tempSheetId + '/export?format=xlsx';
+      const response = UrlFetchApp.fetch(exportUrl, {
+        headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+      });
+      const blob = response.getBlob();
+      xlsxBase64 = Utilities.base64Encode(blob.getBytes());
+
+      // 一時スプレッドシートを削除
+      DriveApp.getFileById(tempSheetId).setTrashed(true);
+    } catch (e) {
+      // xlsxエクスポートに失敗した場合、エラー情報を保存
+      xlsxError = e.message;
+    }
+
     return createSuccessResponse({
       message: `${users.length}名の利用者情報を出力しました`,
       sheetName: billingSheetName,
       count: users.length,
       yearMonth: yearMonthFormatted,
-      outputRows: users.map((_, i) => baseRow + (interval * i))
+      outputRows: users.map((_, i) => baseRow + (interval * i)),
+      xlsxBase64: xlsxBase64,
+      xlsxError: xlsxError  // エラー情報（デバッグ用）
     });
   } catch (error) {
     return createErrorResponse('請求データ出力エラー: ' + error.message);
   }
+}
+
+// ============================================================
+// 権限承認用テスト関数
+// GASエディタでこの関数を実行して権限を承認してください
+// ============================================================
+function testUrlFetchPermission() {
+  const url = 'https://www.google.com';
+  const response = UrlFetchApp.fetch(url);
+  Logger.log('Permission OK: ' + response.getResponseCode());
 }

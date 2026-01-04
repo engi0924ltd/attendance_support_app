@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../services/billing_service.dart';
 
 /// 請求業務設定画面
@@ -1155,12 +1158,28 @@ class _BillingSettingsScreenState extends State<BillingSettingsScreen>
       );
 
       if (mounted) {
+        // デバッグログ
+        print('🔍 result keys: ${result.keys.toList()}');
+        print('🔍 xlsxBase64 is null: ${result['xlsxBase64'] == null}');
+        print('🔍 xlsxBase64 length: ${(result['xlsxBase64'] as String?)?.length ?? 0}');
+        print('🔍 xlsxError: ${result['xlsxError']}');
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message'] ?? '出力完了'),
             backgroundColor: Colors.green,
           ),
         );
+
+        // xlsxファイルをダウンロードするか確認
+        final xlsxBase64 = result['xlsxBase64'] as String?;
+        final xlsxError = result['xlsxError'] as String?;
+        if (xlsxBase64 != null && xlsxBase64.isNotEmpty) {
+          print('✅ xlsxBase64 received, showing dialog');
+          _showDownloadDialog(xlsxBase64, yearMonth);
+        } else {
+          print('❌ xlsxBase64 is null or empty, error: $xlsxError');
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1174,6 +1193,93 @@ class _BillingSettingsScreenState extends State<BillingSettingsScreen>
     } finally {
       if (mounted) {
         setState(() => _isExecuting = false);
+      }
+    }
+  }
+
+  /// xlsxダウンロード確認ダイアログを表示
+  void _showDownloadDialog(String xlsxBase64, String yearMonth) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.download, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Excelダウンロード'),
+          ],
+        ),
+        content: const Text('請求データをExcelファイルとしてダウンロードしますか？\n\n※スプレッドシートの書式がそのまま保持されます'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _saveExcelFile(xlsxBase64, yearMonth);
+            },
+            icon: const Icon(Icons.download),
+            label: const Text('ダウンロード'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Base64データからExcelファイルを保存
+  Future<void> _saveExcelFile(String xlsxBase64, String yearMonth) async {
+    try {
+      // Base64をデコード
+      final bytes = base64Decode(xlsxBase64);
+
+      // ファイル名
+      final fileName = '請求データ_$yearMonth.xlsx';
+      String filePath;
+      final isDesktop = Platform.isMacOS || Platform.isWindows;
+
+      if (isDesktop) {
+        // Windows/macOS: ダウンロードフォルダに保存
+        final downloadsDir = await getDownloadsDirectory();
+        if (downloadsDir != null) {
+          filePath = '${downloadsDir.path}/$fileName';
+        } else {
+          final tempDir = await getTemporaryDirectory();
+          filePath = '${tempDir.path}/$fileName';
+        }
+      } else {
+        // iOS/Android: 一時フォルダに保存
+        final tempDir = await getTemporaryDirectory();
+        filePath = '${tempDir.path}/$fileName';
+      }
+
+      // ファイル保存
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ダウンロードフォルダに保存しました: $fileName'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Excel保存エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
