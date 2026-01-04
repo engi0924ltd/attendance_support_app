@@ -192,10 +192,11 @@
 
 | 関数名 | 用途 |
 |---|---|
-| handleExecuteBilling | 請求データ出力メイン処理 |
+| handleExecuteBilling | 請求データ出力メイン処理（xlsx出力含む） |
 | getValueOrEmpty | null/undefined/空文字→空欄、「0」は保持 |
 | getValueAsText | 先頭に「'」付与してテキスト保持（B172, B175で使用） |
 | formatTimeToHHMM | 時刻をHHMM形式に変換（Date/文字列/シリアル値対応） |
+| testUrlFetchPermission | 権限承認用テスト関数（UrlFetchApp権限） |
 
 #### 市町村出力設定
 
@@ -220,6 +221,29 @@
 | 利用者ブロック | B列14行、C〜E列31行、S列31行 | 全ブロッククリア（clearMaxUsers） |
 
 **クリアタイミング**: 出力前に全ブロックをクリア（前回出力分も含めて完全クリア）
+
+#### Excelダウンロード機能
+
+| 設定項目 | 内容 |
+|---|---|
+| エクスポート形式 | xlsx（フォーマット完全保持） |
+| 転送方式 | Base64エンコード |
+| 保存先（macOS/Windows） | ダウンロードフォルダ |
+| ファイル名 | 請求データ_YYYYMM.xlsx |
+| タブ構成 | 「請求」タブのみ |
+
+**GAS処理フロー**:
+1. 一時スプレッドシート作成
+2. 請求シートをコピー
+3. デフォルトシート削除（Sheet1/シート1）
+4. xlsx形式でエクスポート
+5. Base64エンコードしてレスポンスに含める
+6. 一時スプレッドシートをゴミ箱に移動
+
+**必要なGAS権限**（appsscript.json）:
+- `https://www.googleapis.com/auth/spreadsheets`
+- `https://www.googleapis.com/auth/script.external_request`
+- `https://www.googleapis.com/auth/drive`
 
 ---
 
@@ -276,6 +300,7 @@
 - [x] 次年度更新機能（スプレッドシート作成、利用者コピー、GASセットアップウィザード）
 - [x] 退職済み職員のログイン拒否
 - [x] 請求業務機能（設定画面、請求データ出力、市町村管理）
+- [x] 請求シートExcelダウンロード（xlsx形式、フォーマット保持、macOS/Windows対応）
 
 ---
 
