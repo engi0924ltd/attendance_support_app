@@ -263,10 +263,10 @@ const ROSTER_COLS = {
   GH_STAFF: 42,         // AP列: 担当者名
   GH_CONTACT: 43,       // AQ列: 連絡先
 
-  // その他関係機関（AR〜AT列）
-  OTHER_FACILITY: 44,   // AR列: 施設名
-  OTHER_STAFF: 45,      // AS列: 担当者名
-  OTHER_CONTACT: 46,    // AT列: 連絡先
+  // 上限管理（AR〜AT列）
+  SELF_MANAGED: 44,              // AR列: 自社管理フラグ（○ or 空欄）
+  MANAGEMENT_FACILITY_NAME: 45,  // AS列: 上限管理施設名
+  MANAGEMENT_FACILITY_NUMBER: 46, // AT列: 上限管理施設番号
 
   // 工賃振込先情報（AU〜AY列）
   BANK_NAME: 47,        // AU列: 銀行名
@@ -1301,10 +1301,10 @@ function writeToRosterSheet(rosterSheet, rowNumber, data) {
   if (data.ghStaff !== undefined) rosterSheet.getRange(rowNumber, cols.GH_STAFF).setValue(data.ghStaff || '');
   if (data.ghContact !== undefined) rosterSheet.getRange(rowNumber, cols.GH_CONTACT).setValue(data.ghContact || '');
 
-  // その他関係機関
-  if (data.otherFacility !== undefined) rosterSheet.getRange(rowNumber, cols.OTHER_FACILITY).setValue(data.otherFacility || '');
-  if (data.otherStaff !== undefined) rosterSheet.getRange(rowNumber, cols.OTHER_STAFF).setValue(data.otherStaff || '');
-  if (data.otherContact !== undefined) rosterSheet.getRange(rowNumber, cols.OTHER_CONTACT).setValue(data.otherContact || '');
+  // 上限管理
+  if (data.selfManaged !== undefined) rosterSheet.getRange(rowNumber, cols.SELF_MANAGED).setValue(data.selfManaged || '');
+  if (data.managementFacilityName !== undefined) rosterSheet.getRange(rowNumber, cols.MANAGEMENT_FACILITY_NAME).setValue(data.managementFacilityName || '');
+  if (data.managementFacilityNumber !== undefined) rosterSheet.getRange(rowNumber, cols.MANAGEMENT_FACILITY_NUMBER).setValue(data.managementFacilityNumber || '');
 
   // 工賃振込先情報
   if (data.bankName !== undefined) rosterSheet.getRange(rowNumber, cols.BANK_NAME).setValue(data.bankName || '');
@@ -1400,10 +1400,10 @@ function writeToRosterSheetBatch(rosterSheet, rowNumber, data) {
   setIfDefined(cols.GH_STAFF, data.ghStaff);
   setIfDefined(cols.GH_CONTACT, data.ghContact);
 
-  // その他関係機関
-  setIfDefined(cols.OTHER_FACILITY, data.otherFacility);
-  setIfDefined(cols.OTHER_STAFF, data.otherStaff);
-  setIfDefined(cols.OTHER_CONTACT, data.otherContact);
+  // 上限管理
+  setIfDefined(cols.SELF_MANAGED, data.selfManaged);
+  setIfDefined(cols.MANAGEMENT_FACILITY_NAME, data.managementFacilityName);
+  setIfDefined(cols.MANAGEMENT_FACILITY_NUMBER, data.managementFacilityNumber);
 
   // 工賃振込先情報
   setIfDefined(cols.BANK_NAME, data.bankName);
@@ -1553,7 +1553,7 @@ function handleGetUserList() {
           userObj.initialAddition = r[rc.INITIAL_ADDITION - 1] || '';
 
           // 受給者証情報（AK列）
-          userObj.userBurdenLimit = r[rc.USER_BURDEN_LIMIT - 1] || '';
+          userObj.userBurdenLimit = r[rc.USER_BURDEN_LIMIT - 1] ?? '';
 
           // 相談支援事業所
           userObj.consultationFacility = r[rc.CONSULTATION_FACILITY - 1] || '';
@@ -1565,10 +1565,10 @@ function handleGetUserList() {
           userObj.ghStaff = r[rc.GH_STAFF - 1] || '';
           userObj.ghContact = r[rc.GH_CONTACT - 1] || '';
 
-          // その他関係機関
-          userObj.otherFacility = r[rc.OTHER_FACILITY - 1] || '';
-          userObj.otherStaff = r[rc.OTHER_STAFF - 1] || '';
-          userObj.otherContact = r[rc.OTHER_CONTACT - 1] || '';
+          // 上限管理
+          userObj.selfManaged = r[rc.SELF_MANAGED - 1] || '';
+          userObj.managementFacilityName = r[rc.MANAGEMENT_FACILITY_NAME - 1] || '';
+          userObj.managementFacilityNumber = r[rc.MANAGEMENT_FACILITY_NUMBER - 1] || '';
 
           // 工賃振込先情報
           userObj.bankName = r[rc.BANK_NAME - 1] || '';
@@ -5551,6 +5551,10 @@ function handleExecuteBilling(data) {
       // 名簿情報のクリア（B列、14行分を一括）
       billingSheet.getRange(userBaseRow, 2, 14, 1).clearContent();
 
+      // 上限管理情報のクリア（B190〜B194、A206、B206）
+      billingSheet.getRange(userBaseRow + 20, 2, 5, 1).clearContent(); // B190〜B194
+      billingSheet.getRange(userBaseRow + 36, 1, 1, 2).clearContent(); // A206, B206
+
       // 支援記録情報のクリア（C〜I列、31日分を一括）- 加算列も含む
       const dayStartRow = userBaseRow + dayBaseOffset;
       billingSheet.getRange(dayStartRow, 3, 31, 7).clearContent(); // C,D,E,F,G,H,I列
@@ -5583,6 +5587,28 @@ function handleExecuteBilling(data) {
         [rosterData ? (rosterData[ROSTER_COLS.SUPPLY_AMOUNT - 1] || '') : ''] // B183: 支給量
       ];
       billingSheet.getRange(userBaseRow, 2, 14, 1).setValues(nameInfoData);
+
+      // === 上限管理情報の出力 ===
+      if (rosterData) {
+        const selfManaged = rosterData[ROSTER_COLS.SELF_MANAGED - 1] || '';
+        const managementFacilityName = rosterData[ROSTER_COLS.MANAGEMENT_FACILITY_NAME - 1] || '';
+        const managementFacilityNumber = rosterData[ROSTER_COLS.MANAGEMENT_FACILITY_NUMBER - 1] || '';
+
+        if (selfManaged === '○') {
+          // 自社管理の場合
+          billingSheet.getRange(userBaseRow + 24, 2).setValue('○'); // B194
+          billingSheet.getRange(userBaseRow + 36, 1).setValue(managementFacilityName); // A206
+          billingSheet.getRange(userBaseRow + 36, 2).setValue(managementFacilityNumber); // B206
+          billingSheet.getRange(userBaseRow + 20, 2).setValue('自社'); // B190
+          billingSheet.getRange(userBaseRow + 21, 2).setValue('自社'); // B191
+        } else if (managementFacilityName || managementFacilityNumber) {
+          // 他社管理の場合（施設名または施設番号が入力されている場合のみ）
+          billingSheet.getRange(userBaseRow + 20, 2).setValue(managementFacilityName); // B190
+          billingSheet.getRange(userBaseRow + 21, 2).setValue(managementFacilityNumber); // B191
+          billingSheet.getRange(userBaseRow + 22, 2).setValue('調整中'); // B192
+          billingSheet.getRange(userBaseRow + 23, 2).setValue('調整中'); // B193
+        }
+      }
 
       // === 支援記録情報の出力（C〜I列, S列）- 一括書き込み ===
       const dayStartRow = userBaseRow + dayBaseOffset;

@@ -67,10 +67,10 @@ class User {
   final String? ghStaff;     // AP列: 担当者名
   final String? ghContact;   // AQ列: 連絡先
 
-  // === その他関係機関（AR-AT列）===
-  final String? otherFacility; // AR列: 施設名
-  final String? otherStaff;    // AS列: 担当者名
-  final String? otherContact;  // AT列: 連絡先
+  // === 上限管理（AR-AT列）===
+  final String? selfManaged;              // AR列: 自社管理フラグ（○ or 空欄）
+  final String? managementFacilityName;   // AS列: 上限管理施設名
+  final String? managementFacilityNumber; // AT列: 上限管理施設番号
 
   // === 工賃振込先情報（AU-AY列）===
   final String? bankName;      // AU列: 銀行名
@@ -150,10 +150,10 @@ class User {
     this.ghFacility,
     this.ghStaff,
     this.ghContact,
-    // その他関係機関
-    this.otherFacility,
-    this.otherStaff,
-    this.otherContact,
+    // 上限管理
+    this.selfManaged,
+    this.managementFacilityName,
+    this.managementFacilityNumber,
     // 工賃振込先情報
     this.bankName,
     this.bankCode,
@@ -233,10 +233,10 @@ class User {
       ghFacility: json['ghFacility']?.toString(),
       ghStaff: json['ghStaff']?.toString(),
       ghContact: json['ghContact']?.toString(),
-      // その他関係機関
-      otherFacility: json['otherFacility']?.toString(),
-      otherStaff: json['otherStaff']?.toString(),
-      otherContact: json['otherContact']?.toString(),
+      // 上限管理
+      selfManaged: json['selfManaged']?.toString(),
+      managementFacilityName: json['managementFacilityName']?.toString(),
+      managementFacilityNumber: json['managementFacilityNumber']?.toString(),
       // 工賃振込先情報
       bankName: json['bankName']?.toString(),
       bankCode: json['bankCode']?.toString(),
@@ -321,10 +321,10 @@ class User {
       'ghFacility': ghFacility,
       'ghStaff': ghStaff,
       'ghContact': ghContact,
-      // その他関係機関
-      'otherFacility': otherFacility,
-      'otherStaff': otherStaff,
-      'otherContact': otherContact,
+      // 上限管理
+      'selfManaged': selfManaged,
+      'managementFacilityName': managementFacilityName,
+      'managementFacilityNumber': managementFacilityNumber,
       // 工賃振込先情報
       'bankName': bankName,
       'bankCode': bankCode,
@@ -412,9 +412,9 @@ class User {
     String? ghFacility,
     String? ghStaff,
     String? ghContact,
-    String? otherFacility,
-    String? otherStaff,
-    String? otherContact,
+    String? selfManaged,
+    String? managementFacilityName,
+    String? managementFacilityNumber,
     String? bankName,
     String? bankCode,
     String? branchName,
@@ -479,9 +479,9 @@ class User {
       ghFacility: ghFacility ?? this.ghFacility,
       ghStaff: ghStaff ?? this.ghStaff,
       ghContact: ghContact ?? this.ghContact,
-      otherFacility: otherFacility ?? this.otherFacility,
-      otherStaff: otherStaff ?? this.otherStaff,
-      otherContact: otherContact ?? this.otherContact,
+      selfManaged: selfManaged ?? this.selfManaged,
+      managementFacilityName: managementFacilityName ?? this.managementFacilityName,
+      managementFacilityNumber: managementFacilityNumber ?? this.managementFacilityNumber,
       bankName: bankName ?? this.bankName,
       bankCode: bankCode ?? this.bankCode,
       branchName: branchName ?? this.branchName,

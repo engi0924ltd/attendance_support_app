@@ -88,9 +88,11 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
   late TextEditingController _ghFacilityController;
   late TextEditingController _ghStaffController;
   late TextEditingController _ghContactController;
-  late TextEditingController _otherFacilityController;
-  late TextEditingController _otherStaffController;
-  late TextEditingController _otherContactController;
+
+  // === 上限管理 ===
+  String _selfManagedValue = ''; // 自社管理: '○', 他社管理: ''
+  late TextEditingController _managementFacilityNameController;
+  late TextEditingController _managementFacilityNumberController;
 
   // === 退所・就労情報 ===
   late TextEditingController _leaveDateController;
@@ -184,9 +186,11 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _ghFacilityController = TextEditingController(text: widget.user?.ghFacility ?? '');
     _ghStaffController = TextEditingController(text: widget.user?.ghStaff ?? '');
     _ghContactController = TextEditingController(text: widget.user?.ghContact ?? '');
-    _otherFacilityController = TextEditingController(text: widget.user?.otherFacility ?? '');
-    _otherStaffController = TextEditingController(text: widget.user?.otherStaff ?? '');
-    _otherContactController = TextEditingController(text: widget.user?.otherContact ?? '');
+
+    // 上限管理
+    _selfManagedValue = widget.user?.selfManaged ?? '';
+    _managementFacilityNameController = TextEditingController(text: widget.user?.managementFacilityName ?? '');
+    _managementFacilityNumberController = TextEditingController(text: widget.user?.managementFacilityNumber ?? '');
 
     // 退所・就労情報
     _leaveDateController = TextEditingController(text: widget.user?.leaveDate ?? '');
@@ -286,9 +290,9 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _ghFacilityController.dispose();
     _ghStaffController.dispose();
     _ghContactController.dispose();
-    _otherFacilityController.dispose();
-    _otherStaffController.dispose();
-    _otherContactController.dispose();
+    // 上限管理
+    _managementFacilityNameController.dispose();
+    _managementFacilityNumberController.dispose();
     // 退所・就労情報
     _leaveDateController.dispose();
     _leaveReasonController.dispose();
@@ -367,10 +371,10 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           ghFacility: _ghFacilityController.text.trim(),
           ghStaff: _ghStaffController.text.trim(),
           ghContact: _ghContactController.text.trim(),
-          // その他関係機関
-          otherFacility: _otherFacilityController.text.trim(),
-          otherStaff: _otherStaffController.text.trim(),
-          otherContact: _otherContactController.text.trim(),
+          // 上限管理
+          selfManaged: _selfManagedValue,
+          managementFacilityName: _managementFacilityNameController.text.trim(),
+          managementFacilityNumber: _managementFacilityNumberController.text.trim(),
           // 銀行口座情報
           bankName: _bankNameController.text.trim(),
           bankCode: _bankCodeController.text.trim(),
@@ -449,10 +453,10 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           ghFacility: _ghFacilityController.text.trim(),
           ghStaff: _ghStaffController.text.trim(),
           ghContact: _ghContactController.text.trim(),
-          // その他関係機関
-          otherFacility: _otherFacilityController.text.trim(),
-          otherStaff: _otherStaffController.text.trim(),
-          otherContact: _otherContactController.text.trim(),
+          // 上限管理
+          selfManaged: _selfManagedValue,
+          managementFacilityName: _managementFacilityNameController.text.trim(),
+          managementFacilityNumber: _managementFacilityNumberController.text.trim(),
           // 銀行口座情報
           bankName: _bankNameController.text.trim(),
           bankCode: _bankCodeController.text.trim(),
@@ -1219,6 +1223,68 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
             keyboardType: TextInputType.number,
             enabled: !_isLoading,
           ),
+          const SizedBox(height: 24),
+
+          // 上限管理
+          const Text(
+            '上限管理',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+
+          // 自社/他社 ラジオボタン
+          Row(
+            children: [
+              Expanded(
+                child: RadioListTile<String>(
+                  title: const Text('自社で行う'),
+                  value: '○',
+                  groupValue: _selfManagedValue,
+                  onChanged: _isLoading ? null : (value) {
+                    setState(() {
+                      _selfManagedValue = value ?? '';
+                    });
+                  },
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              Expanded(
+                child: RadioListTile<String>(
+                  title: const Text('他社で行う'),
+                  value: '',
+                  groupValue: _selfManagedValue,
+                  onChanged: _isLoading ? null : (value) {
+                    setState(() {
+                      _selfManagedValue = value ?? '';
+                    });
+                  },
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _managementFacilityNameController,
+            decoration: const InputDecoration(
+              labelText: '施設名',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.apartment),
+            ),
+            enabled: !_isLoading,
+          ),
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _managementFacilityNumberController,
+            decoration: const InputDecoration(
+              labelText: '施設番号',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.numbers),
+            ),
+            enabled: !_isLoading,
+          ),
           const SizedBox(height: 80),
         ],
       ),
@@ -1403,46 +1469,6 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
 
           TextFormField(
             controller: _ghContactController,
-            decoration: const InputDecoration(
-              labelText: '連絡先',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.phone),
-            ),
-            enabled: !_isLoading,
-          ),
-          const SizedBox(height: 24),
-
-          // その他関係機関
-          const Text(
-            'その他関係機関',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-
-          TextFormField(
-            controller: _otherFacilityController,
-            decoration: const InputDecoration(
-              labelText: '施設名',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.apartment),
-            ),
-            enabled: !_isLoading,
-          ),
-          const SizedBox(height: 12),
-
-          TextFormField(
-            controller: _otherStaffController,
-            decoration: const InputDecoration(
-              labelText: '担当者名',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person),
-            ),
-            enabled: !_isLoading,
-          ),
-          const SizedBox(height: 12),
-
-          TextFormField(
-            controller: _otherContactController,
             decoration: const InputDecoration(
               labelText: '連絡先',
               border: OutlineInputBorder(),

@@ -114,10 +114,10 @@ class UserService {
     String? ghFacility,
     String? ghStaff,
     String? ghContact,
-    // === その他関係機関 ===
-    String? otherFacility,
-    String? otherStaff,
-    String? otherContact,
+    // === 上限管理 ===
+    String? selfManaged,
+    String? managementFacilityName,
+    String? managementFacilityNumber,
     // === 工賃振込先情報 ===
     String? bankName,
     String? bankCode,
@@ -192,10 +192,10 @@ class UserService {
         'ghFacility': ghFacility ?? '',
         'ghStaff': ghStaff ?? '',
         'ghContact': ghContact ?? '',
-        // その他関係機関
-        'otherFacility': otherFacility ?? '',
-        'otherStaff': otherStaff ?? '',
-        'otherContact': otherContact ?? '',
+        // 上限管理
+        'selfManaged': selfManaged ?? '',
+        'managementFacilityName': managementFacilityName ?? '',
+        'managementFacilityNumber': managementFacilityNumber ?? '',
         // 工賃振込先情報
         'bankName': bankName ?? '',
         'bankCode': bankCode ?? '',
@@ -284,10 +284,10 @@ class UserService {
     String? ghFacility,
     String? ghStaff,
     String? ghContact,
-    // === その他関係機関 ===
-    String? otherFacility,
-    String? otherStaff,
-    String? otherContact,
+    // === 上限管理 ===
+    String? selfManaged,
+    String? managementFacilityName,
+    String? managementFacilityNumber,
     // === 工賃振込先情報 ===
     String? bankName,
     String? bankCode,
@@ -363,10 +363,10 @@ class UserService {
         'ghFacility': ghFacility ?? '',
         'ghStaff': ghStaff ?? '',
         'ghContact': ghContact ?? '',
-        // その他関係機関
-        'otherFacility': otherFacility ?? '',
-        'otherStaff': otherStaff ?? '',
-        'otherContact': otherContact ?? '',
+        // 上限管理
+        'selfManaged': selfManaged ?? '',
+        'managementFacilityName': managementFacilityName ?? '',
+        'managementFacilityNumber': managementFacilityNumber ?? '',
         // 工賃振込先情報
         'bankName': bankName ?? '',
         'bankCode': bankCode ?? '',
