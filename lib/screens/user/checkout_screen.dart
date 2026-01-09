@@ -6,8 +6,9 @@ import '../../services/master_service.dart';
 import '../../services/master_auth_service.dart';
 import '../../config/constants.dart';
 import '../../utils/time_utils.dart';
+import '../../theme/app_theme_v2.dart';
 
-/// 退勤入力画面（利用者用）
+/// 退勤入力画面（利用者用・V2デザイン）
 class CheckoutScreen extends StatefulWidget {
   final String userName;
 
@@ -142,14 +143,31 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('退勤登録完了'),
-        content: const Text('退勤を記録しました。\nお疲れ様でした！'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.check_circle, color: AppThemeV2.infoColor, size: 28),
+            const SizedBox(width: 8),
+            const Text('退勤登録完了'),
+          ],
+        ),
+        content: Image.asset(
+          'assets/images/tapir_checkout_success.png',
+          height: 300,
+          fit: BoxFit.contain,
+        ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.popUntil(context, (route) => route.isFirst);
             },
-            child: const Text('閉じる'),
+            child: Text(
+              '閉じる',
+              style: TextStyle(
+                color: AppThemeV2.infoColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -160,12 +178,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('エラー'),
-        content: Text(message),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: AppThemeV2.errorColor, size: 28),
+            const SizedBox(width: 8),
+            const Text('エラー'),
+          ],
+        ),
+        content: Text(message, style: AppThemeV2.bodyLarge),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('閉じる'),
+            child: Text(
+              '閉じる',
+              style: TextStyle(
+                color: AppThemeV2.infoColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -174,23 +205,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('退勤登録 - ${widget.userName}'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+    return CleanScaffold(
+      appBar: CleanAppBar(
+        title: '退勤登録 - ${widget.userName}',
+        backgroundColor: AppThemeV2.infoColor,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: AppThemeV2.infoColor,
+              ),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildDateTimeDisplay(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   _buildFormFields(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
                   _buildSubmitButton(),
                 ],
               ),
@@ -204,22 +238,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final dateStr = DateFormat(AppConstants.dateDisplayFormat).format(now);
     final timeStr = DateFormat(AppConstants.timeFormat).format(now);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Text(
-              dateStr,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    return CleanCard(
+      child: Column(
+        children: [
+          Text(
+            dateStr,
+            style: AppThemeV2.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            timeStr,
+            style: AppThemeV2.headlineLarge.copyWith(
+              color: AppThemeV2.infoColor,
             ),
-            const SizedBox(height: 8),
-            Text(
-              timeStr,
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -227,57 +260,78 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   /// 入力フォーム
   Widget _buildFormFields() {
     if (_dropdownOptions == null) {
-      return const Text('選択肢を読み込めませんでした');
+      return CleanCard(
+        child: Text(
+          '選択肢を読み込めませんでした',
+          style: AppThemeV2.bodyLarge.copyWith(color: AppThemeV2.errorColor),
+        ),
+      );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildDropdown(
-          label: '疲労感 *',
-          value: _fatigue,
-          items: _dropdownOptions!.fatigue,
-          onChanged: (value) => setState(() => _fatigue = value),
-        ),
-        const SizedBox(height: 16),
-        _buildDropdown(
-          label: '心理的負荷 *',
-          value: _stress,
-          items: _dropdownOptions!.stress,
-          onChanged: (value) => setState(() => _stress = value),
-        ),
-        const SizedBox(height: 16),
-        _buildDropdown(
-          label: '昼休憩（任意）',
-          value: _lunchBreak,
-          items: ['', ..._dropdownOptions!.lunchBreak],  // 空白を先頭に追加
-          onChanged: (value) => setState(() => _lunchBreak = value == '' ? null : value),
-        ),
-        const SizedBox(height: 16),
-        _buildDropdown(
-          label: '15分休憩（任意）',
-          value: _shortBreak,
-          items: ['', ..._dropdownOptions!.shortBreak],  // 空白を先頭に追加
-          onChanged: (value) => setState(() => _shortBreak = value == '' ? null : value),
-        ),
-        const SizedBox(height: 16),
-        _buildDropdown(
-          label: 'その他休憩（任意）',
-          value: _otherBreak,
-          items: ['', ..._dropdownOptions!.otherBreak],  // 空白を先頭に追加
-          onChanged: (value) => setState(() => _otherBreak = value == '' ? null : value),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _commentController,
-          decoration: const InputDecoration(
-            labelText: 'コメント（任意）',
-            border: OutlineInputBorder(),
-            hintText: '何かあればお書きください',
+    return CleanCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SectionHeader(
+            title: '退勤情報を入力',
+            icon: Icons.edit_note,
+            iconColor: AppThemeV2.infoColor,
           ),
-          maxLines: 3,
-        ),
-      ],
+          const SizedBox(height: 8),
+          _buildDropdown(
+            label: '疲労感 *',
+            value: _fatigue,
+            items: _dropdownOptions!.fatigue,
+            onChanged: (value) => setState(() => _fatigue = value),
+            isRequired: true,
+          ),
+          const SizedBox(height: 16),
+          _buildDropdown(
+            label: '心理的負荷 *',
+            value: _stress,
+            items: _dropdownOptions!.stress,
+            onChanged: (value) => setState(() => _stress = value),
+            isRequired: true,
+          ),
+          const SizedBox(height: 16),
+          _buildDropdown(
+            label: '昼休憩（任意）',
+            value: _lunchBreak,
+            items: ['', ..._dropdownOptions!.lunchBreak],  // 空白を先頭に追加
+            onChanged: (value) => setState(() => _lunchBreak = value == '' ? null : value),
+          ),
+          const SizedBox(height: 16),
+          _buildDropdown(
+            label: '15分休憩（任意）',
+            value: _shortBreak,
+            items: ['', ..._dropdownOptions!.shortBreak],  // 空白を先頭に追加
+            onChanged: (value) => setState(() => _shortBreak = value == '' ? null : value),
+          ),
+          const SizedBox(height: 16),
+          _buildDropdown(
+            label: 'その他休憩（任意）',
+            value: _otherBreak,
+            items: ['', ..._dropdownOptions!.otherBreak],  // 空白を先頭に追加
+            onChanged: (value) => setState(() => _otherBreak = value == '' ? null : value),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _commentController,
+            decoration: InputDecoration(
+              labelText: 'コメント（任意）',
+              hintText: '何かあればお書きください',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppThemeV2.infoColor, width: 2),
+              ),
+            ),
+            maxLines: 3,
+          ),
+        ],
+      ),
     );
   }
 
@@ -287,12 +341,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     required String? value,
     required List<String> items,
     required void Function(String?) onChanged,
+    bool isRequired = false,
   }) {
     return DropdownButtonFormField<String>(
       value: value,
       decoration: InputDecoration(
         labelText: label,
-        border: const OutlineInputBorder(),
+        labelStyle: TextStyle(
+          color: isRequired ? AppThemeV2.infoColor : AppThemeV2.textSecondary,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppThemeV2.infoColor, width: 2),
+        ),
       ),
       items: items.map((item) {
         return DropdownMenuItem<String>(
@@ -306,17 +370,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   /// 退勤ボタン
   Widget _buildSubmitButton() {
-    return ElevatedButton(
-      onPressed: _isSubmitting ? null : _submitCheckout,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    return SizedBox(
+      height: 56,
+      child: ElevatedButton(
+        onPressed: _isSubmitting ? null : _submitCheckout,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppThemeV2.infoColor,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppThemeV2.infoColor.withOpacity(0.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: _isSubmitting
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.logout, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    '退勤する',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
       ),
-      child: _isSubmitting
-          ? const CircularProgressIndicator(color: Colors.white)
-          : const Text('退勤する'),
     );
   }
 }

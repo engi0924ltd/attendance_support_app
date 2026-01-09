@@ -170,34 +170,14 @@ class _FacilityAdminDailyAttendanceScreenState
       final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
       final scheduledUsers = await _attendanceService.getScheduledUsers(dateStr);
 
-      // 並び順: 未登録 → 登録済み・支援記録未登録 → 完了
-      scheduledUsers.sort((a, b) {
-        final aHasCheckedIn = a['hasCheckedIn'] as bool;
-        final bHasCheckedIn = b['hasCheckedIn'] as bool;
-        final aAttendance = a['attendance'] as Attendance?;
-        final bAttendance = b['attendance'] as Attendance?;
-
-        int getPriority(bool hasCheckedIn, Attendance? attendance) {
-          if (!hasCheckedIn) return 0;
-          if (attendance != null && !attendance.hasSupportRecord) return 1;
-          return 2;
-        }
-
-        final aPriority = getPriority(aHasCheckedIn, aAttendance);
-        final bPriority = getPriority(bHasCheckedIn, bAttendance);
-
-        if (aPriority != bPriority) {
-          return aPriority.compareTo(bPriority);
-        }
-
-        final aName = a['userName'] as String;
-        final bName = b['userName'] as String;
-        return aName.compareTo(bName);
-      });
+      // 出勤済みの人を除外し、名簿順を維持
+      final notCheckedInUsers = scheduledUsers
+          .where((u) => u['hasCheckedIn'] != true)
+          .toList();
 
       if (!mounted) return;
       setState(() {
-        _scheduledUsers = scheduledUsers;
+        _scheduledUsers = notCheckedInUsers;
         _isLoading = false;
       });
     } catch (e) {
@@ -296,9 +276,9 @@ class _FacilityAdminDailyAttendanceScreenState
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: '出勤一覧'),
-            Tab(text: '出勤予定者'),
+          tabs: [
+            Tab(text: '出勤一覧（${_attendances.length}）'),
+            Tab(text: '出勤予定者（${_scheduledUsers.length}）'),
           ],
         ),
       ),

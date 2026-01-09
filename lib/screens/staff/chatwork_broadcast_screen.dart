@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/attendance_service.dart';
+import '../../theme/app_theme_v2.dart';
 
 /// 送信モード
 enum ChatworkSendMode {
@@ -223,13 +224,15 @@ class _ChatworkBroadcastScreenState extends State<ChatworkBroadcastScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppThemeV2.backgroundGrey,
       appBar: AppBar(
         title: Text(_isBroadcastMode ? '一斉送信' : '選択送信'),
-        backgroundColor: Colors.red,
+        backgroundColor: AppThemeV2.errorColor,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppThemeV2.errorColor))
           : _errorMessage != null
               ? _buildErrorView()
               : _buildContent(),

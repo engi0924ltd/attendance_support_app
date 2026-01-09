@@ -4,6 +4,7 @@ import '../../models/user.dart';
 import '../../services/attendance_service.dart';
 import '../../services/master_service.dart';
 import '../../widgets/searchable_dropdown.dart';
+import '../../theme/app_theme_v2.dart';
 import 'user_detail_screen.dart';
 
 /// 検索モード
@@ -171,10 +172,12 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppThemeV2.backgroundGrey,
       appBar: AppBar(
         title: const Text('過去の実績記録'),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppThemeV2.accentOrange,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: Column(
         children: [
@@ -197,7 +200,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
   Widget _buildSearchModeToggle() {
     return Container(
       padding: const EdgeInsets.all(12),
-      color: Colors.orange.shade50,
+      color: AppThemeV2.accentOrange.withValues(alpha: 0.1),
       child: Row(
         children: [
           Expanded(
@@ -214,12 +217,12 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
                   color: _searchMode == SearchMode.byUser
-                      ? Colors.orange
+                      ? AppThemeV2.accentOrange
                       : Colors.white,
                   borderRadius: const BorderRadius.horizontal(
                     left: Radius.circular(8),
                   ),
-                  border: Border.all(color: Colors.orange),
+                  border: Border.all(color: AppThemeV2.accentOrange),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -229,7 +232,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
                       size: 20,
                       color: _searchMode == SearchMode.byUser
                           ? Colors.white
-                          : Colors.orange,
+                          : AppThemeV2.accentOrange,
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -238,7 +241,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
                         fontWeight: FontWeight.bold,
                         color: _searchMode == SearchMode.byUser
                             ? Colors.white
-                            : Colors.orange,
+                            : AppThemeV2.accentOrange,
                       ),
                     ),
                   ],
@@ -260,12 +263,12 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
                   color: _searchMode == SearchMode.byDate
-                      ? Colors.orange
+                      ? AppThemeV2.accentOrange
                       : Colors.white,
                   borderRadius: const BorderRadius.horizontal(
                     right: Radius.circular(8),
                   ),
-                  border: Border.all(color: Colors.orange),
+                  border: Border.all(color: AppThemeV2.accentOrange),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -275,7 +278,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
                       size: 20,
                       color: _searchMode == SearchMode.byDate
                           ? Colors.white
-                          : Colors.orange,
+                          : AppThemeV2.accentOrange,
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -284,7 +287,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
                         fontWeight: FontWeight.bold,
                         color: _searchMode == SearchMode.byDate
                             ? Colors.white
-                            : Colors.orange,
+                            : AppThemeV2.accentOrange,
                       ),
                     ),
                   ],
@@ -380,24 +383,24 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.orange.shade300),
+                border: Border.all(color: AppThemeV2.accentOrange.withValues(alpha: 0.5)),
                 borderRadius: BorderRadius.circular(8),
-                color: Colors.orange.shade50,
+                color: AppThemeV2.accentOrange.withValues(alpha: 0.1),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.calendar_today, color: Colors.orange.shade700),
+                  Icon(Icons.calendar_today, color: AppThemeV2.accentOrange),
                   const SizedBox(width: 12),
                   Text(
                     dateFormatted,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.orange.shade900,
+                      color: AppThemeV2.accentOrange,
                     ),
                   ),
                   const Spacer(),
-                  Icon(Icons.arrow_drop_down, color: Colors.orange.shade700),
+                  Icon(Icons.arrow_drop_down, color: AppThemeV2.accentOrange),
                 ],
               ),
             ),
@@ -411,7 +414,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
               icon: const Icon(Icons.search),
               label: const Text('この日の記録を検索'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
+                backgroundColor: AppThemeV2.accentOrange,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -547,7 +550,7 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
         statusText = '欠勤';
         break;
       case '遅刻':
-        statusColor = Colors.orange;
+        statusColor = AppThemeV2.accentOrange;
         statusText = '遅刻';
         break;
       case '早退':
@@ -692,14 +695,14 @@ class _PastRecordsScreenState extends State<PastRecordsScreen> {
                   Icon(
                     hasSupportRecord ? Icons.check_circle : Icons.warning,
                     size: 16,
-                    color: hasSupportRecord ? Colors.green : Colors.orange,
+                    color: hasSupportRecord ? Colors.green : AppThemeV2.accentOrange,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     hasSupportRecord ? '支援記録あり' : '支援記録未登録',
                     style: TextStyle(
                       fontSize: 12,
-                      color: hasSupportRecord ? Colors.green : Colors.orange,
+                      color: hasSupportRecord ? Colors.green : AppThemeV2.accentOrange,
                     ),
                   ),
                 ],

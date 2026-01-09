@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'screens/common/menu_selection_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   // アプリの準備
@@ -36,16 +37,7 @@ class AttendanceSupportApp extends StatelessWidget {
         Locale('ja', 'JP'),
       ],
       locale: const Locale('ja', 'JP'),
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(
-          floatingLabelBehavior: FloatingLabelBehavior.always,
-        ),
-      ),
+      theme: AppTheme.lightTheme,
       // 最初に表示する画面
       home: const MenuSelectionScreen(),
     );

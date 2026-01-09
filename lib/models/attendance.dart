@@ -32,6 +32,8 @@ class Attendance {
   final bool visitSupport;          // 訪問支援加算（AE列）
   final bool transportService;      // 送迎加算（AF列）
   final String? userStatus;         // 本人の状況（Z列：支援記録）
+  final String? recorder;           // 記録者（AB列）
+  final bool? _hasSupportRecord;    // GASから取得した支援記録状態
 
   Attendance({
     this.rowId,
@@ -58,7 +60,9 @@ class Attendance {
     this.visitSupport = false,
     this.transportService = false,
     this.userStatus,
-  });
+    this.recorder,
+    bool? hasSupportRecord,
+  }) : _hasSupportRecord = hasSupportRecord;
 
   // スプレッドシートから受け取ったデータを勤怠データに変換
   factory Attendance.fromJson(Map<String, dynamic> json) {
@@ -87,6 +91,8 @@ class Attendance {
       visitSupport: _parseBool(json['visitSupport']),
       transportService: _parseBool(json['transportService']),
       userStatus: json['userStatus']?.toString(),
+      recorder: json['recorder']?.toString(),
+      hasSupportRecord: json['hasSupportRecord'] as bool?,
     );
   }
 
@@ -120,8 +126,15 @@ class Attendance {
     };
   }
 
-  /// 支援記録が登録されているかどうか（Z列に入力があるか）
-  bool get hasSupportRecord => userStatus != null && userStatus!.isNotEmpty;
+  /// 支援記録が登録されているかどうか
+  /// GASから取得した値があればそれを使用、なければフォールバック
+  bool get hasSupportRecord {
+    if (_hasSupportRecord != null) {
+      return _hasSupportRecord!;
+    }
+    // フォールバック: 旧ロジック
+    return userStatus != null && userStatus!.isNotEmpty;
+  }
 
   /// 一部のフィールドを変更した新しいインスタンスを作成
   Attendance copyWith({
@@ -149,6 +162,7 @@ class Attendance {
     bool? visitSupport,
     bool? transportService,
     String? userStatus,
+    String? recorder,
     bool? hasSupportRecord, // 支援記録状態を直接設定するための特別パラメータ
   }) {
     return Attendance(
@@ -175,10 +189,9 @@ class Attendance {
       absenceSupport: absenceSupport ?? this.absenceSupport,
       visitSupport: visitSupport ?? this.visitSupport,
       transportService: transportService ?? this.transportService,
-      // hasSupportRecordがtrueならダミーの値を設定、falseならnull
-      userStatus: hasSupportRecord != null
-          ? (hasSupportRecord ? (this.userStatus ?? '登録済み') : null)
-          : (userStatus ?? this.userStatus),
+      userStatus: userStatus ?? this.userStatus,
+      recorder: recorder ?? this.recorder,
+      hasSupportRecord: hasSupportRecord ?? _hasSupportRecord,
     );
   }
 }

@@ -4,7 +4,7 @@ import '../../models/facility.dart';
 import '../../services/facility_service.dart';
 import '../../services/master_auth_service.dart';
 import '../common/menu_selection_screen.dart';
-import '../facility_admin/facility_admin_dashboard_screen.dart';
+import '../facility_admin/facility_admin_dashboard_screen_v2.dart';
 import '../facility_admin/chatwork_settings_screen.dart';
 import '../../models/facility_admin.dart';
 import 'facility_registration_screen.dart';
@@ -86,7 +86,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => FacilityAdminDashboardScreen(
+        builder: (context) => FacilityAdminDashboardScreenV2(
           admin: facilityAdmin,
         ),
       ),

@@ -9,8 +9,9 @@ import '../../services/support_service.dart';
 import '../../services/master_service.dart';
 import '../../config/constants.dart';
 import '../../widgets/health_line_chart.dart';
+import '../../theme/app_theme_v2.dart';
 
-/// 利用者詳細画面（勤怠表示・編集 + 支援記録入力）
+/// 利用者詳細画面（勤怠表示・編集 + 支援記録入力）- V2デザイン
 class UserDetailScreen extends StatefulWidget {
   final String date;
   final String userName;
@@ -345,11 +346,15 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppThemeV2.backgroundGrey,
       appBar: AppBar(
         title: Text('${widget.userName} - ${widget.date}'),
+        backgroundColor: AppThemeV2.accentOrange,
+        foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppThemeV2.accentOrange))
           : _errorMessage != null
               ? Center(
                   child: Column(
@@ -405,7 +410,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       children: [
         Row(
           children: [
-            Icon(Icons.show_chart, color: Colors.orange.shade700),
+            Icon(Icons.show_chart, color: AppThemeV2.accentOrange),
             const SizedBox(width: 8),
             const Text(
               '健康推移（過去7回分）',
@@ -482,6 +487,8 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     // 勤怠データがない場合は最小限のフォームを表示（欠席登録用・訪問支援用）
     if (_attendance == null) {
       return Card(
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -567,6 +574,8 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     }
 
     return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -1195,7 +1204,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
 
           const SizedBox(height: 24),
 
-          // 統合保存ボタン
+          // 統合保存ボタン（V2スタイル）
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -1204,8 +1213,11 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
               label: const Text('保存'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.orange,
+                backgroundColor: AppThemeV2.accentOrange,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ),

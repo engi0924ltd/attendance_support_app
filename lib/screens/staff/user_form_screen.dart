@@ -3,8 +3,9 @@ import '../../models/user.dart';
 import '../../models/dropdown_options.dart';
 import '../../services/user_service.dart';
 import '../../services/master_service.dart';
+import '../../theme/app_theme_v2.dart';
 
-/// 利用者登録・編集画面（タブ形式）
+/// 利用者登録・編集画面（タブ形式）- V2デザイン
 class UserFormScreen extends StatefulWidget {
   final User? user; // 編集時は既存の利用者データを渡す
   final String? gasUrl; // 施設固有のGAS URL
@@ -502,10 +503,12 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppThemeV2.backgroundGrey,
       appBar: AppBar(
         title: Text(_isEditMode ? '利用者情報編集' : '利用者登録'),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppThemeV2.accentOrange,
         foregroundColor: Colors.white,
+        elevation: 0,
         bottom: TabBar(
           controller: _tabController,
           isScrollable: false,

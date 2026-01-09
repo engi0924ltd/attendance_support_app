@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../services/master_service.dart';
+import '../../theme/app_theme_v2.dart';
 import 'user_form_screen.dart';
 
-/// 利用者一覧画面（支援者用）
+/// 利用者一覧画面（支援者用・V2デザイン）
 class UserListScreen extends StatefulWidget {
   const UserListScreen({super.key});
 
@@ -245,10 +246,12 @@ class _UserListScreenState extends State<UserListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppThemeV2.backgroundGrey,
       appBar: AppBar(
         title: const Text('利用者管理'),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppThemeV2.accentOrange,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -264,7 +267,7 @@ class _UserListScreenState extends State<UserListScreen> {
           _buildUserCount(),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: AppThemeV2.accentOrange))
                 : _errorMessage != null
                     ? _buildErrorView()
                     : _buildUserList(),
@@ -273,7 +276,7 @@ class _UserListScreenState extends State<UserListScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToCreateScreen,
-        backgroundColor: Colors.orange,
+        backgroundColor: AppThemeV2.accentOrange,
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
@@ -317,7 +320,7 @@ class _UserListScreenState extends State<UserListScreen> {
     );
   }
 
-  /// フィルタチップ
+  /// フィルタチップ（V2スタイル）
   Widget _buildFilterChip(String label, String value) {
     final isSelected = _filterStatus == value;
     return FilterChip(
@@ -329,7 +332,8 @@ class _UserListScreenState extends State<UserListScreen> {
           _applyFilters();
         });
       },
-      selectedColor: Colors.orange.shade100,
+      selectedColor: AppThemeV2.accentOrange.withValues(alpha: 0.2),
+      checkmarkColor: AppThemeV2.accentOrange,
     );
   }
 
@@ -399,13 +403,15 @@ class _UserListScreenState extends State<UserListScreen> {
     );
   }
 
-  /// 利用者カード
+  /// 利用者カード（V2スタイル）
   Widget _buildUserCard(User user) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: user.isActive ? Colors.green : Colors.grey,
+          backgroundColor: user.isActive ? AppThemeV2.primaryGreen : AppThemeV2.textSecondary,
           child: Text(
             user.name.substring(0, 1),
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -420,7 +426,34 @@ class _UserListScreenState extends State<UserListScreen> {
           children: [
             const SizedBox(height: 4),
             Text('フリガナ: ${user.furigana}'),
-            Text('ステータス: ${user.status}'),
+            Row(
+              children: [
+                const Text('ステータス: '),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: user.isActive
+                        ? AppThemeV2.primaryGreen.withValues(alpha: 0.1)
+                        : AppThemeV2.textSecondary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: user.isActive
+                          ? AppThemeV2.primaryGreen
+                          : AppThemeV2.textSecondary,
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Text(
+                    user.status,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: user.isActive ? AppThemeV2.primaryGreen : AppThemeV2.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             if (user.mobilePhone != null && user.mobilePhone!.isNotEmpty)
               Text('電話: ${user.mobilePhone}'),
           ],
@@ -438,19 +471,19 @@ class _UserListScreenState extends State<UserListScreen> {
               value: 'edit',
               child: Row(
                 children: [
-                  Icon(Icons.edit, size: 20),
+                  Icon(Icons.edit, size: 20, color: AppThemeV2.infoColor),
                   SizedBox(width: 8),
                   Text('編集'),
                 ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'change_status',
               child: Row(
                 children: [
-                  Icon(Icons.swap_horiz, size: 20, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text('契約状態の変更', style: TextStyle(color: Colors.orange)),
+                  Icon(Icons.swap_horiz, size: 20, color: AppThemeV2.accentOrange),
+                  const SizedBox(width: 8),
+                  Text('契約状態の変更', style: TextStyle(color: AppThemeV2.accentOrange)),
                 ],
               ),
             ),

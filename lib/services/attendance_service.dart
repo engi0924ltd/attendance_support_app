@@ -241,6 +241,27 @@ class AttendanceService {
     return response;
   }
 
+  /// 市区町村別利用者統計を取得
+  Future<Map<String, dynamic>> getMunicipalityStats() async {
+    final response = await _apiService.get('analytics/municipality-stats');
+    return response;
+  }
+
+  /// 利用者の過去6ヶ月の出勤履歴を取得
+  Future<Map<String, dynamic>> getUserAttendanceHistory(String userName) async {
+    final encodedName = Uri.encodeComponent(userName);
+    final response = await _apiService.get('analytics/user-attendance-history/$encodedName');
+    return response;
+  }
+
+  /// 受給者証期限切れアラートを取得
+  /// 在籍中（契約中）の利用者で、支給決定期間または適用期間が期限切れの人を返す
+  Future<List<Map<String, dynamic>>> getCertificateAlerts() async {
+    final response = await _apiService.get('master/certificate-alerts');
+    final List<dynamic> alerts = response['alerts'] ?? [];
+    return alerts.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
   /// 分析データをバッチ取得（施設統計・退所者・曜日別予定を一括）
   /// [month] - 対象月（YYYY-MM形式）。省略時は当月
   Future<Map<String, dynamic>> getAnalyticsBatch({String? month}) async {

@@ -6,8 +6,9 @@ import '../../services/attendance_service.dart';
 import '../../services/master_service.dart';
 import '../../widgets/searchable_dropdown.dart';
 import '../../widgets/health_line_chart.dart';
+import '../../theme/app_theme_v2.dart';
 
-/// 分析画面（支援者用）
+/// 分析画面（支援者用・V2デザイン）
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
 
@@ -146,13 +147,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppThemeV2.backgroundGrey,
       appBar: AppBar(
         title: const Text('分析'),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Colors.indigo))
           : _errorMessage != null
               ? _buildErrorView()
               : RefreshIndicator(

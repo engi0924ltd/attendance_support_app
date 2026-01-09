@@ -48,14 +48,30 @@ class _MenuSelectionScreenState extends State<MenuSelectionScreen> {
     }
   }
 
-  /// 支援者メニューへ遷移
-  void _navigateToStaffMenu() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const StaffLoginScreen(),
-      ),
-    );
+  /// 支援者メニューへ遷移（施設設定をチェック）
+  Future<void> _navigateToStaffMenu() async {
+    // 施設のGAS URLがあるかチェック
+    final gasUrl = await _masterAuthService.getFacilityGasUrl();
+
+    if (mounted) {
+      if (gasUrl == null || gasUrl.isEmpty) {
+        // 施設が設定されていない場合は施設コード入力画面へ
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const FacilityCodeSetupScreen(),
+          ),
+        );
+      } else {
+        // 施設が設定されている場合は支援者ログイン画面へ
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const StaffLoginScreen(),
+          ),
+        );
+      }
+    }
   }
 
   @override

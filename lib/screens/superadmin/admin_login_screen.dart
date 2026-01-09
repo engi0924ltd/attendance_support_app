@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/master_auth_service.dart';
-import '../facility_admin/facility_admin_dashboard_screen.dart';
+import '../facility_admin/facility_admin_dashboard_screen_v2.dart';
 import 'super_admin_dashboard_screen.dart';
 
 /// 統合管理者ログイン画面（全権管理者 or 施設管理者）
@@ -104,7 +104,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => FacilityAdminDashboardScreen(
+              builder: (context) => FacilityAdminDashboardScreenV2(
                 admin: facilityAdmin,
               ),
             ),
