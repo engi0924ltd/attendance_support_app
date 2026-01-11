@@ -306,6 +306,10 @@ function doGet(e) {
       return handleGetEvaluationAlerts();
     } else if (action === 'master/certificate-alerts') {
       return handleGetCertificateAlerts();
+    } else if (action.startsWith('dashboard/staff-batch/')) {
+      // 支援者ダッシュボード用バッチAPI（出勤一覧・予定者・アラートを一括取得）
+      const date = action.split('/')[2];
+      return handleStaffDashboardBatch(date);
     } else if (action === 'staff/list') {
       return handleGetStaffList();
     } else if (action.startsWith('attendance/daily/')) {
@@ -626,6 +630,381 @@ function handleGetDropdowns() {
   };
 
   return createSuccessResponse(options);
+}
+
+/**
+ * 支援者ダッシュボード用バッチAPI
+ * 出勤一覧・出勤予定者・受給者証アラート・評価アラートを一括取得
+ * Flutter側からの複数API呼び出しを1回にまとめることで高速化
+ */
+function handleStaffDashboardBatch(date) {
+  const startTime = Date.now();
+
+  // 各データを取得（内部的に既存関数のロジックを再利用）
+  // シートは1回だけ取得して効率化
+  const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+  const masterSheet = getSheet(SHEET_NAMES.MASTER);
+  const rosterSheet = getSheet(getSheetNames().ROSTER);
+
+  // === 1. 出勤一覧（handleGetDailyAttendanceのロジック） ===
+  const dailyAttendances = getDailyAttendanceData(supportSheet, date);
+
+  // === 2. 出勤予定者（handleGetScheduledUsersのロジック） ===
+  const scheduledUsers = getScheduledUsersData(masterSheet, supportSheet, date);
+
+  // === 3. 受給者証アラート（handleGetCertificateAlertsのロジック） ===
+  const certificateAlerts = getCertificateAlertsData(masterSheet, rosterSheet);
+
+  // === 4. 評価アラート（handleGetEvaluationAlertsのロジック・キャッシュ利用） ===
+  const cacheKey = 'evaluation_alerts';
+  let evaluationAlerts = getCacheData(cacheKey);
+  if (!evaluationAlerts) {
+    evaluationAlerts = getEvaluationAlertsData(masterSheet, supportSheet);
+    setCacheData(cacheKey, evaluationAlerts, 300); // 5分キャッシュ
+  }
+
+  const totalTime = Date.now() - startTime;
+
+  return createSuccessResponse({
+    dailyAttendances: dailyAttendances,
+    scheduledUsers: scheduledUsers,
+    certificateAlerts: certificateAlerts,
+    evaluationAlerts: evaluationAlerts,
+    batchTime: totalTime + 'ms'
+  });
+}
+
+/**
+ * 出勤一覧データを取得（バッチAPI用内部関数）
+ */
+function getDailyAttendanceData(supportSheet, date) {
+  const actualLastRow = supportSheet.getLastRow();
+  if (actualLastRow < 2) {
+    return [];
+  }
+
+  // 今日の日付を取得（yyyy/MM/dd形式）
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+  const isToday = (date === today);
+
+  // 検索範囲を決定
+  let startRow, maxSearchRows;
+  if (isToday) {
+    maxSearchRows = Math.min(actualLastRow - 1, 100);
+    startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+  } else {
+    startRow = 2;
+    maxSearchRows = actualLastRow - 1;
+  }
+
+  const searchRange = supportSheet.getRange(startRow, 1, maxSearchRows, 38);
+  const allData = searchRange.getValues();
+
+  const attendances = [];
+  for (let i = 0; i < allData.length; i++) {
+    const row = allData[i];
+    const rowDate = row[0];
+    if (!rowDate) continue;
+
+    let formattedDate = '';
+    if (rowDate instanceof Date) {
+      formattedDate = Utilities.formatDate(rowDate, 'Asia/Tokyo', 'yyyy/MM/dd');
+    } else {
+      formattedDate = String(rowDate).substring(0, 10).replace(/-/g, '/');
+    }
+
+    if (formattedDate === date) {
+      const userName = row[1];
+      const attendanceStatus = row[3];
+      const hasSupportRecord = !!(row[4] || row[5] || row[6] || row[30] || row[31]);
+
+      attendances.push({
+        date: date,
+        userName: userName,
+        attendanceStatus: attendanceStatus,
+        checkinTime: row[15] || null,
+        checkoutTime: row[16] || null,
+        checkinComment: row[9] || null,
+        checkoutComment: row[12] || null,
+        healthCondition: row[7] || null,
+        sleepStatus: row[8] || null,
+        fatigueLevel: row[10] || null,
+        stressLevel: row[11] || null,
+        hasSupportRecord: hasSupportRecord
+      });
+    }
+  }
+
+  return attendances;
+}
+
+/**
+ * 出勤予定者データを取得（バッチAPI用内部関数）
+ */
+function getScheduledUsersData(masterSheet, supportSheet, date) {
+  const targetDate = new Date(date.replace(/\//g, '-'));
+  const dayOfWeek = targetDate.getDay();
+  const dayColIndex = (dayOfWeek === 0) ? 9 : 3 + dayOfWeek; // D-J列
+
+  const masterLastRow = masterSheet.getLastRow();
+  if (masterLastRow < MASTER_CONFIG.USER_DATA_START_ROW) {
+    return [];
+  }
+
+  const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+  const numRows = masterLastRow - startRow + 1;
+  const masterData = masterSheet.getRange(startRow, 1, numRows, 10).getValues();
+
+  const scheduledUsers = [];
+  for (let i = 0; i < masterData.length; i++) {
+    const name = masterData[i][MASTER_CONFIG.USER_COLS.NAME - 1];
+    const status = masterData[i][MASTER_CONFIG.USER_COLS.STATUS - 1];
+    const scheduledAttendance = masterData[i][dayColIndex];
+
+    if (!name || name === '' || status !== '契約中') continue;
+    if (!scheduledAttendance || scheduledAttendance === '' || scheduledAttendance === '休み') continue;
+
+    scheduledUsers.push({
+      userName: name,
+      scheduledAttendance: scheduledAttendance,
+      hasCheckedIn: false,
+      attendance: null
+    });
+  }
+
+  // 出勤記録を検索
+  const actualLastRow = supportSheet.getLastRow();
+  if (actualLastRow >= 2) {
+    const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+    const isToday = (date === today);
+
+    let searchStartRow, searchRows;
+    if (isToday) {
+      searchRows = Math.min(actualLastRow - 1, 100);
+      searchStartRow = Math.max(2, actualLastRow - searchRows + 1);
+    } else {
+      searchStartRow = 2;
+      searchRows = actualLastRow - 1;
+    }
+
+    const supportData = supportSheet.getRange(searchStartRow, 1, searchRows, 38).getValues();
+
+    for (let i = 0; i < supportData.length; i++) {
+      const row = supportData[i];
+      const rowDate = row[0];
+      if (!rowDate) continue;
+
+      let formattedDate = '';
+      if (rowDate instanceof Date) {
+        formattedDate = Utilities.formatDate(rowDate, 'Asia/Tokyo', 'yyyy/MM/dd');
+      } else {
+        formattedDate = String(rowDate).substring(0, 10).replace(/-/g, '/');
+      }
+
+      if (formattedDate === date) {
+        const userName = row[1];
+        const userIndex = scheduledUsers.findIndex(u => u.userName === userName);
+
+        if (userIndex !== -1) {
+          const hasSupportRecord = !!(row[4] || row[5] || row[6] || row[30] || row[31]);
+          scheduledUsers[userIndex].hasCheckedIn = true;
+          scheduledUsers[userIndex].attendance = {
+            date: date,
+            userName: userName,
+            attendanceStatus: row[3],
+            checkinTime: row[15] || null,
+            checkoutTime: row[16] || null,
+            checkinComment: row[9] || null,
+            checkoutComment: row[12] || null,
+            healthCondition: row[7] || null,
+            sleepStatus: row[8] || null,
+            fatigueLevel: row[10] || null,
+            stressLevel: row[11] || null,
+            hasSupportRecord: hasSupportRecord
+          };
+        }
+      }
+    }
+  }
+
+  return scheduledUsers;
+}
+
+/**
+ * 受給者証アラートデータを取得（バッチAPI用内部関数）
+ */
+function getCertificateAlertsData(masterSheet, rosterSheet) {
+  const masterLastRow = masterSheet.getLastRow();
+  if (masterLastRow < MASTER_CONFIG.USER_DATA_START_ROW) {
+    return [];
+  }
+
+  const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+  const numRows = masterLastRow - startRow + 1;
+  const masterData = masterSheet.getRange(startRow, 1, numRows, 3).getValues();
+
+  const activeUserNames = [];
+  for (let i = 0; i < masterData.length; i++) {
+    const name = masterData[i][0];
+    const status = masterData[i][2];
+    if (name && status === '契約中') {
+      activeUserNames.push(name);
+    }
+  }
+
+  if (activeUserNames.length === 0) {
+    return [];
+  }
+
+  const rosterLastRow = rosterSheet.getLastRow();
+  if (rosterLastRow < 2) {
+    return [];
+  }
+
+  const rosterData = rosterSheet.getRange(2, 2, rosterLastRow - 1, 59).getValues();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const alerts = [];
+  for (let i = 0; i < rosterData.length; i++) {
+    const userName = rosterData[i][0];
+    if (!userName || !activeUserNames.includes(userName)) continue;
+
+    const supplyStartStr = rosterData[i][23];
+    const supplyEndStr = rosterData[i][24];
+    const applyStartStr = rosterData[i][25];
+    const applyEndStr = rosterData[i][26];
+
+    const expiredItems = [];
+
+    if (supplyEndStr) {
+      const supplyEnd = parseDate(supplyEndStr);
+      if (supplyEnd && supplyEnd < today) {
+        expiredItems.push({ label: '支給決定期間', expiredDate: formatDateYYYYMMDD(supplyEnd) });
+      }
+    }
+
+    if (applyEndStr) {
+      const applyEnd = parseDate(applyEndStr);
+      if (applyEnd && applyEnd < today) {
+        expiredItems.push({ label: '適用期間', expiredDate: formatDateYYYYMMDD(applyEnd) });
+      }
+    }
+
+    if (expiredItems.length > 0) {
+      alerts.push({ userName: userName, expiredItems: expiredItems });
+    }
+  }
+
+  return alerts;
+}
+
+/**
+ * 評価アラートデータを取得（バッチAPI用内部関数）
+ */
+function getEvaluationAlertsData(masterSheet, supportSheet) {
+  const alerts = [];
+  const today = new Date();
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
+  const masterLastRow = masterSheet.getLastRow();
+  const userScheduleMap = {};
+
+  if (masterLastRow >= MASTER_CONFIG.USER_DATA_START_ROW) {
+    const startRow = MASTER_CONFIG.USER_DATA_START_ROW;
+    const numRows = masterLastRow - startRow + 1;
+    const masterData = masterSheet.getRange(startRow, 1, numRows, 10).getValues();
+
+    for (let i = 0; i < masterData.length; i++) {
+      const name = masterData[i][MASTER_CONFIG.USER_COLS.NAME - 1];
+      const status = masterData[i][MASTER_CONFIG.USER_COLS.STATUS - 1];
+
+      if (!name || name === '' || status !== '契約中') continue;
+
+      let needsHomeEval = false;
+      let needsExternalEval = false;
+
+      for (let d = 3; d <= 9; d++) {
+        const schedule = masterData[i][d];
+        if (schedule && schedule.includes('在宅')) needsHomeEval = true;
+        if (schedule && schedule.includes('施設外')) needsExternalEval = true;
+      }
+
+      if (needsHomeEval || needsExternalEval) {
+        userScheduleMap[name] = { needsHomeEval, needsExternalEval };
+      }
+    }
+  }
+
+  const userNames = Object.keys(userScheduleMap);
+  if (userNames.length === 0) return alerts;
+
+  const actualLastRow = supportSheet.getLastRow();
+  if (actualLastRow < 2) return alerts;
+
+  const maxRows = Math.min(actualLastRow - 1, 500);
+  const startRow = Math.max(2, actualLastRow - maxRows + 1);
+  const supportData = supportSheet.getRange(startRow, 1, maxRows, 32).getValues();
+
+  const userLastEval = {};
+  for (let i = supportData.length - 1; i >= 0; i--) {
+    const row = supportData[i];
+    const userName = row[1];
+    if (!userName || !userScheduleMap[userName]) continue;
+
+    const homeEvalFlag = row[29];
+    const externalEvalFlag = row[30];
+
+    if (!userLastEval[userName]) {
+      userLastEval[userName] = { home: null, external: null };
+    }
+
+    if (homeEvalFlag === 'ON' && !userLastEval[userName].home) {
+      const recordDate = row[0];
+      if (recordDate instanceof Date) {
+        userLastEval[userName].home = recordDate;
+      }
+    }
+
+    if (externalEvalFlag === 'ON' && !userLastEval[userName].external) {
+      const recordDate = row[0];
+      if (recordDate instanceof Date) {
+        userLastEval[userName].external = recordDate;
+      }
+    }
+  }
+
+  for (const userName of userNames) {
+    const schedule = userScheduleMap[userName];
+    const lastEval = userLastEval[userName] || { home: null, external: null };
+
+    if (schedule.needsHomeEval) {
+      const lastHomeEval = lastEval.home;
+      if (!lastHomeEval || (today - lastHomeEval) > ONE_WEEK_MS) {
+        alerts.push({
+          userName: userName,
+          alertType: 'home',
+          lastEvalDate: lastHomeEval ? Utilities.formatDate(lastHomeEval, 'Asia/Tokyo', 'yyyy/MM/dd') : null,
+          message: '在宅支援評価が1週間以上未実施です'
+        });
+      }
+    }
+
+    if (schedule.needsExternalEval) {
+      const lastExternalEval = lastEval.external;
+      if (!lastExternalEval || (today - lastExternalEval) > TWO_WEEKS_MS) {
+        alerts.push({
+          userName: userName,
+          alertType: 'external',
+          lastEvalDate: lastExternalEval ? Utilities.formatDate(lastExternalEval, 'Asia/Tokyo', 'yyyy/MM/dd') : null,
+          message: '施設外支援評価が2週間以上未実施です'
+        });
+      }
+    }
+  }
+
+  return alerts;
 }
 
 /**

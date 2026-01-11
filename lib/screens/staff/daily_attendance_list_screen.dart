@@ -52,8 +52,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadData();
-    _loadCertificateAlerts();
+    _loadData(); // バッチAPIで全データを一括取得
   }
 
   @override
@@ -62,27 +61,121 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     super.dispose();
   }
 
-  /// 勤怠一覧と出勤予定者を読み込む
+  /// 勤怠一覧と出勤予定者を読み込む（バッチAPI使用で高速化）
   Future<void> _loadData() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
+      _isLoadingAlerts = true;
       _errorMessage = null;
     });
 
     try {
-      await Future.wait([
-        _loadAttendances(),
-        _loadScheduledUsers(),
-        _loadEvaluationAlerts(),
-      ]);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
+
+      // バッチAPIで一括取得（4つのAPIを1回にまとめて高速化）
+      final batchData = await _attendanceService.getStaffDashboardBatch(dateStr);
+
+      if (!mounted) return;
+
+      // === 出勤一覧の処理 ===
+      final attendances = batchData.dailyAttendances;
+      // 支援記録未登録の人を上位に並べ替え
+      attendances.sort((a, b) {
+        final aHasSupportRecord = a.hasSupportRecord;
+        final bHasSupportRecord = b.hasSupportRecord;
+        if (aHasSupportRecord != bHasSupportRecord) {
+          return aHasSupportRecord ? 1 : -1;
+        }
+        return a.userName.compareTo(b.userName);
+      });
+
+      // === 出勤予定者の処理 ===
+      final scheduledUsers = batchData.scheduledUsers;
+      final totalCount = scheduledUsers.length;
+
+      // 記録未カウント（施設管理者ダッシュボードと同じロジック）
+      int notRegistered = 0;
+      final notRegisteredUsers = <Map<String, dynamic>>[];
+
+      for (final user in scheduledUsers) {
+        final hasCheckedIn = user['hasCheckedIn'] as bool? ?? false;
+        final attendance = user['attendance'] as Attendance?;
+        final userName = user['userName'] as String? ?? '';
+
+        if (hasCheckedIn) {
+          if (attendance != null && !attendance.hasSupportRecord) {
+            notRegistered++;
+            notRegisteredUsers.add({
+              'userName': userName,
+              'status': attendance.attendanceStatus ?? '出勤',
+              'attendance': attendance,
+            });
+          }
+        } else {
+          if (attendance != null) {
+            final status = attendance.attendanceStatus;
+            final isAbsent = status == '欠勤' || status == '事前連絡あり欠勤';
+            if (isAbsent && !attendance.hasSupportRecord) {
+              notRegistered++;
+              notRegisteredUsers.add({
+                'userName': userName,
+                'status': status,
+                'attendance': attendance,
+              });
+            }
+          }
+        }
       }
+
+      // 出勤済みの人を除外し、名簿順を維持（タブ・リスト用）
+      final notCheckedInUsers = scheduledUsers
+          .where((u) => u['hasCheckedIn'] != true)
+          .toList();
+
+      // === 評価アラートの処理 ===
+      final Map<String, List<EvaluationAlert>> groupedAlerts = {};
+      for (var alertData in batchData.evaluationAlerts) {
+        // lastEvalDateから経過日数を計算
+        int daysSinceLastEval = 999;
+        final lastEvalDateStr = alertData['lastEvalDate'] as String?;
+        if (lastEvalDateStr != null && lastEvalDateStr.isNotEmpty) {
+          try {
+            final lastEvalDate = DateTime.parse(lastEvalDateStr.replaceAll('/', '-'));
+            daysSinceLastEval = DateTime.now().difference(lastEvalDate).inDays;
+          } catch (_) {}
+        }
+
+        final alert = EvaluationAlert(
+          userName: alertData['userName'] as String? ?? '',
+          alertType: alertData['alertType'] as String? ?? '',
+          daysSinceLastEval: daysSinceLastEval,
+          lastEvalDate: lastEvalDateStr,
+          message: alertData['message'] as String? ?? '',
+        );
+        groupedAlerts.putIfAbsent(alert.userName, () => []).add(alert);
+      }
+
+      setState(() {
+        _attendances = attendances;
+        _scheduledUsers = notCheckedInUsers;
+        _totalScheduledCount = totalCount;
+        _notRegisteredCount = notRegistered;
+        _notRegisteredUsers = notRegisteredUsers;
+        _certificateAlerts = batchData.certificateAlerts;
+        _evaluationAlerts = groupedAlerts;
+        _isLoading = false;
+        _isLoadingAlerts = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'データの読み込みに失敗しました\n$e';
+        _isLoading = false;
+        _isLoadingAlerts = false;
+      });
     }
+
     // 健康履歴を非同期で読み込み（UI表示をブロックしない）
     _loadHealthBatch();
   }
@@ -95,8 +188,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     await _masterService.clearUsersCache();
     await _masterService.clearDropdownCache();
     await _masterService.clearAlertsCache();
-    _loadData();
-    _loadCertificateAlerts();
+    _loadData(); // バッチAPIで全データを一括取得
   }
 
   /// 健康履歴をバッチで読み込む

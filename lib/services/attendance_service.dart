@@ -1,6 +1,21 @@
 import '../models/attendance.dart';
 import 'api_service.dart';
 
+/// 支援者ダッシュボード用バッチデータ
+class StaffDashboardBatchData {
+  final List<Attendance> dailyAttendances;
+  final List<Map<String, dynamic>> scheduledUsers;
+  final List<Map<String, dynamic>> certificateAlerts;
+  final List<Map<String, dynamic>> evaluationAlerts;
+
+  StaffDashboardBatchData({
+    required this.dailyAttendances,
+    required this.scheduledUsers,
+    required this.certificateAlerts,
+    required this.evaluationAlerts,
+  });
+}
+
 /// 勤怠データ（出勤・退勤）を扱う機能
 class AttendanceService {
   final ApiService _apiService;
@@ -260,6 +275,50 @@ class AttendanceService {
     final response = await _apiService.get('master/certificate-alerts');
     final List<dynamic> alerts = response['alerts'] ?? [];
     return alerts.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  /// 支援者ダッシュボード用バッチ取得
+  /// 出勤一覧・出勤予定者・受給者証アラート・評価アラートを1回のAPIで取得
+  Future<StaffDashboardBatchData> getStaffDashboardBatch(String date) async {
+    final response = await _apiService.get('dashboard/staff-batch/$date');
+
+    // 出勤一覧
+    final List<dynamic> dailyList = response['dailyAttendances'] ?? [];
+    final dailyAttendances = dailyList.map((json) => Attendance.fromJson(json)).toList();
+
+    // 出勤予定者
+    final List<dynamic> scheduledList = response['scheduledUsers'] ?? [];
+    final scheduledUsers = scheduledList.map((item) {
+      return {
+        'userName': item['userName'],
+        'scheduledAttendance': item['scheduledAttendance'],
+        'hasCheckedIn': item['hasCheckedIn'],
+        'attendance': item['attendance'] != null
+            ? Attendance.fromJson(item['attendance'])
+            : null,
+      };
+    }).toList();
+
+    // 受給者証アラート
+    final List<dynamic> certList = response['certificateAlerts'] ?? [];
+    final certificateAlerts = certList.map((e) => Map<String, dynamic>.from(e)).toList();
+
+    // 評価アラート
+    final List<dynamic> evalList = response['evaluationAlerts'] ?? [];
+    final evaluationAlerts = evalList.map((e) => Map<String, dynamic>.from(e)).toList();
+
+    // バッチ処理時間（デバッグ用）
+    final batchTime = response['batchTime'] as String?;
+    if (batchTime != null) {
+      print('📦 [BATCH] GAS処理時間: $batchTime');
+    }
+
+    return StaffDashboardBatchData(
+      dailyAttendances: dailyAttendances,
+      scheduledUsers: scheduledUsers,
+      certificateAlerts: certificateAlerts,
+      evaluationAlerts: evaluationAlerts,
+    );
   }
 
   /// 分析データをバッチ取得（施設統計・退所者・曜日別予定を一括）

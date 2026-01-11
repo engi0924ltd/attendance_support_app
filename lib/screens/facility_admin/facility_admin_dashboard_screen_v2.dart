@@ -55,15 +55,15 @@ class _FacilityAdminDashboardScreenV2State
   @override
   void initState() {
     super.initState();
-    _loadTodayStats();
-    _loadCertificateAlerts();
+    _loadTodayStats(); // バッチAPIで全データを一括取得
   }
 
-  /// 本日のステータスを読み込む
+  /// 本日のステータスを読み込む（バッチAPI使用で高速化）
   Future<void> _loadTodayStats() async {
     if (widget.admin.gasUrl == null || widget.admin.gasUrl!.isEmpty) {
       setState(() {
         _isLoadingStats = false;
+        _isLoadingAlerts = false;
       });
       return;
     }
@@ -71,19 +71,19 @@ class _FacilityAdminDashboardScreenV2State
     // ローディング状態を開始
     setState(() {
       _isLoadingStats = true;
+      _isLoadingAlerts = true;
     });
 
     try {
       final dateStr = DateFormat(AppConstants.dateFormat).format(DateTime.now());
 
-      // 予定者リストと実際の出勤記録を並行取得
-      final results = await Future.wait([
-        _attendanceService.getScheduledUsers(dateStr),
-        _attendanceService.getDailyAttendance(dateStr),
-      ]);
+      // バッチAPIで一括取得（3つのAPIを1回にまとめて高速化）
+      final batchData = await _attendanceService.getStaffDashboardBatch(dateStr);
 
-      final scheduledUsers = results[0] as List<Map<String, dynamic>>;
-      final attendances = results[1] as List<Attendance>;
+      if (!mounted) return;
+
+      final scheduledUsers = batchData.scheduledUsers;
+      final attendances = batchData.dailyAttendances;
 
       int scheduled = 0;
       int notCheckedIn = 0;
@@ -125,22 +125,24 @@ class _FacilityAdminDashboardScreenV2State
         }
       }
 
-      if (mounted) {
-        setState(() {
-          _scheduledCount = scheduled;
-          // 出勤済み = 実際の出勤記録数（予定外出勤も含む）
-          _checkedInCount = attendances.length;
-          // 未出勤 = 予定者のうちまだ出勤していない人
-          _notCheckedInCount = notCheckedIn;
-          _notRegisteredCount = notRegistered;
-          _notRegisteredUsers = notRegisteredUsers;
-          _isLoadingStats = false;
-        });
-      }
+      setState(() {
+        _scheduledCount = scheduled;
+        // 出勤済み = 実際の出勤記録数（予定外出勤も含む）
+        _checkedInCount = attendances.length;
+        // 未出勤 = 予定者のうちまだ出勤していない人
+        _notCheckedInCount = notCheckedIn;
+        _notRegisteredCount = notRegistered;
+        _notRegisteredUsers = notRegisteredUsers;
+        // 受給者証アラートもバッチで取得済み
+        _certificateAlerts = batchData.certificateAlerts;
+        _isLoadingStats = false;
+        _isLoadingAlerts = false;
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
           _isLoadingStats = false;
+          _isLoadingAlerts = false;
         });
       }
     }
