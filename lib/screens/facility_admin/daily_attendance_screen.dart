@@ -32,6 +32,7 @@ class _FacilityAdminDailyAttendanceScreenState
   late final MasterService _masterService;
   List<Attendance> _attendances = [];
   List<Map<String, dynamic>> _scheduledUsers = [];
+  int _totalScheduledCount = 0; // 曜日ごとの出勤予定者数（出勤済み含む）
   Map<String, List<EvaluationAlert>> _evaluationAlerts = {};
   Map<String, List<HealthDataPoint>> _healthHistory = {};
   bool _isLoading = true;
@@ -63,6 +64,17 @@ class _FacilityAdminDailyAttendanceScreenState
     ]);
     // 健康履歴を非同期で読み込み
     _loadHealthBatch();
+  }
+
+  /// 日付を今日に更新してデータを再読み込み（日を跨いだ場合に対応）
+  Future<void> _refreshToToday() async {
+    setState(() {
+      _selectedDate = DateTime.now();
+    });
+    await _masterService.clearUsersCache();
+    await _masterService.clearDropdownCache();
+    await _masterService.clearAlertsCache();
+    _loadData();
   }
 
   /// 健康履歴をバッチで読み込む
@@ -170,13 +182,17 @@ class _FacilityAdminDailyAttendanceScreenState
       final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
       final scheduledUsers = await _attendanceService.getScheduledUsers(dateStr);
 
-      // 出勤済みの人を除外し、名簿順を維持
+      // 全予定者数を保存（クイックステータス用）
+      final totalCount = scheduledUsers.length;
+
+      // 出勤済みの人を除外し、名簿順を維持（タブ・リスト用）
       final notCheckedInUsers = scheduledUsers
           .where((u) => u['hasCheckedIn'] != true)
           .toList();
 
       if (!mounted) return;
       setState(() {
+        _totalScheduledCount = totalCount;
         _scheduledUsers = notCheckedInUsers;
         _isLoading = false;
       });
@@ -261,13 +277,7 @@ class _FacilityAdminDailyAttendanceScreenState
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () async {
-              // 全キャッシュをクリアしてから再読み込み
-              await _masterService.clearUsersCache();
-              await _masterService.clearDropdownCache();
-              await _masterService.clearAlertsCache();
-              _loadData();
-            },
+            onPressed: _refreshToToday,
             tooltip: '再読み込み（キャッシュクリア）',
           ),
         ],

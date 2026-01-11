@@ -2172,6 +2172,8 @@ function handleCheckout(data) {
 
 /**
  * 指定日の勤怠一覧取得（一括取得で高速化）
+ * - 今日の日付：最新100行のみ検索（高速）
+ * - 過去の日付：全範囲検索（遅いが確実）
  */
 function handleGetDailyAttendance(date) {
   const sheet = getSheet(SHEET_NAMES.SUPPORT);
@@ -2183,9 +2185,22 @@ function handleGetDailyAttendance(date) {
     return createSuccessResponse({ records: [] });
   }
 
-  // 【高速化】実データの最下行から上に最大100行のみ検索
-  const maxSearchRows = Math.min(actualLastRow - 1, 100);
-  const startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+  // 今日の日付を取得（yyyy/MM/dd形式）
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+  const isToday = (date === today);
+
+  // 検索範囲を決定
+  let startRow, maxSearchRows;
+  if (isToday) {
+    // 【高速化】今日の日付：最新100行のみ検索
+    maxSearchRows = Math.min(actualLastRow - 1, 100);
+    startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+  } else {
+    // 【全範囲】過去の日付：全データを検索
+    startRow = 2;
+    maxSearchRows = actualLastRow - 1;
+  }
+
   const searchData = sheet.getRange(startRow, SUPPORT_COLS.DATE, maxSearchRows, 2).getValues();
   const targetRows = [];
 
@@ -2335,9 +2350,22 @@ function handleGetScheduledUsers(date) {
     const actualAttendance = {};
 
     if (actualLastRow >= 2) {
-      // 【高速化】実データの最下行から上に最大100行のみ検索
-      const maxSearchRows = Math.min(actualLastRow - 1, 100);
-      const startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+      // 今日の日付を取得（yyyy/MM/dd形式）
+      const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+      const isToday = (date === today);
+
+      // 検索範囲を決定
+      let startRow, maxSearchRows;
+      if (isToday) {
+        // 【高速化】今日の日付：最新100行のみ検索
+        maxSearchRows = Math.min(actualLastRow - 1, 100);
+        startRow = Math.max(2, actualLastRow - maxSearchRows + 1);
+      } else {
+        // 【全範囲】過去の日付：全データを検索
+        startRow = 2;
+        maxSearchRows = actualLastRow - 1;
+      }
+
       const searchData = attendanceSheet.getRange(startRow, SUPPORT_COLS.DATE, maxSearchRows, 2).getValues();
 
       // 指定日のデータを特定、空白行はスキップ

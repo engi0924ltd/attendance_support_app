@@ -36,6 +36,8 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   final MasterService _masterService = MasterService();
   List<Attendance> _attendances = [];
   List<Map<String, dynamic>> _scheduledUsers = [];
+  int _totalScheduledCount = 0; // 曜日ごとの出勤予定者数（出勤済み含む）
+  int _notRegisteredCount = 0; // 支援記録未登録の人数
   List<Map<String, dynamic>> _notRegisteredUsers = []; // 支援記録未登録の利用者リスト
   Map<String, List<EvaluationAlert>> _evaluationAlerts = {}; // 利用者名→アラート情報リスト
   Map<String, List<HealthDataPoint>> _healthHistory = {}; // 利用者名→健康履歴
@@ -83,6 +85,18 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
     }
     // 健康履歴を非同期で読み込み（UI表示をブロックしない）
     _loadHealthBatch();
+  }
+
+  /// 日付を今日に更新してデータを再読み込み（日を跨いだ場合に対応）
+  Future<void> _refreshToToday() async {
+    setState(() {
+      _selectedDate = DateTime.now();
+    });
+    await _masterService.clearUsersCache();
+    await _masterService.clearDropdownCache();
+    await _masterService.clearAlertsCache();
+    _loadData();
+    _loadCertificateAlerts();
   }
 
   /// 健康履歴をバッチで読み込む
@@ -217,13 +231,55 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
       final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
       final scheduledUsers = await _attendanceService.getScheduledUsers(dateStr);
 
-      // 出勤済みの人を除外し、名簿順を維持
+      // 全予定者数を保存（クイックステータス用）
+      final totalCount = scheduledUsers.length;
+
+      // 記録未カウント（施設管理者ダッシュボードと同じロジック）
+      int notRegistered = 0;
+      final notRegisteredUsers = <Map<String, dynamic>>[];
+
+      for (final user in scheduledUsers) {
+        final hasCheckedIn = user['hasCheckedIn'] as bool? ?? false;
+        final attendance = user['attendance'] as Attendance?;
+        final userName = user['userName'] as String? ?? '';
+
+        if (hasCheckedIn) {
+          // 出勤済みで支援記録未入力
+          if (attendance != null && !attendance.hasSupportRecord) {
+            notRegistered++;
+            notRegisteredUsers.add({
+              'userName': userName,
+              'status': attendance.attendanceStatus ?? '出勤',
+              'attendance': attendance,
+            });
+          }
+        } else {
+          // 欠勤・事前連絡あり欠勤で支援記録未入力もカウント
+          if (attendance != null) {
+            final status = attendance.attendanceStatus;
+            final isAbsent = status == '欠勤' || status == '事前連絡あり欠勤';
+            if (isAbsent && !attendance.hasSupportRecord) {
+              notRegistered++;
+              notRegisteredUsers.add({
+                'userName': userName,
+                'status': status,
+                'attendance': attendance,
+              });
+            }
+          }
+        }
+      }
+
+      // 出勤済みの人を除外し、名簿順を維持（タブ・リスト用）
       final notCheckedInUsers = scheduledUsers
           .where((u) => u['hasCheckedIn'] != true)
           .toList();
 
       if (!mounted) return;
       setState(() {
+        _totalScheduledCount = totalCount;
+        _notRegisteredCount = notRegistered;
+        _notRegisteredUsers = notRegisteredUsers;
         _scheduledUsers = notCheckedInUsers;
       });
     } catch (e) {
@@ -493,13 +549,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () async {
-              // 全キャッシュをクリアしてから再読み込み
-              await _masterService.clearUsersCache();
-              await _masterService.clearDropdownCache();
-              await _masterService.clearAlertsCache();
-              _loadData();
-            },
+            onPressed: _refreshToToday,
             tooltip: '再読み込み（キャッシュクリア）',
           ),
           IconButton(
@@ -548,14 +598,14 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
 
   /// V2: クイックステータス表示
   Widget _buildQuickStats() {
-    // 出勤予定数
-    final scheduled = _scheduledUsers.length;
+    // 出勤予定数（曜日ごとの全予定者数、出勤済み含む）
+    final scheduled = _totalScheduledCount;
     // 出勤済み数（実際に出勤登録した人数）
     final checkedIn = _attendances.length;
     // 未出勤数（予定者のうちまだ出勤していない人）
-    final notCheckedIn = _scheduledUsers.where((u) => u['hasCheckedIn'] != true).length;
-    // 支援記録未登録数
-    final notRegistered = _attendances.where((a) => !a.hasSupportRecord).length;
+    final notCheckedIn = _scheduledUsers.length;
+    // 支援記録未登録数（出勤者 + 欠勤・事前連絡あり欠勤で未入力）
+    final notRegistered = _notRegisteredCount;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -582,7 +632,7 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
               ),
               // 更新ボタン
               GestureDetector(
-                onTap: _isLoading ? null : _loadData,
+                onTap: _isLoading ? null : _refreshToToday,
                 child: _isLoading
                     ? const SizedBox(
                         width: 18,

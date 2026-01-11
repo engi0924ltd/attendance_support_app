@@ -97,10 +97,11 @@ class MasterAuthService {
     await clearFacilityTimeRounding();
   }
 
-  /// セッションのみログアウト（認証情報は維持）
+  /// セッションのみログアウト（認証情報・施設情報は維持）
+  /// 施設コードで設定した施設情報（GAS URL等）は保持し、再ログイン時に施設コード入力不要にする
   Future<void> logoutSession() async {
-    await clearFacilityGasUrl();
-    await clearFacilityTimeRounding();
+    // 施設情報（facility_gas_url, facility_time_rounding）は維持する
+    // 完全ログアウト（logout()）の場合のみ施設情報をクリアする
   }
 
   /// 施設のGAS URLを保存
