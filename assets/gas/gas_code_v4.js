@@ -683,8 +683,8 @@ function getDailyAttendanceData(supportSheet, date) {
     return [];
   }
 
-  // 今日の日付を取得（yyyy/MM/dd形式）
-  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+  // 今日の日付を取得（yyyy-MM-dd形式）
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
   const isToday = (date === today);
 
   // 検索範囲を決定
@@ -706,17 +706,12 @@ function getDailyAttendanceData(supportSheet, date) {
     const rowDate = row[0];
     if (!rowDate) continue;
 
-    let formattedDate = '';
-    if (rowDate instanceof Date) {
-      formattedDate = Utilities.formatDate(rowDate, 'Asia/Tokyo', 'yyyy/MM/dd');
-    } else {
-      formattedDate = String(rowDate).substring(0, 10).replace(/-/g, '/');
-    }
+    const formattedDate = formatDate(rowDate);
 
     if (formattedDate === date) {
       const userName = row[1];
       const attendanceStatus = row[3];
-      const hasSupportRecord = !!(row[4] || row[5] || row[6] || row[30] || row[31]);
+      const hasSupportRecord = !!row[25]; // Z列（本人の状況）で判定
 
       attendances.push({
         date: date,
@@ -742,9 +737,9 @@ function getDailyAttendanceData(supportSheet, date) {
  * 出勤予定者データを取得（バッチAPI用内部関数）
  */
 function getScheduledUsersData(masterSheet, supportSheet, date) {
-  const targetDate = new Date(date.replace(/\//g, '-'));
+  const targetDate = new Date(date);
   const dayOfWeek = targetDate.getDay();
-  const dayColIndex = (dayOfWeek === 0) ? 9 : 3 + dayOfWeek; // D-J列
+  const dayColIndex = (dayOfWeek === 0) ? 9 : 2 + dayOfWeek; // D-J列（配列インデックス: D=3, E=4, ... J=9）
 
   const masterLastRow = masterSheet.getLastRow();
   if (masterLastRow < MASTER_CONFIG.USER_DATA_START_ROW) {
@@ -762,7 +757,11 @@ function getScheduledUsersData(masterSheet, supportSheet, date) {
     const scheduledAttendance = masterData[i][dayColIndex];
 
     if (!name || name === '' || status !== '契約中') continue;
-    if (!scheduledAttendance || scheduledAttendance === '' || scheduledAttendance === '休み') continue;
+
+    // 空白、休み、非利用日はスキップ
+    const scheduledStr = String(scheduledAttendance).trim();
+    if (!scheduledAttendance || scheduledAttendance === '' ||
+        scheduledStr === '休み' || scheduledStr === '非利用日' || scheduledStr.includes('非利用')) continue;
 
     scheduledUsers.push({
       userName: name,
@@ -794,19 +793,14 @@ function getScheduledUsersData(masterSheet, supportSheet, date) {
       const rowDate = row[0];
       if (!rowDate) continue;
 
-      let formattedDate = '';
-      if (rowDate instanceof Date) {
-        formattedDate = Utilities.formatDate(rowDate, 'Asia/Tokyo', 'yyyy/MM/dd');
-      } else {
-        formattedDate = String(rowDate).substring(0, 10).replace(/-/g, '/');
-      }
+      const formattedDate = formatDate(rowDate);
 
       if (formattedDate === date) {
         const userName = row[1];
         const userIndex = scheduledUsers.findIndex(u => u.userName === userName);
 
         if (userIndex !== -1) {
-          const hasSupportRecord = !!(row[4] || row[5] || row[6] || row[30] || row[31]);
+          const hasSupportRecord = !!row[25]; // Z列（本人の状況）で判定
           scheduledUsers[userIndex].hasCheckedIn = true;
           scheduledUsers[userIndex].attendance = {
             date: date,
@@ -870,10 +864,9 @@ function getCertificateAlertsData(masterSheet, rosterSheet) {
     const userName = rosterData[i][0];
     if (!userName || !activeUserNames.includes(userName)) continue;
 
-    const supplyStartStr = rosterData[i][23];
-    const supplyEndStr = rosterData[i][24];
-    const applyStartStr = rosterData[i][25];
-    const applyEndStr = rosterData[i][26];
+    // AC列: 支給決定期間有効期限、AE列: 適用期間有効期限
+    const supplyEndStr = rosterData[i][27];  // AC列（B列起点でindex 27）
+    const applyEndStr = rosterData[i][29];   // AE列（B列起点でindex 29）
 
     const expiredItems = [];
 
@@ -2564,8 +2557,8 @@ function handleGetDailyAttendance(date) {
     return createSuccessResponse({ records: [] });
   }
 
-  // 今日の日付を取得（yyyy/MM/dd形式）
-  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+  // 今日の日付を取得（yyyy-MM-dd形式）
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
   const isToday = (date === today);
 
   // 検索範囲を決定

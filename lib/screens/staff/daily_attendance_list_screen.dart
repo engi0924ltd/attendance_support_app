@@ -7,6 +7,7 @@ import '../../services/master_service.dart';
 import '../../config/constants.dart';
 import '../../widgets/health_line_chart.dart';
 import '../../theme/app_theme_v2.dart';
+import '../../utils/quick_status_helper.dart';
 import '../common/menu_selection_screen.dart';
 import '../common/tasks_settings_screen.dart';
 import 'user_list_screen.dart';
@@ -92,41 +93,9 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
 
       // === 出勤予定者の処理 ===
       final scheduledUsers = batchData.scheduledUsers;
-      final totalCount = scheduledUsers.length;
 
-      // 記録未カウント（施設管理者ダッシュボードと同じロジック）
-      int notRegistered = 0;
-      final notRegisteredUsers = <Map<String, dynamic>>[];
-
-      for (final user in scheduledUsers) {
-        final hasCheckedIn = user['hasCheckedIn'] as bool? ?? false;
-        final attendance = user['attendance'] as Attendance?;
-        final userName = user['userName'] as String? ?? '';
-
-        if (hasCheckedIn) {
-          if (attendance != null && !attendance.hasSupportRecord) {
-            notRegistered++;
-            notRegisteredUsers.add({
-              'userName': userName,
-              'status': attendance.attendanceStatus ?? '出勤',
-              'attendance': attendance,
-            });
-          }
-        } else {
-          if (attendance != null) {
-            final status = attendance.attendanceStatus;
-            final isAbsent = status == '欠勤' || status == '事前連絡あり欠勤';
-            if (isAbsent && !attendance.hasSupportRecord) {
-              notRegistered++;
-              notRegisteredUsers.add({
-                'userName': userName,
-                'status': status,
-                'attendance': attendance,
-              });
-            }
-          }
-        }
-      }
+      // クイックステータスを計算（共通ヘルパー使用）
+      final quickStatus = calculateQuickStatus(scheduledUsers, attendances);
 
       // 出勤済みの人を除外し、名簿順を維持（タブ・リスト用）
       final notCheckedInUsers = scheduledUsers
@@ -159,9 +128,9 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
       setState(() {
         _attendances = attendances;
         _scheduledUsers = notCheckedInUsers;
-        _totalScheduledCount = totalCount;
-        _notRegisteredCount = notRegistered;
-        _notRegisteredUsers = notRegisteredUsers;
+        _totalScheduledCount = quickStatus.scheduled;
+        _notRegisteredCount = quickStatus.notRegistered;
+        _notRegisteredUsers = quickStatus.notRegisteredUsers;
         _certificateAlerts = batchData.certificateAlerts;
         _evaluationAlerts = groupedAlerts;
         _isLoading = false;
@@ -323,44 +292,8 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
       final dateStr = DateFormat(AppConstants.dateFormat).format(_selectedDate);
       final scheduledUsers = await _attendanceService.getScheduledUsers(dateStr);
 
-      // 全予定者数を保存（クイックステータス用）
-      final totalCount = scheduledUsers.length;
-
-      // 記録未カウント（施設管理者ダッシュボードと同じロジック）
-      int notRegistered = 0;
-      final notRegisteredUsers = <Map<String, dynamic>>[];
-
-      for (final user in scheduledUsers) {
-        final hasCheckedIn = user['hasCheckedIn'] as bool? ?? false;
-        final attendance = user['attendance'] as Attendance?;
-        final userName = user['userName'] as String? ?? '';
-
-        if (hasCheckedIn) {
-          // 出勤済みで支援記録未入力
-          if (attendance != null && !attendance.hasSupportRecord) {
-            notRegistered++;
-            notRegisteredUsers.add({
-              'userName': userName,
-              'status': attendance.attendanceStatus ?? '出勤',
-              'attendance': attendance,
-            });
-          }
-        } else {
-          // 欠勤・事前連絡あり欠勤で支援記録未入力もカウント
-          if (attendance != null) {
-            final status = attendance.attendanceStatus;
-            final isAbsent = status == '欠勤' || status == '事前連絡あり欠勤';
-            if (isAbsent && !attendance.hasSupportRecord) {
-              notRegistered++;
-              notRegisteredUsers.add({
-                'userName': userName,
-                'status': status,
-                'attendance': attendance,
-              });
-            }
-          }
-        }
-      }
+      // クイックステータスを計算（共通ヘルパー使用）
+      final quickStatus = calculateQuickStatus(scheduledUsers, _attendances);
 
       // 出勤済みの人を除外し、名簿順を維持（タブ・リスト用）
       final notCheckedInUsers = scheduledUsers
@@ -369,9 +302,9 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
 
       if (!mounted) return;
       setState(() {
-        _totalScheduledCount = totalCount;
-        _notRegisteredCount = notRegistered;
-        _notRegisteredUsers = notRegisteredUsers;
+        _totalScheduledCount = quickStatus.scheduled;
+        _notRegisteredCount = quickStatus.notRegistered;
+        _notRegisteredUsers = quickStatus.notRegisteredUsers;
         _scheduledUsers = notCheckedInUsers;
       });
     } catch (e) {
@@ -1294,21 +1227,34 @@ class _DailyAttendanceListScreenState extends State<DailyAttendanceListScreen>
   /// 出欠状態と勤務時刻を表示するテキスト
   Widget _buildAttendanceStatusText(Attendance attendance) {
     final status = attendance.attendanceStatus ?? "未入力";
-    final checkinTime = attendance.checkinTime;
-    final checkoutTime = attendance.checkoutTime;
+    final checkinTime = _formatTimeString(attendance.checkinTime);
+    final checkoutTime = _formatTimeString(attendance.checkoutTime);
 
     // 勤務時刻の表示文字列を構築
     String timeText = '';
     if (checkinTime != null) {
-      final startTime = checkinTime;
       final endTime = checkoutTime ?? '未退勤';
-      timeText = ' ($startTime - $endTime)';
+      timeText = ' ($checkinTime - $endTime)';
     } else if (checkoutTime != null) {
-      // 出勤時刻がないが退勤時刻がある場合（通常はあり得ないが念のため）
       timeText = ' (--:-- - $checkoutTime)';
     }
 
     return Text('出欠: $status$timeText');
+  }
+
+  /// 時刻文字列をHH:mm形式にフォーマット
+  String? _formatTimeString(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return null;
+    // 既にHH:mm形式の場合はそのまま返す
+    if (RegExp(r'^\d{1,2}:\d{2}$').hasMatch(timeStr)) return timeStr;
+    // ISO形式（1899-12-30T01:00:00.000Z等）の場合、時刻部分を抽出してJSTに変換
+    try {
+      final dt = DateTime.parse(timeStr);
+      final jst = dt.toLocal();
+      return '${jst.hour.toString().padLeft(2, '0')}:${jst.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return timeStr;
+    }
   }
 
   /// ドロワーメニュー（V2デザイン）

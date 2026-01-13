@@ -6,6 +6,7 @@ import '../../theme/app_theme_v2.dart';
 import '../../services/master_auth_service.dart';
 import '../../services/attendance_service.dart';
 import '../../config/constants.dart';
+import '../../utils/quick_status_helper.dart';
 import '../common/menu_selection_screen.dart';
 import '../staff/user_detail_screen.dart';
 import 'staff_list_screen.dart';
@@ -85,54 +86,15 @@ class _FacilityAdminDashboardScreenV2State
       final scheduledUsers = batchData.scheduledUsers;
       final attendances = batchData.dailyAttendances;
 
-      int scheduled = 0;
-      int notCheckedIn = 0;
-      int notRegistered = 0;
-      final notRegisteredUsers = <Map<String, dynamic>>[];
-
-      for (final user in scheduledUsers) {
-        final hasCheckedIn = user['hasCheckedIn'] as bool? ?? false;
-        final attendance = user['attendance'] as Attendance?;
-        final userName = user['userName'] as String? ?? '';
-
-        scheduled++;
-
-        if (hasCheckedIn) {
-          // 出勤済みで支援記録未入力
-          if (attendance != null && !attendance.hasSupportRecord) {
-            notRegistered++;
-            notRegisteredUsers.add({
-              'userName': userName,
-              'status': attendance.attendanceStatus ?? '出勤',
-              'attendance': attendance,
-            });
-          }
-        } else {
-          notCheckedIn++;
-          // 欠勤・事前連絡あり欠勤で支援記録未入力もカウント
-          if (attendance != null) {
-            final status = attendance.attendanceStatus;
-            final isAbsent = status == '欠勤' || status == '事前連絡あり欠勤';
-            if (isAbsent && !attendance.hasSupportRecord) {
-              notRegistered++;
-              notRegisteredUsers.add({
-                'userName': userName,
-                'status': status,
-                'attendance': attendance,
-              });
-            }
-          }
-        }
-      }
+      // クイックステータスを計算（共通ヘルパー使用）
+      final quickStatus = calculateQuickStatus(scheduledUsers, attendances);
 
       setState(() {
-        _scheduledCount = scheduled;
-        // 出勤済み = 実際の出勤記録数（予定外出勤も含む）
-        _checkedInCount = attendances.length;
-        // 未出勤 = 予定者のうちまだ出勤していない人
-        _notCheckedInCount = notCheckedIn;
-        _notRegisteredCount = notRegistered;
-        _notRegisteredUsers = notRegisteredUsers;
+        _scheduledCount = quickStatus.scheduled;
+        _checkedInCount = quickStatus.checkedIn;
+        _notCheckedInCount = quickStatus.notCheckedIn;
+        _notRegisteredCount = quickStatus.notRegistered;
+        _notRegisteredUsers = quickStatus.notRegisteredUsers;
         // 受給者証アラートもバッチで取得済み
         _certificateAlerts = batchData.certificateAlerts;
         _isLoadingStats = false;

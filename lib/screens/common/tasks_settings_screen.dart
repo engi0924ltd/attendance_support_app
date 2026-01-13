@@ -128,6 +128,8 @@ class _TasksSettingsScreenState extends State<TasksSettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('作業登録・編集'),
+        backgroundColor: const Color(0xFF4CAF50),
+        foregroundColor: Colors.white,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
