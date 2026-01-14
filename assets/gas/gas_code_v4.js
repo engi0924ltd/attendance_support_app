@@ -389,6 +389,9 @@ function doGet(e) {
     } else if (action === 'analytics/municipality-stats') {
       // 市区町村別利用者統計
       return handleGetMunicipalityStats();
+    } else if (action === 'analytics/age-distribution') {
+      // 年齢別分布統計
+      return handleGetAgeDistribution();
     } else if (action.startsWith('analytics/user-attendance-history/')) {
       // 利用者の過去6ヶ月の出勤履歴
       const userName = decodeURIComponent(action.split('/')[2]);
@@ -5131,6 +5134,80 @@ function handleGetMunicipalityStats() {
     });
   } catch (error) {
     return createErrorResponse('市区町村統計取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 年齢別分布を取得
+ * 名簿シートのD列（年齢）から10代、20代、30代...と分類
+ * 契約中・退所済みを問わず、名簿に登録のある全利用者が対象
+ */
+function handleGetAgeDistribution() {
+  try {
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+
+    // 名簿シートから全データを取得
+    const rosterLastRow = rosterSheet.getLastRow();
+    const ageDistribution = {}; // { ageGroup: { count: number, users: string[] } }
+    let totalCount = 0;
+
+    if (rosterLastRow >= 3) {
+      const numRows = rosterLastRow - 2;
+      // B列:名前, D列:年齢を取得
+      const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+      const ageData = rosterSheet.getRange(3, ROSTER_COLS.AGE, numRows, 1).getValues();
+
+      for (let i = 0; i < numRows; i++) {
+        const name = nameData[i][0];
+        const age = ageData[i][0];
+
+        // 名前がある行のみカウント
+        if (name && name !== '') {
+          // 年齢を10代、20代...に分類
+          let ageGroup = '未設定';
+          if (age !== '' && age !== null && !isNaN(age)) {
+            const ageNum = parseInt(age);
+            if (ageNum < 10) {
+              ageGroup = '10歳未満';
+            } else if (ageNum >= 100) {
+              ageGroup = '100歳以上';
+            } else {
+              const decade = Math.floor(ageNum / 10) * 10;
+              ageGroup = decade + '代';
+            }
+          }
+
+          if (!ageDistribution[ageGroup]) {
+            ageDistribution[ageGroup] = { count: 0, users: [] };
+          }
+          ageDistribution[ageGroup].count++;
+          ageDistribution[ageGroup].users.push(name);
+          totalCount++;
+        }
+      }
+    }
+
+    // 年代順にソート（10代、20代、30代...の順）
+    const ageOrder = ['10歳未満', '10代', '20代', '30代', '40代', '50代', '60代', '70代', '80代', '90代', '100歳以上', '未設定'];
+    const stats = Object.entries(ageDistribution)
+      .map(([name, data]) => ({
+        name: name,
+        count: data.count,
+        percentage: totalCount > 0 ? Math.round((data.count / totalCount) * 1000) / 10 : 0,
+        users: data.users
+      }))
+      .sort((a, b) => {
+        const indexA = ageOrder.indexOf(a.name);
+        const indexB = ageOrder.indexOf(b.name);
+        return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+      });
+
+    return createSuccessResponse({
+      totalUsers: totalCount,
+      ageGroups: stats
+    });
+  } catch (error) {
+    return createErrorResponse('年齢別分布取得エラー: ' + error.message);
   }
 }
 

@@ -262,6 +262,12 @@ class AttendanceService {
     return response;
   }
 
+  /// 年齢別分布を取得
+  Future<Map<String, dynamic>> getAgeDistribution() async {
+    final response = await _apiService.get('analytics/age-distribution');
+    return response;
+  }
+
   /// 利用者の過去6ヶ月の出勤履歴を取得
   Future<Map<String, dynamic>> getUserAttendanceHistory(String userName) async {
     final encodedName = Uri.encodeComponent(userName);

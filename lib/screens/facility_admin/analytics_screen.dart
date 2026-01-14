@@ -56,6 +56,10 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
   List<Map<String, dynamic>> _municipalityStats = [];
   int _municipalityTotalUsers = 0;
 
+  // 年齢別分布
+  List<Map<String, dynamic>> _ageDistribution = [];
+  int _ageTotalUsers = 0;
+
   /// 当月かどうか
   bool get _isCurrentMonth {
     final now = DateTime.now();
@@ -88,6 +92,7 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
         _loadAnalyticsBatch(),
         _loadYearlyStats(),  // 施設情報用の年度統計
         _loadMunicipalityStats(),  // 市区町村別統計
+        _loadAgeDistribution(),  // 年齢別分布
       ];
 
       // 当月の場合のみ利用者一覧を読み込む
@@ -192,6 +197,27 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
     }
   }
 
+  /// 年齢別分布を読み込む
+  Future<void> _loadAgeDistribution() async {
+    try {
+      final result = await _attendanceService.getAgeDistribution();
+      if (!mounted) return;
+
+      setState(() {
+        _ageTotalUsers = result['totalUsers'] as int? ?? 0;
+        _ageDistribution = (result['ageGroups'] as List<dynamic>?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ?? [];
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _ageDistribution = [];
+        _ageTotalUsers = 0;
+      });
+    }
+  }
+
   /// 月を変更
   void _changeMonth(int delta) {
     setState(() {
@@ -269,6 +295,9 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                         const SizedBox(height: 24),
                         // 市区町村別統計
                         _buildMunicipalityStatsSection(),
+                        const SizedBox(height: 24),
+                        // 年齢別分布
+                        _buildAgeDistributionSection(),
                         const SizedBox(height: 24),
                         // 当月のみ: 曜日別出勤予定
                         if (_isCurrentMonth) ...[
@@ -907,6 +936,212 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.teal.shade700,
+                          ),
+                        ),
+                      ),
+                      title: Text(userName),
+                      trailing: Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey.shade400,
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showUserAttendanceHistoryDialog(userName);
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 年齢別分布セクション
+  Widget _buildAgeDistributionSection() {
+    // カードの色リスト（年代ごとにグラデーション）
+    const cardColors = [
+      Colors.blue,
+      Colors.cyan,
+      Colors.teal,
+      Colors.green,
+      Colors.lime,
+      Colors.amber,
+      Colors.orange,
+      Colors.deepOrange,
+      Colors.red,
+      Colors.pink,
+      Colors.purple,
+      Colors.grey,
+    ];
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.cake, color: Colors.orange.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  '年齢別分布',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '全$_ageTotalUsers名',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            if (_ageDistribution.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text(
+                    '年齢データがありません',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              )
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: _ageDistribution.length,
+                itemBuilder: (context, index) {
+                  final stat = _ageDistribution[index];
+                  final name = stat['name'] as String? ?? '未設定';
+                  final count = stat['count'] as int? ?? 0;
+                  final percentage = (stat['percentage'] as num?)?.toDouble() ?? 0.0;
+                  final users = (stat['users'] as List<dynamic>?) ?? [];
+                  final color = cardColors[index % cardColors.length];
+
+                  return InkWell(
+                    onTap: () => _showAgeGroupUsersDialog(name, users),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: color.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: color.shade700,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$count名',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: color.shade700,
+                            ),
+                          ),
+                          Text(
+                            '${percentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: color.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 年齢別の利用者一覧ダイアログ
+  void _showAgeGroupUsersDialog(String ageGroup, List<dynamic> users) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.cake, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$ageGroup（${users.length}名）',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: users.isEmpty
+              ? const Center(
+                  child: Text(
+                    '利用者がいません',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final userName = users[index].toString();
+                    return ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: Colors.orange.shade100,
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade700,
                           ),
                         ),
                       ),
