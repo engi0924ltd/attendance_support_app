@@ -41,6 +41,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // 当月退所者（analytics/batchから取得）
   List<Map<String, dynamic>> _departedUsers = [];
 
+  // 市区町村別統計
+  List<Map<String, dynamic>> _municipalityStats = [];
+  int _municipalityTotalUsers = 0;
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +63,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         _loadFacilityStats(),
         _loadWeeklySchedule(),
         _loadUsers(),
+        _loadMunicipalityStats(),
       ]);
 
       if (!mounted) return;
@@ -108,6 +113,27 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     setState(() {
       _users = users;
     });
+  }
+
+  /// 市区町村別統計を読み込む
+  Future<void> _loadMunicipalityStats() async {
+    try {
+      final result = await _attendanceService.getMunicipalityStats();
+      if (!mounted) return;
+
+      setState(() {
+        _municipalityTotalUsers = result['totalUsers'] as int? ?? 0;
+        _municipalityStats = (result['municipalities'] as List<dynamic>?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ?? [];
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _municipalityStats = [];
+        _municipalityTotalUsers = 0;
+      });
+    }
   }
 
   /// 個人の統計を読み込む
@@ -168,6 +194,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       children: [
                         // 施設全体の統計
                         _buildFacilityStatsSection(),
+                        const SizedBox(height: 24),
+                        // 市区町村別統計
+                        _buildMunicipalityStatsSection(),
                         const SizedBox(height: 24),
                         // 曜日別出勤予定
                         _buildWeeklyScheduleSection(),
@@ -324,6 +353,220 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 市区町村別統計セクション
+  Widget _buildMunicipalityStatsSection() {
+    // カードの色リスト
+    const cardColors = [
+      Colors.blue,
+      Colors.teal,
+      Colors.orange,
+      Colors.purple,
+      Colors.pink,
+      Colors.indigo,
+      Colors.green,
+      Colors.amber,
+    ];
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.location_city, color: Colors.teal.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  '市区町村別利用者数',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '全$_municipalityTotalUsers名',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            if (_municipalityStats.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text(
+                    '市区町村データがありません',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              )
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: _municipalityStats.length,
+                itemBuilder: (context, index) {
+                  final stat = _municipalityStats[index];
+                  final name = stat['name'] as String? ?? '未設定';
+                  final count = stat['count'] as int? ?? 0;
+                  final percentage = (stat['percentage'] as num?)?.toDouble() ?? 0.0;
+                  final users = (stat['users'] as List<dynamic>?) ?? [];
+                  final color = cardColors[index % cardColors.length];
+
+                  return InkWell(
+                    onTap: () => _showMunicipalityUsersDialog(name, users),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: color.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: color.shade700,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$count名',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: color.shade700,
+                            ),
+                          ),
+                          Text(
+                            '${percentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: color.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 市区町村の利用者一覧ダイアログ
+  void _showMunicipalityUsersDialog(String municipalityName, List<dynamic> users) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.location_city, color: Colors.teal.shade700),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$municipalityName（${users.length}名）',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: users.isEmpty
+              ? const Center(
+                  child: Text(
+                    '利用者がいません',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final userName = users[index].toString();
+                    return ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: Colors.teal.shade100,
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.teal.shade700,
+                          ),
+                        ),
+                      ),
+                      title: Text(userName),
+                      trailing: Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey.shade400,
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showUserAttendanceHistoryDialog(userName);
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 利用者の出勤履歴ダイアログ（過去6ヶ月）
+  void _showUserAttendanceHistoryDialog(String userName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _StaffUserAttendanceHistoryDialog(
+        userName: userName,
+        attendanceService: _attendanceService,
       ),
     );
   }
@@ -1321,5 +1564,311 @@ class FullScreenHealthChart extends StatelessWidget {
       if (value <= 3) return Colors.orange;
       return Colors.red;
     }
+  }
+}
+
+/// 利用者出勤履歴ダイアログ（過去6ヶ月）- 支援者画面用
+class _StaffUserAttendanceHistoryDialog extends StatefulWidget {
+  final String userName;
+  final AttendanceService attendanceService;
+
+  const _StaffUserAttendanceHistoryDialog({
+    required this.userName,
+    required this.attendanceService,
+  });
+
+  @override
+  State<_StaffUserAttendanceHistoryDialog> createState() => _StaffUserAttendanceHistoryDialogState();
+}
+
+class _StaffUserAttendanceHistoryDialogState extends State<_StaffUserAttendanceHistoryDialog> {
+  bool _isLoading = true;
+  String? _errorMessage;
+  int _totalDays = 0;
+  int _totalRemoteDays = 0;
+  Map<String, List<Map<String, dynamic>>> _monthlyData = {};
+  Map<String, List<Map<String, dynamic>>> _remoteMonthlyData = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final result = await widget.attendanceService.getUserAttendanceHistory(widget.userName);
+      if (!mounted) return;
+
+      setState(() {
+        _totalDays = result['totalDays'] as int? ?? 0;
+        _totalRemoteDays = result['totalRemoteDays'] as int? ?? 0;
+        _monthlyData = _parseMonthlyData(result['monthlyData']);
+        _remoteMonthlyData = _parseMonthlyData(result['remoteMonthlyData']);
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = '履歴の取得に失敗しました';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Map<String, List<Map<String, dynamic>>> _parseMonthlyData(dynamic data) {
+    if (data == null) return {};
+    final Map<String, dynamic> rawData = Map<String, dynamic>.from(data as Map);
+    return rawData.map((key, value) {
+      final List<dynamic> list = value as List<dynamic>;
+      return MapEntry(
+        key,
+        list.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      titlePadding: const EdgeInsets.fromLTRB(8, 16, 16, 0),
+      title: Row(
+        children: [
+          // 戻るボタン
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back),
+            color: Colors.grey.shade600,
+            tooltip: '戻る',
+          ),
+          Icon(Icons.calendar_month, color: Colors.blue.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.userName,
+                  style: const TextStyle(fontSize: 18),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 450,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _errorMessage != null
+                ? Center(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  )
+                : _buildHistoryContent(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('閉じる'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHistoryContent() {
+    // 月のキーをソート（新しい順）
+    final allMonths = <String>{
+      ..._monthlyData.keys,
+      ..._remoteMonthlyData.keys,
+    }.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    if (allMonths.isEmpty) {
+      return const Center(
+        child: Text(
+          '過去6ヶ月の出勤記録がありません',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: allMonths.length,
+      itemBuilder: (context, index) {
+        final monthKey = allMonths[index];
+        final attendanceList = _monthlyData[monthKey] ?? [];
+        final remoteList = _remoteMonthlyData[monthKey] ?? [];
+
+        // 月表示用のフォーマット
+        final year = monthKey.substring(0, 4);
+        final month = monthKey.substring(5, 7);
+        final monthLabel = '$year年$month月';
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ExpansionTile(
+            initiallyExpanded: index == 0,
+            title: Row(
+              children: [
+                Text(
+                  monthLabel,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                if (attendanceList.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '出勤${attendanceList.length}日',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                if (remoteList.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '在宅${remoteList.length}日',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            children: [
+              // 2カラムレイアウト: 左に出勤、右に在宅
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 左カラム: 出勤
+                    Expanded(
+                      child: _buildDateColumn('出勤', attendanceList, Colors.blue),
+                    ),
+                    const SizedBox(width: 16),
+                    // 右カラム: 在宅
+                    Expanded(
+                      child: _buildDateColumn('在宅', remoteList, Colors.green),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDateColumn(String label, List<Map<String, dynamic>> dates, MaterialColor color) {
+    // 日付を昇順にソート（1日〜31日）
+    final sortedDates = List<Map<String, dynamic>>.from(dates);
+    sortedDates.sort((a, b) {
+      final dateA = a['date'] as String? ?? '';
+      final dateB = b['date'] as String? ?? '';
+      return dateA.compareTo(dateB);
+    });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ヘッダー: ラベルと日数
+        Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: color.shade700,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${dates.length}日',
+              style: TextStyle(
+                fontSize: 12,
+                color: color.shade600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        // 日付一覧（左寄せ）
+        if (sortedDates.isEmpty)
+          Text(
+            'なし',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade500,
+            ),
+          )
+        else
+          Align(
+            alignment: Alignment.topLeft,
+            child: Wrap(
+              alignment: WrapAlignment.start,
+              spacing: 4,
+              runSpacing: 4,
+              children: sortedDates.map((item) {
+                final dateStr = item['date'] as String? ?? '';
+                final status = item['status'] as String? ?? '';
+                // 日付部分のみ表示（M/D形式：1/12のように）
+                String displayDay = dateStr;
+                if (dateStr.length >= 10) {
+                  final month = int.tryParse(dateStr.substring(5, 7)) ?? 0;
+                  final day = int.tryParse(dateStr.substring(8, 10)) ?? 0;
+                  displayDay = '$month/$day';
+                }
+
+                // ステータスに応じた色
+                MaterialColor statusColor = color;
+                if (status == '遅刻') {
+                  statusColor = Colors.orange;
+                } else if (status == '早退') {
+                  statusColor = Colors.purple;
+                } else if (status == '施設外') {
+                  statusColor = Colors.teal;
+                }
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    status != '出勤' && status != '在宅' ? '$displayDay($status)' : displayDay,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: statusColor.shade700,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
   }
 }
