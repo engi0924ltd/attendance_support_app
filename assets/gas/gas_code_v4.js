@@ -392,6 +392,9 @@ function doGet(e) {
     } else if (action === 'analytics/age-distribution') {
       // 年齢別分布統計
       return handleGetAgeDistribution();
+    } else if (action === 'analytics/disability-type-distribution') {
+      // 障害種別分布統計
+      return handleGetDisabilityTypeDistribution();
     } else if (action.startsWith('analytics/user-attendance-history/')) {
       // 利用者の過去6ヶ月の出勤履歴
       const userName = decodeURIComponent(action.split('/')[2]);
@@ -5208,6 +5211,69 @@ function handleGetAgeDistribution() {
     });
   } catch (error) {
     return createErrorResponse('年齢別分布取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 障害種別分布を取得
+ * 名簿シートのX列（障害種別）から分類
+ * 契約中・退所済みを問わず、名簿に登録のある全利用者が対象
+ */
+function handleGetDisabilityTypeDistribution() {
+  try {
+    const rosterSheet = getSheet(SHEET_NAMES.ROSTER);
+
+    // 名簿シートから全データを取得
+    const rosterLastRow = rosterSheet.getLastRow();
+    const disabilityDistribution = {}; // { type: { count: number, users: string[] } }
+    let totalCount = 0;
+
+    if (rosterLastRow >= 3) {
+      const numRows = rosterLastRow - 2;
+      // B列:名前, X列:障害種別を取得
+      const nameData = rosterSheet.getRange(3, ROSTER_COLS.NAME, numRows, 1).getValues();
+      const typeData = rosterSheet.getRange(3, ROSTER_COLS.DISABILITY_TYPE, numRows, 1).getValues();
+
+      for (let i = 0; i < numRows; i++) {
+        const name = nameData[i][0];
+        const disabilityType = typeData[i][0];
+
+        // 名前がある行のみカウント
+        if (name && name !== '') {
+          const typeName = disabilityType ? String(disabilityType).trim() : '未設定';
+
+          if (!disabilityDistribution[typeName]) {
+            disabilityDistribution[typeName] = { count: 0, users: [] };
+          }
+          disabilityDistribution[typeName].count++;
+          disabilityDistribution[typeName].users.push(name);
+          totalCount++;
+        }
+      }
+    }
+
+    // 人数が多い順にソート（未設定は最後）
+    const stats = Object.entries(disabilityDistribution)
+      .map(([name, data]) => ({
+        name: name,
+        count: data.count,
+        percentage: totalCount > 0 ? Math.round((data.count / totalCount) * 1000) / 10 : 0,
+        users: data.users
+      }))
+      .sort((a, b) => {
+        // 未設定は最後に
+        if (a.name === '未設定') return 1;
+        if (b.name === '未設定') return -1;
+        // それ以外は人数が多い順
+        return b.count - a.count;
+      });
+
+    return createSuccessResponse({
+      totalUsers: totalCount,
+      disabilityTypes: stats
+    });
+  } catch (error) {
+    return createErrorResponse('障害種別分布取得エラー: ' + error.message);
   }
 }
 

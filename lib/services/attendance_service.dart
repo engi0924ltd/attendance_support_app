@@ -268,6 +268,12 @@ class AttendanceService {
     return response;
   }
 
+  /// 障害種別分布を取得
+  Future<Map<String, dynamic>> getDisabilityTypeDistribution() async {
+    final response = await _apiService.get('analytics/disability-type-distribution');
+    return response;
+  }
+
   /// 利用者の過去6ヶ月の出勤履歴を取得
   Future<Map<String, dynamic>> getUserAttendanceHistory(String userName) async {
     final encodedName = Uri.encodeComponent(userName);
