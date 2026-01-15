@@ -399,6 +399,10 @@ function doGet(e) {
       // 利用者の過去6ヶ月の出勤履歴
       const userName = decodeURIComponent(action.split('/')[2]);
       return handleGetUserAttendanceHistory(userName);
+    } else if (action.startsWith('analytics/user-support-records/')) {
+      // 利用者の支援記録（Z列）を取得
+      const userName = decodeURIComponent(action.split('/')[2]);
+      return handleGetUserSupportRecords(userName);
     }
 
     return createErrorResponse('無効なアクション: ' + action);
@@ -5274,6 +5278,60 @@ function handleGetDisabilityTypeDistribution() {
     });
   } catch (error) {
     return createErrorResponse('障害種別分布取得エラー: ' + error.message);
+  }
+}
+
+/**
+ * 利用者の支援記録（Z列）を取得
+ * 最新のものから最大30件を返す
+ */
+function handleGetUserSupportRecords(userName) {
+  try {
+    if (!userName) {
+      return createErrorResponse('利用者名が指定されていません');
+    }
+
+    const supportSheet = getSheet(SHEET_NAMES.SUPPORT);
+    const lastRow = supportSheet.getLastRow();
+
+    if (lastRow < 3) {
+      return createSuccessResponse({ records: [] });
+    }
+
+    const numRows = lastRow - 2;
+    // A列:日付, B列:利用者名, D列:出欠, Z列:本人の状況（支援記録）を取得
+    const data = supportSheet.getRange(3, 1, numRows, SUPPORT_COLS.USER_STATUS).getValues();
+
+    const records = [];
+    // 最新から検索するため逆順でループ
+    for (let i = numRows - 1; i >= 0 && records.length < 30; i--) {
+      const rowName = data[i][SUPPORT_COLS.USER_NAME - 1];
+      if (rowName === userName) {
+        const date = data[i][SUPPORT_COLS.DATE - 1];
+        const attendance = data[i][SUPPORT_COLS.ATTENDANCE - 1];
+        const supportRecord = data[i][SUPPORT_COLS.USER_STATUS - 1];
+
+        // 日付がある行のみ
+        if (date) {
+          const dateStr = date instanceof Date
+            ? Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+            : String(date);
+
+          records.push({
+            date: dateStr,
+            attendance: attendance || '',
+            supportRecord: supportRecord || ''
+          });
+        }
+      }
+    }
+
+    return createSuccessResponse({
+      userName: userName,
+      records: records
+    });
+  } catch (error) {
+    return createErrorResponse('支援記録取得エラー: ' + error.message);
   }
 }
 

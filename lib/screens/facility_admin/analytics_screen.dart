@@ -2439,20 +2439,26 @@ class _FacilityAdminAnalyticsScreenState extends State<FacilityAdminAnalyticsScr
               items: _users,
               itemLabel: (user) => user.name,
               onChanged: (user) {
-                setState(() {
-                  _selectedUser = user;
-                  _userStats = null;
-                });
                 if (user != null) {
-                  _loadUserStats(user.name);
+                  // ポップアップダイアログを表示
+                  _showUserAnalysisDialog(user.name);
                 }
               },
-              hint: '利用者を選択...',
+              hint: '利用者を選択して分析...',
             ),
-            const SizedBox(height: 16),
-            if (_selectedUser != null) _buildUserStatsContent(),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 利用者個人分析ポップアップを表示
+  void _showUserAnalysisDialog(String userName) {
+    showDialog(
+      context: context,
+      builder: (context) => _UserAnalysisDialog(
+        userName: userName,
+        attendanceService: _attendanceService,
       ),
     );
   }
@@ -3567,6 +3573,530 @@ class _UserAttendanceHistoryDialogState extends State<_UserAttendanceHistoryDial
                   ),
                 );
               }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 利用者個人分析ダイアログ
+class _UserAnalysisDialog extends StatefulWidget {
+  final String userName;
+  final AttendanceService attendanceService;
+
+  const _UserAnalysisDialog({
+    required this.userName,
+    required this.attendanceService,
+  });
+
+  @override
+  State<_UserAnalysisDialog> createState() => _UserAnalysisDialogState();
+}
+
+class _UserAnalysisDialogState extends State<_UserAnalysisDialog> {
+  bool _isLoading = true;
+  Map<String, dynamic>? _userStats;
+  List<Attendance> _healthHistory = [];
+  List<Map<String, dynamic>> _supportRecords = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      // 統計データ・履歴・支援記録を並列取得
+      final results = await Future.wait([
+        widget.attendanceService.getUserStats(widget.userName),
+        widget.attendanceService.getUserHistory(widget.userName),
+        widget.attendanceService.getUserSupportRecords(widget.userName),
+      ]);
+
+      if (!mounted) return;
+
+      final allHistory = results[1] as List<Attendance>;
+      final healthHistory = allHistory.take(60).toList();
+
+      final supportResponse = results[2] as Map<String, dynamic>;
+      final supportRecordsList = (supportResponse['records'] as List<dynamic>?)
+          ?.map((e) => Map<String, dynamic>.from(e))
+          .toList() ?? [];
+
+      setState(() {
+        _userStats = results[0] as Map<String, dynamic>;
+        _healthHistory = healthHistory;
+        _supportRecords = supportRecordsList;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.95,
+        height: MediaQuery.of(context).size.height * 0.85,
+        constraints: const BoxConstraints(maxWidth: 700),
+        child: Column(
+          children: [
+            // ヘッダー
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.indigo,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(Icons.person, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.userName,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // コンテンツ
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 出勤統計セクション
+                          _buildStatsSection(),
+                          const SizedBox(height: 24),
+                          // 健康推移セクション
+                          if (_healthHistory.isNotEmpty) ...[
+                            _buildHealthSection(),
+                            const SizedBox(height: 24),
+                          ],
+                          // 支援記録セクション
+                          _buildSupportRecordsSection(),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 出勤統計セクション
+  Widget _buildStatsSection() {
+    if (_userStats == null) {
+      return const Center(
+        child: Text('統計データがありません', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    final attendanceRate = _userStats!['attendanceRate'] ?? 0.0;
+    final totalWorkMinutes = _userStats!['totalWorkMinutes'] ?? 0;
+    final avgWorkMinutes = _userStats!['avgWorkMinutes'] ?? 0;
+    final attendanceDays = _userStats!['attendanceDays'] ?? 0;
+    final absentDays = _userStats!['absentDays'] ?? 0;
+
+    final totalHours = (totalWorkMinutes / 60).floor();
+    final totalMins = totalWorkMinutes % 60;
+    final avgHours = (avgWorkMinutes / 60).floor();
+    final avgMins = avgWorkMinutes % 60;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.analytics, color: Colors.indigo.shade700, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              '出勤統計',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.indigo.shade700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.pie_chart,
+                label: '出勤率',
+                value: '${(attendanceRate * 100).toStringAsFixed(1)}%',
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.timer,
+                label: '平均勤務',
+                value: '${avgHours}h${avgMins}m',
+                color: Colors.blue,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.check_circle,
+                label: '出勤日数',
+                value: '$attendanceDays日',
+                color: Colors.teal,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.cancel,
+                label: '欠勤日数',
+                value: '$absentDays日',
+                color: Colors.red,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.purple.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.purple.shade200),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.access_time, color: Colors.purple.shade700, size: 24),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '当月合計勤務時間',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  Text(
+                    '${totalHours}時間${totalMins}分',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.purple.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 健康推移セクション
+  Widget _buildHealthSection() {
+    final sortedHistory = _healthHistory.reversed.toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.show_chart, color: Colors.orange.shade700, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              '健康推移（過去${_healthHistory.length}回分）',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildHealthChartCard(sortedHistory, HealthMetricType.healthCondition),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildHealthChartCard(sortedHistory, HealthMetricType.sleepStatus),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildHealthChartCard(sortedHistory, HealthMetricType.fatigue),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildHealthChartCard(sortedHistory, HealthMetricType.stress),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHealthChartCard(List<Attendance> history, HealthMetricType type) {
+    final dataPoints = extractHealthData(history, type);
+    return HealthLineChartCard(
+      dataPoints: dataPoints,
+      type: type,
+      onTap: () => _showFullScreenHealthChart(type),
+    );
+  }
+
+  void _showFullScreenHealthChart(HealthMetricType type) {
+    final sortedHistory = _healthHistory.reversed.toList();
+    final dataPoints = extractHealthData(sortedHistory, type);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _FullScreenHealthChart(
+          dataPoints: dataPoints,
+          type: type,
+          userName: widget.userName,
+        ),
+      ),
+    );
+  }
+
+  /// 支援記録セクション
+  Widget _buildSupportRecordsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.description, color: Colors.teal.shade700, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              '支援記録',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.teal.shade700,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '（最新${_supportRecords.length}件）',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_supportRecords.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            alignment: Alignment.center,
+            child: Text(
+              '支援記録がありません',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _supportRecords.length,
+              separatorBuilder: (context, index) => Divider(
+                height: 1,
+                color: Colors.grey.shade300,
+              ),
+              itemBuilder: (context, index) {
+                final record = _supportRecords[index];
+                final dateStr = record['date'] as String? ?? '';
+                final attendance = record['attendance'] as String? ?? '';
+                final supportRecord = record['supportRecord'] as String? ?? '';
+
+                // 日付フォーマット（M/D形式）
+                String displayDate = dateStr;
+                if (dateStr.length >= 10) {
+                  final month = int.tryParse(dateStr.substring(5, 7)) ?? 0;
+                  final day = int.tryParse(dateStr.substring(8, 10)) ?? 0;
+                  displayDate = '$month/$day';
+                }
+
+                // 出勤ステータスの色
+                Color statusColor = Colors.grey;
+                if (attendance == '出勤') {
+                  statusColor = Colors.blue;
+                } else if (attendance == '在宅') {
+                  statusColor = Colors.green;
+                } else if (attendance == '遅刻') {
+                  statusColor = Colors.orange;
+                } else if (attendance == '早退') {
+                  statusColor = Colors.purple;
+                } else if (attendance == '施設外') {
+                  statusColor = Colors.teal;
+                } else if (attendance.contains('欠勤')) {
+                  statusColor = Colors.red;
+                }
+
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  color: index == 0 ? Colors.teal.shade50 : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: statusColor.withValues(alpha: 0.5)),
+                            ),
+                            child: Text(
+                              displayDate,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              attendance,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          if (index == 0) ...[
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.teal,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                '最新',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (supportRecord.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          supportRecord,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
             ),
           ),
       ],

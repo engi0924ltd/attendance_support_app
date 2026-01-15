@@ -281,6 +281,13 @@ class AttendanceService {
     return response;
   }
 
+  /// 利用者の支援記録（Z列）を取得
+  Future<Map<String, dynamic>> getUserSupportRecords(String userName) async {
+    final encodedName = Uri.encodeComponent(userName);
+    final response = await _apiService.get('analytics/user-support-records/$encodedName');
+    return response;
+  }
+
   /// 受給者証期限切れアラートを取得
   /// 在籍中（契約中）の利用者で、支給決定期間または適用期間が期限切れの人を返す
   Future<List<Map<String, dynamic>>> getCertificateAlerts() async {
