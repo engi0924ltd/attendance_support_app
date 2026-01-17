@@ -12,6 +12,8 @@ import '../staff/user_detail_screen.dart';
 import 'staff_list_screen.dart';
 import 'user_list_screen.dart';
 import 'daily_attendance_screen.dart';
+import 'past_records_screen.dart';
+import 'chatwork_screen.dart';
 import 'analytics_screen.dart';
 import 'settings_screen.dart';
 import 'billing_settings_screen.dart';
@@ -689,18 +691,59 @@ class _FacilityAdminDashboardScreenV2State
   Widget _buildMainMenu(BuildContext context) {
     return Column(
       children: [
-        // 本日の勤怠一覧（メイン機能）
-        _MenuCard(
-          icon: Icons.today,
-          title: '本日の勤怠一覧',
-          subtitle: '出勤・支援記録の確認と登録',
-          color: AppThemeV2.primaryGreen,
-          isPrimary: true,
-          onTap: () => _navigateToDailyAttendance(context),
+        // 1行目: 本日の勤怠一覧 | 過去の実績記録
+        Row(
+          children: [
+            Expanded(
+              child: _MenuCard(
+                icon: Icons.today,
+                title: '本日の勤怠一覧',
+                subtitle: '出勤・支援記録の確認',
+                color: AppThemeV2.primaryGreen,
+                onTap: () => _navigateToDailyAttendance(context),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _MenuCard(
+                icon: Icons.history,
+                title: '過去の実績記録',
+                subtitle: '過去データの確認',
+                color: AppThemeV2.primaryGreen,
+                onTap: () => _navigateToPastRecords(context),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
 
-        // 2列レイアウト
+        // 2行目: 利用者管理 | 支援者管理
+        Row(
+          children: [
+            Expanded(
+              child: _MenuCard(
+                icon: Icons.person_add,
+                title: '利用者管理',
+                subtitle: 'アカウント設定',
+                color: Colors.teal,
+                onTap: () => _navigateToUserManagement(context),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _MenuCard(
+                icon: Icons.people,
+                title: '支援者管理',
+                subtitle: 'アカウント設定',
+                color: Colors.purple,
+                onTap: () => _navigateToStaffManagement(context),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // 3行目: 統計・分析 | 請求業務
         Row(
           children: [
             Expanded(
@@ -726,38 +769,29 @@ class _FacilityAdminDashboardScreenV2State
         ),
         const SizedBox(height: 12),
 
+        // 4行目: チャットワーク連絡 | 設定
         Row(
           children: [
             Expanded(
               child: _MenuCard(
-                icon: Icons.people,
-                title: '支援者管理',
-                subtitle: 'アカウント設定',
-                color: Colors.purple,
-                onTap: () => _navigateToStaffManagement(context),
+                icon: Icons.chat,
+                title: 'チャットワーク連絡',
+                subtitle: '利用者への連絡',
+                color: AppThemeV2.errorColor,
+                onTap: () => _navigateToChatwork(context),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _MenuCard(
-                icon: Icons.person_add,
-                title: '利用者管理',
-                subtitle: 'アカウント設定',
-                color: Colors.teal,
-                onTap: () => _navigateToUserManagement(context),
+                icon: Icons.settings,
+                title: '設定',
+                subtitle: '施設情報・各種設定',
+                color: Colors.grey,
+                onTap: () => _navigateToSettings(context),
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 12),
-
-        // 設定（フル幅）
-        _MenuCard(
-          icon: Icons.settings,
-          title: '設定',
-          subtitle: '施設情報・各種設定',
-          color: Colors.grey,
-          onTap: () => _navigateToSettings(context),
         ),
       ],
     );
@@ -783,6 +817,34 @@ class _FacilityAdminDashboardScreenV2State
       // 戻ってきたらステータスを再読み込み
       _loadTodayStats();
     });
+  }
+
+  void _navigateToPastRecords(BuildContext context) {
+    if (widget.admin.gasUrl == null || widget.admin.gasUrl!.isEmpty) {
+      _showError(context, 'GAS URLが設定されていません');
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FacilityAdminPastRecordsScreen(
+          adminName: widget.admin.adminName,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToChatwork(BuildContext context) {
+    if (widget.admin.gasUrl == null || widget.admin.gasUrl!.isEmpty) {
+      _showError(context, 'GAS URLが設定されていません');
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const FacilityAdminChatworkScreen(),
+      ),
+    );
   }
 
   void _navigateToStaffManagement(BuildContext context) {

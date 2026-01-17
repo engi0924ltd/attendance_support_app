@@ -2616,6 +2616,18 @@ function handleGetDailyAttendance(date) {
     records.push(parseAttendanceRowFromArray(rowData, rowNumber));
   }
 
+  // 名簿（マスタ設定シート）の利用者順でソート
+  const masterSheet = getSheet(SHEET_NAMES.MASTER);
+  const userNames = masterSheet.getRange(MASTER_CONFIG.USER_DATA_START_ROW, MASTER_CONFIG.USER_COLS.NAME, 200, 1).getValues().flat().filter(n => n);
+  const userOrder = {};
+  userNames.forEach((name, index) => { userOrder[name] = index; });
+
+  records.sort((a, b) => {
+    const orderA = userOrder[a.userName] ?? 9999;
+    const orderB = userOrder[b.userName] ?? 9999;
+    return orderA - orderB;
+  });
+
   return createSuccessResponse({ records });
 }
 

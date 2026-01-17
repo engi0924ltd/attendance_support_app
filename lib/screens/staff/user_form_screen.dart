@@ -91,7 +91,7 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
   late TextEditingController _ghContactController;
 
   // === 上限管理 ===
-  String _selfManagedValue = ''; // 自社管理: '○', 他社管理: ''
+  String? _selfManagedValue; // null: 未選択, '○': 自社, '他社': 他社
   late TextEditingController _managementFacilityNameController;
   late TextEditingController _managementFacilityNumberController;
 
@@ -189,7 +189,16 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
     _ghContactController = TextEditingController(text: widget.user?.ghContact ?? '');
 
     // 上限管理
-    _selfManagedValue = widget.user?.selfManaged ?? '';
+    final selfManaged = widget.user?.selfManaged;
+    final hasFacilityInfo = (widget.user?.managementFacilityName?.isNotEmpty ?? false) ||
+                            (widget.user?.managementFacilityNumber?.isNotEmpty ?? false);
+    if (selfManaged == '○') {
+      _selfManagedValue = '○';
+    } else if (hasFacilityInfo) {
+      _selfManagedValue = '他社';
+    } else {
+      _selfManagedValue = null;
+    }
     _managementFacilityNameController = TextEditingController(text: widget.user?.managementFacilityName ?? '');
     _managementFacilityNumberController = TextEditingController(text: widget.user?.managementFacilityNumber ?? '');
 
@@ -373,9 +382,9 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           ghStaff: _ghStaffController.text.trim(),
           ghContact: _ghContactController.text.trim(),
           // 上限管理
-          selfManaged: _selfManagedValue,
-          managementFacilityName: _managementFacilityNameController.text.trim(),
-          managementFacilityNumber: _managementFacilityNumberController.text.trim(),
+          selfManaged: _selfManagedValue == '○' ? '○' : '',
+          managementFacilityName: _selfManagedValue != null ? _managementFacilityNameController.text.trim() : '',
+          managementFacilityNumber: _selfManagedValue != null ? _managementFacilityNumberController.text.trim() : '',
           // 銀行口座情報
           bankName: _bankNameController.text.trim(),
           bankCode: _bankCodeController.text.trim(),
@@ -455,9 +464,9 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           ghStaff: _ghStaffController.text.trim(),
           ghContact: _ghContactController.text.trim(),
           // 上限管理
-          selfManaged: _selfManagedValue,
-          managementFacilityName: _managementFacilityNameController.text.trim(),
-          managementFacilityNumber: _managementFacilityNumberController.text.trim(),
+          selfManaged: _selfManagedValue == '○' ? '○' : '',
+          managementFacilityName: _selfManagedValue != null ? _managementFacilityNameController.text.trim() : '',
+          managementFacilityNumber: _selfManagedValue != null ? _managementFacilityNumberController.text.trim() : '',
           // 銀行口座情報
           bankName: _bankNameController.text.trim(),
           bankCode: _bankCodeController.text.trim(),
@@ -1235,33 +1244,41 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 8),
 
-          // 自社/他社 ラジオボタン
+          // 自社/他社 チェックボックス（排他制御）
           Row(
             children: [
               Expanded(
-                child: RadioListTile<String>(
+                child: CheckboxListTile(
                   title: const Text('自社で行う'),
-                  value: '○',
-                  groupValue: _selfManagedValue,
+                  value: _selfManagedValue == '○',
                   onChanged: _isLoading ? null : (value) {
                     setState(() {
-                      _selfManagedValue = value ?? '';
+                      if (value == true) {
+                        _selfManagedValue = '○';
+                      } else {
+                        _selfManagedValue = null;
+                      }
                     });
                   },
                   contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
                 ),
               ),
               Expanded(
-                child: RadioListTile<String>(
+                child: CheckboxListTile(
                   title: const Text('他社で行う'),
-                  value: '',
-                  groupValue: _selfManagedValue,
+                  value: _selfManagedValue == '他社',
                   onChanged: _isLoading ? null : (value) {
                     setState(() {
-                      _selfManagedValue = value ?? '';
+                      if (value == true) {
+                        _selfManagedValue = '他社';
+                      } else {
+                        _selfManagedValue = null;
+                      }
                     });
                   },
                   contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
                 ),
               ),
             ],
@@ -1270,23 +1287,27 @@ class _UserFormScreenState extends State<UserFormScreen> with SingleTickerProvid
 
           TextFormField(
             controller: _managementFacilityNameController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: '施設名',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.apartment),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.apartment),
+              filled: _selfManagedValue == null,
+              fillColor: Colors.grey.shade200,
             ),
-            enabled: !_isLoading,
+            enabled: !_isLoading && _selfManagedValue != null,
           ),
           const SizedBox(height: 12),
 
           TextFormField(
             controller: _managementFacilityNumberController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: '施設番号',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.numbers),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.numbers),
+              filled: _selfManagedValue == null,
+              fillColor: Colors.grey.shade200,
             ),
-            enabled: !_isLoading,
+            enabled: !_isLoading && _selfManagedValue != null,
           ),
           const SizedBox(height: 80),
         ],
