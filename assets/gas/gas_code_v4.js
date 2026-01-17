@@ -4446,12 +4446,14 @@ function handleGetUserStats(userName) {
           }
 
           // 出欠状況で分類
-          if (attendance === '出勤' || attendance === '遅刻') {
+          // 出勤系: 出勤、遅刻、早退、在宅、施設外
+          if (attendance === '出勤' || attendance === '遅刻' || attendance === '早退' || attendance === '在宅' || attendance === '施設外') {
             attendanceDays++;
             if (workMinutes && typeof workMinutes === 'number') {
               totalWorkMinutes += workMinutes;
             }
-          } else if (attendance === '欠勤') {
+          // 欠勤系: 欠勤、欠席、事前連絡あり欠勤、事前連絡あり欠席
+          } else if (attendance === '欠勤' || attendance === '欠席' || attendance === '事前連絡あり欠勤' || attendance === '事前連絡あり欠席') {
             absentDays++;
           }
         }
